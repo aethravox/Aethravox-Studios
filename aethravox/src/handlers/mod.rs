@@ -2,6 +2,7 @@ pub mod admin;
 pub mod aexos;
 pub mod aextube;
 pub mod api;
+pub mod api_v1;
 pub mod assets;
 pub mod auth;
 pub mod categories;

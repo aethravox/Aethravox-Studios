@@ -432,6 +432,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(from_fn_with_state(state.clone(), auth_mw::require_auth));
 
     let app = Router::new()
+        .merge(handlers::api_v1::router())
         .merge(public_routes)
         .merge(guest_routes)
         .merge(protected_routes)
