@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Mi perfil — Aethravox{% endblock %}
+{% block tagline %}Mi perfil{% endblock %}
+
+{# El profile-fab (botón flotante dorado "Mi perfil") es redundante en la
+   propia página /perfil: ya estás aquí. Lo vaciamos para que no aparezca
+   la "bolita" dorada abajo a la derecha en esta página. #}
+{% block profile_fab %}{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <div class="profile-header">
+        <img src="{{ avatar }}" alt="avatar" class="profile-avatar">
+        <div class="profile-info">
+            <h2>{{ display }}</h2>
+            <p class="muted">@{{ username }}</p>
+            <span class="role-badge role-{{ role_css_key }}">{{ role }}</span>
+        </div>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">⚠️ {{ e }}</div>
+    {% endif %}
+    {% if let Some(i) = info %}
+    <div class="alert alert-info">✅ {{ i }}</div>
+    {% endif %}
+
+    <div class="profile-stats">
+        <div class="stat">
+            <div class="stat-label">Miembro desde</div>
+            <div class="stat-value">{{ created_at }}</div>
+        </div>
+    </div>
+
+    {% if !bio.is_empty() %}
+    <div class="bio-block">
+        <div class="stat-label">Bio</div>
+        <div class="bio-content">{{ bio }}</div>
+    </div>
+    {% endif %}
+
+    {# ===== Editor de títulos ===== #}
+    <div class="titles-editor">
+        <h3 class="section-title">🏅 Mis títulos</h3>
+        <p class="muted small">
+            Marca hasta <strong>3 títulos</strong> para mostrar en tu perfil público.
+            De esos, elige <strong>uno como principal</strong>: ese se verá junto a tu
+            nombre en todo el sitio (chat, amigos, etc.) sin que nadie abra tu perfil.
+        </p>
+
+        {% if my_titles.is_empty() %}
+        <div class="empty-state" style="padding:20px">
+            <div style="font-size:2.4rem;margin-bottom:8px">🏷️</div>
+            <p class="muted">Aún no tienes títulos. Los otorga el Owner desde el panel de administración.</p>
+        </div>
+        {% else %}
+        <form method="POST" action="/perfil/titles" class="auth-form" id="titles-form">
+            <div class="titles-list">
+                {% for t in my_titles %}
+                <label class="title-pick
+                    {% if t.selected %}title-pick-selected{% endif %}">
+                    <span class="title-badge title-{{ t.id }} fx-{{ t.effect }}">{{ t.name }}</span>
+                    {% if let Some(d) = t.description %}
+                    <span class="title-pick-desc muted small">{{ d }}</span>
+                    {% endif %}
+                    <span class="title-pick-controls">
+                        <label class="title-pick-visible">
+                            <input type="checkbox" name="visible" value="{{ t.id }}"
+                                class="vis-cb" data-id="{{ t.id }}"
+                                {% if t.selected %}checked{% endif %}>
+                            <span>Visible en perfil</span>
+                        </label>
+                        <label class="title-pick-primary
+                            {% if !t.selected %}title-pick-primary-disabled{% endif %}">
+                            <input type="radio" name="primary" value="{{ t.id }}"
+                                class="prim-rb" data-id="{{ t.id }}"
+                                {% if !t.selected %}disabled{% endif %}
+                                {% if t.is_primary %}checked{% endif %}>
+                            <span>⭐ Principal</span>
+                        </label>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">💾 Guardar selección</button>
+        </form>
+        <p class="muted small" id="titles-count" style="margin-top:10px;"></p>
+        {% endif %}
+    </div>
+
+    <div class="dashboard-actions">
+        <a href="/u/{{ username }}" class="btn btn-secondary">👁️ Ver mi perfil público</a>
+        <a href="/dashboard" class="btn btn-secondary">🛡️ Ajustes de cuenta</a>
+    </div>
+</div>
+
+<style>
+.titles-editor { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--fondo); }
+.titles-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.title-pick {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    cursor: default;
+}
+.title-pick-selected { border-color: var(--dorado); background: rgba(224,163,8,0.06); }
+.title-pick-desc { flex: 1 1 200px; min-width: 160px; }
+.title-pick-controls {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+.title-pick-visible, .title-pick-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.title-pick-primary input { accent-color: var(--dorado); }
+.title-pick-visible input { accent-color: var(--dorado); }
+.title-pick-primary-disabled { opacity: 0.4; }
+@media (max-width: 600px) {
+    .title-pick { flex-direction: column; align-items: flex-start; }
+    .title-pick-controls { margin-left: 0; width: 100%; justify-content: space-between; }
+}
+</style>
+
+<script>
+// Sincroniza: el radio "principal" solo se puede marcar si el título está
+// visible. Y si desmarcas el visible del principal, se limpia el principal.
+(function() {
+    var form = document.getElementById('titles-form');
+    if (!form) return;
+    var cbs = Array.prototype.slice.call(form.querySelectorAll('.vis-cb'));
+    var rbs = Array.prototype.slice.call(form.querySelectorAll('.prim-rb'));
+    function sync() {
+        var visibleIds = new Set(cbs.filter(function(c){return c.checked;})
+                                    .map(function(c){return c.dataset.id;}));
+        // Limitar a 3 visibles.
+        var checkedCount = visibleIds.size;
+        cbs.forEach(function(c){
+            if (!c.checked && checkedCount >= 3) {
+                c.disabled = true;
+            } else {
+                c.disabled = false;
+            }
+        });
+        // Radios: deshabilitar y desmarcar los no visibles.
+        var primaryChecked = null;
+        rbs.forEach(function(r){
+            if (visibleIds.has(r.dataset.id)) {
+                r.disabled = false;
+                r.parentElement.classList.remove('title-pick-primary-disabled');
+                if (r.checked) primaryChecked = r.dataset.id;
+            } else {
+                r.disabled = true;
+                r.checked = false;
+                r.parentElement.classList.add('title-pick-primary-disabled');
+            }
+        });
+        var countEl = document.getElementById('titles-count');
+        if (countEl) {
+            countEl.textContent = 'Visibles: ' + checkedCount + ' / 3'
+                + (primaryChecked ? ' · Principal: marcado' : ' · Principal: sin elegir');
+        }
+    }
+    cbs.forEach(function(c){ c.addEventListener('change', sync); });
+    rbs.forEach(function(r){ r.addEventListener('change', sync); });
+    sync();
+})();
+</script>
+{% endblock %}

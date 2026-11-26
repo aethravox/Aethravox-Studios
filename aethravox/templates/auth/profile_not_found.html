@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}No encontrado — Aethravox{% endblock %}
+{% block tagline %}Usuario no encontrado{% endblock %}
+
+{% block content %}
+<div class="dashboard-card" style="text-align:center">
+    <div style="font-size:4rem;margin-bottom:20px">🌫️</div>
+    <h2>Usuario no encontrado</h2>
+    <p class="muted">No existe ningún miembro con el nombre <strong>{{ username }}</strong>,
+       o no tienes permiso para verlo.</p>
+    <div class="dashboard-actions" style="margin-top:25px">
+    </div>
+</div>
+{% endblock %}

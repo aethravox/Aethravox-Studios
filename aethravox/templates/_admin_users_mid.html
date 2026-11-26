@@ -1,0 +1,161 @@
+    border: 0;
+    color: var(--blanco);
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+.user-list-header:hover { background: rgba(255, 255, 255, 0.02); }
+.user-list-avatar {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.user-list-avatar-online {
+    background: var(--verde);
+    box-shadow: 0 0 8px var(--verde);
+}
+.user-list-avatar-offline {
+    background: var(--gris-claro);
+    opacity: 0.5;
+}
+.user-list-name {
+    font-weight: 600;
+    color: var(--blanco);
+}
+.user-list-display {
+    font-size: 0.85rem;
+}
+.user-list-role {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.user-list-status {
+    flex-shrink: 0;
+    font-size: 0.78rem;
+}
+.user-list-chevron {
+    color: var(--gris-claro);
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.user-list-header[aria-expanded="true"] .user-list-chevron {
+    transform: rotate(180deg);
+}
+.user-list-detail {
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--fondo);
+    margin-top: 0;
+}
+.user-data-list {
+    margin: 14px 0 16px 0;
+    display: grid;
+    grid-template-columns: minmax(110px, 160px) 1fr;
+    gap: 8px 18px;
+    align-items: center;
+}
+.user-data-list dt {
+    color: var(--gris-claro);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.user-data-list dd {
+    margin: 0;
+    color: var(--blanco);
+    font-size: 0.92rem;
+}
+.user-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    border-top: 1px dashed var(--fondo);
+}
+.user-list-empty { margin-top: 18px; text-align: center; }
+
+@media (max-width: 600px) {
+    .user-list-header { gap: 8px; padding: 12px 12px; font-size: 0.9rem; }
+    .user-list-display { display: none; }
+    .user-list-status { display: none; }
+    .user-list-role { font-size: 0.72rem; }
+    .user-list-detail { padding: 0 12px 14px; }
+    .user-data-list {
+        grid-template-columns: 1fr;
+        gap: 4px 0;
+    }
+    .user-data-list dt { margin-top: 8px; }
+    .user-data-list dt:first-child { margin-top: 8px; }
+}
+</style>
+
+<script src="/static/js/admin/admin_users_1.js" defer></script>
+<div class="admin-nav">
+</div>
+
+{# ===== Modal: Suspender usuario ===== #}
+<div class="modal-overlay" id="suspend-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>⏸️ Suspender cuenta</span>
+            <button type="button" class="modal-close" onclick="closeSuspendModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom:14px;">
+                Vas a suspender a <strong id="suspend-username" class="gold">—</strong>.
+                La cuenta quedará inaccesible hasta que expire el tiempo o la levantes manualmente.
+                El usuario verá una pantalla con motivo + countdown.
+            </p>
+            <form method="POST" action="#" id="suspend-form" class="auth-form">
+                <div class="input-group">
+                    <label>Motivo (visible para el usuario)</label>
+                    <textarea name="reason" required rows="2" maxlength="500"
+                              placeholder="Ej: Spam repetido en chat después de advertencias."></textarea>
+                </div>
+                <div class="input-group">
+                    <label>Duración</label>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <input type="number" name="duration_value" value="24" min="1" max="365"
+                               style="flex:1; min-width:100px;">
+                        <select name="duration_unit" style="flex:1; min-width:120px;">
+                            <option value="minutes">Minutos</option>
+                            <option value="hours" selected>Horas</option>
+                            <option value="days">Días</option>
+                            <option value="weeks">Semanas</option>
+                            <option value="months">Meses</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">⏸️ Suspender cuenta</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeSuspendModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Banear usuario ===== #}
+<div class="modal-overlay" id="ban-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>⛔ Banear cuenta</span>
+            <button type="button" class="modal-close" onclick="closeBanModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom:14px;">
+                Vas a banear a <strong id="ban-username" class="gold">—</strong>.
+                El ban puede ser permanente o temporal. El usuario verá una pantalla con motivo + countdown.
+            </p>
+            <form method="POST" action="#" id="ban-form" class="auth-form">
+                <div class="input-group">
+                    <label>Motivo (visible para el usuario)</label>
+                    <textarea name="reason" required rows="2" maxlength="500"
+                              placeholder="Ej: Múltiples cuentas falsas, comportamiento tóxico reiterado."></textarea>
+                </div>
+                <div class="input-group">
+                    <label>Tipo de ban</label>
+                    <div class="ban-duration-tabs">
+                        <label class="ban-duration-option">

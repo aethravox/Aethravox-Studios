@@ -1,0 +1,1935 @@
+{% extends "base.html" %}
+
+{% block title %}aexOS — Aethravox Studios{% endblock %}
+{% block body_class %}app-fullscreen{% endblock %}
+{% block tagline %}Sistema Operativo Web{% endblock %}
+
+{% block extra_head %}
+<style>
+.aexos-shell {
+    position: fixed;
+    inset: var(--header-h, 57px) 0 0 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-primary, #F8FAFC);
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    user-select: none;
+}
+.aexos-shell.is-fullscreen {
+    inset: 0 !important;
+    z-index: 120;
+}
+
+/* Wallpapers */
+.aexos-wp {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    background: var(--bg-obsidian, #06030C);
+}
+.aexos-wp-blob1, .aexos-wp-blob2, .aexos-wp-horizon-glow, .aexos-wp-horizon-svg {
+    display: none;
+}
+.aexos-shell[data-wp="nebula"] .aexos-wp-blob1 {
+    display: block;
+    position: absolute;
+    top: -96px; left: -64px;
+    width: 380px; height: 380px;
+    border-radius: 9999px;
+    background: var(--accent-secondary, #00d4ff);
+    opacity: .18;
+    filter: blur(72px);
+}
+.aexos-shell[data-wp="nebula"] .aexos-wp-blob2 {
+    display: block;
+    position: absolute;
+    bottom: -96px; right: -48px;
+    width: 380px; height: 380px;
+    border-radius: 9999px;
+    background: var(--accent-primary, #e0a308);
+    opacity: .15;
+    filter: blur(72px);
+}
+.aexos-shell[data-wp="grid"] .aexos-wp {
+    background-image:
+        linear-gradient(to right, var(--border-subtle, #1E1830) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--border-subtle, #1E1830) 1px, transparent 1px);
+    background-size: 36px 36px;
+}
+.aexos-shell[data-wp="horizon"] .aexos-wp-horizon-glow {
+    display: block;
+    position: absolute;
+    bottom: -96px; left: 50%;
+    transform: translateX(-50%);
+    width: 140%; height: 260px;
+    border-radius: 100%;
+    opacity: .22;
+    filter: blur(44px);
+    background: linear-gradient(90deg, var(--accent-secondary, #00d4ff), var(--accent-primary, #e0a308));
+}
+.aexos-shell[data-wp="horizon"] .aexos-wp-horizon-svg {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: .22;
+}
+
+/* Phases: Off / Boot / Login / Desktop */
+.aexos-power-screen {
+    position: relative;
+    z-index: 10;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    background: #040208;
+    color: #F8FAFC;
+    gap: 18px;
+}
+.aexos-spinner {
+    width: 28px; height: 28px;
+    border-radius: 9999px;
+    border: 2.5px solid var(--accent-primary, #e0a308);
+    border-top-color: transparent;
+    animation: aexspin .75s linear infinite;
+}
+@keyframes aexspin { to { transform: rotate(360deg); } }
+
+.aexos-lock-wrap {
+    position: relative;
+    z-index: 10;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    overflow-y: auto;
+}
+.aexos-lock-card {
+    width: 100%;
+    max-width: 390px;
+    border-radius: 16px;
+    border: 1px solid var(--border-strong, #2E2447);
+    background: color-mix(in srgb, var(--bg-surface, #0D0818) 92%, transparent);
+    backdrop-filter: blur(14px);
+    padding: 24px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.aexos-avatar-lg {
+    width: 64px; height: 64px;
+    border-radius: 9999px;
+    border: 1.5px solid var(--accent-primary, #e0a308);
+    background: var(--bg-elevated, #16101F);
+    color: var(--accent-primary, #e0a308);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 22px; font-weight: 700;
+    text-transform: uppercase;
+    overflow: hidden;
+    margin: 0 auto;
+}
+.aexos-avatar-lg img { width: 100%; height: 100%; object-fit: cover; }
+
+.aexos-user-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-secondary, #A1A1AA);
+    font-size: 12px; font-weight: 500;
+    cursor: pointer;
+}
+.aexos-user-chip.is-active {
+    border-color: var(--accent-primary, #e0a308);
+    background: var(--bg-elevated, #16101F);
+    color: var(--text-primary, #F8FAFC);
+}
+.aexos-user-chip-add {
+    border-style: dashed;
+    border-color: var(--border-strong, #2E2447);
+    color: var(--accent-secondary-light, #67e8f9);
+}
+
+/* Desktop & Icons */
+.aexos-desktop {
+    position: relative;
+    flex: 1;
+    padding: 14px;
+    overflow: hidden;
+}
+.aexos-icons {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 86px);
+    grid-auto-flow: column;
+    grid-template-rows: repeat(auto-fill, 92px);
+    gap: 8px;
+    height: calc(100% - 8px);
+    align-content: start;
+}
+.aexos-icon-btn {
+    width: 84px;
+    padding: 8px 6px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-primary, #F8FAFC);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: default;
+    text-align: center;
+    transition: background .12s, border-color .12s;
+}
+.aexos-icon-btn:hover {
+    background: color-mix(in srgb, var(--bg-surface, #0D0818) 82%, transparent);
+    border-color: var(--border-strong, #2E2447);
+}
+.aexos-icon-box {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--border-strong, #2E2447);
+    background: color-mix(in srgb, var(--bg-surface, #0D0818) 95%, transparent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.aexos-icon-btn span.lbl {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.25;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.aexos-icon-dot {
+    width: 6px; height: 6px; border-radius: 9999px;
+}
+
+/* Windows */
+.aexos-window {
+    position: absolute;
+    background: var(--bg-surface, #0D0818);
+    border: 1px solid var(--border-strong, #2E2447);
+    border-radius: 12px;
+    box-shadow: 0 22px 52px rgba(0,0,0,.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 280px;
+    min-height: 220px;
+}
+.aexos-window.is-focused {
+    border-color: color-mix(in srgb, var(--accent-primary, #e0a308) 70%, transparent);
+}
+.aexos-window.is-maximized {
+    left: 6px !important;
+    top: 6px !important;
+    width: calc(100% - 12px) !important;
+    height: calc(100% - 12px) !important;
+}
+.aexos-win-bar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px 0 12px;
+    background: var(--bg-elevated, #16101F);
+    border-bottom: 1px solid var(--border-subtle, #1E1830);
+    cursor: default;
+    flex-shrink: 0;
+}
+.aexos-win-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary, #F8FAFC);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+}
+.aexos-win-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aexos-win-controls { display: flex; gap: 4px; flex-shrink: 0; }
+.aexos-win-controls button {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary, #A1A1AA);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.aexos-win-controls button:hover {
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-primary, #F8FAFC);
+}
+.aexos-win-controls button.btn-close:hover {
+    background: color-mix(in srgb, var(--status-err, #DC2626) 20%, transparent);
+    color: var(--status-err, #DC2626);
+}
+.aexos-win-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    user-select: text;
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-primary, #F8FAFC);
+}
+.aexos-win-body.no-pad { overflow: hidden; }
+.aexos-win-body iframe {
+    width: 100%; height: 100%; border: 0;
+    background: var(--bg-obsidian, #06030C);
+    display: block;
+}
+
+/* Taskbar */
+.aexos-taskbar {
+    height: 48px;
+    padding: 0 10px;
+    background: color-mix(in srgb, var(--bg-surface, #0D0818) 95%, transparent);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-strong, #2E2447);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    z-index: 60;
+    flex-shrink: 0;
+}
+.aexos-task-left { display: flex; align-items: center; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; }
+.aexos-start-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong, #2E2447);
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-primary, #F8FAFC);
+    font-weight: 600; font-size: 12px;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.aexos-start-btn.is-open {
+    background: var(--accent-primary, #e0a308);
+    border-color: var(--accent-primary, #e0a308);
+    color: #06030C;
+}
+.aexos-task-sep { width: 1px; height: 22px; background: var(--border-subtle, #1E1830); margin: 0 2px; flex-shrink: 0; }
+.aexos-task-btn {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, #A1A1AA);
+    font-size: 12px; font-weight: 500;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.aexos-task-btn:hover { background: var(--bg-obsidian, #06030C); color: var(--text-primary, #F8FAFC); }
+.aexos-task-btn.is-open {
+    background: var(--bg-obsidian, #06030C);
+    border-color: var(--border-strong, #2E2447);
+}
+.aexos-task-btn.is-active {
+    background: var(--bg-elevated, #16101F);
+    border-color: color-mix(in srgb, var(--accent-primary, #e0a308) 70%, transparent);
+    color: var(--text-primary, #F8FAFC);
+}
+.aexos-task-ind {
+    position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+    height: 2px; border-radius: 9999px;
+    background: var(--text-muted, #71717A); width: 8px;
+}
+.aexos-task-btn.is-active .aexos-task-ind {
+    background: var(--accent-primary, #e0a308); width: 16px;
+}
+
+.aexos-task-right {
+    display: flex; align-items: center; gap: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-subtle, #1E1830);
+    font-size: 11.5px; color: var(--text-secondary, #A1A1AA);
+    white-space: nowrap; flex-shrink: 0;
+}
+.aexos-tray-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px;
+    border-radius: 8px; border: none; background: transparent;
+    color: var(--text-secondary, #A1A1AA);
+    cursor: pointer;
+}
+.aexos-tray-btn:hover { background: var(--bg-obsidian, #06030C); color: var(--text-primary, #F8FAFC); }
+.aexos-clock-box { text-align: right; line-height: 1.2; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.aexos-clock-box .tm { font-size: 11.5px; font-weight: 600; color: var(--text-primary, #F8FAFC); }
+.aexos-clock-box .dt { font-size: 10px; color: var(--text-muted, #71717A); }
+.aexos-show-desktop-btn {
+    width: 8px; height: 30px;
+    border: none; border-left: 1px solid var(--border-strong, #2E2447);
+    background: transparent; cursor: pointer; border-radius: 0 4px 4px 0;
+}
+.aexos-show-desktop-btn:hover { background: color-mix(in srgb, var(--accent-primary, #e0a308) 25%, transparent); }
+
+/* Start Menu */
+.aexos-start-menu {
+    position: absolute;
+    left: 8px;
+    bottom: 54px;
+    width: min(440px, calc(100% - 16px));
+    background: color-mix(in srgb, var(--bg-surface, #0D0818) 96%, transparent);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border-strong, #2E2447);
+    border-radius: 16px;
+    box-shadow: 0 24px 54px rgba(0,0,0,.6);
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.aexos-start-menu[hidden] { display: none; }
+.aexos-start-head {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-subtle, #1E1830);
+    display: flex; flex-direction: column; gap: 10px;
+}
+.aexos-search-wrap { position: relative; }
+.aexos-search-wrap svg {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted, #71717A); pointer-events: none;
+}
+.aexos-search-wrap input {
+    width: 100%; box-sizing: border-box;
+    height: 36px; padding: 0 12px 0 34px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong, #2E2447);
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-primary, #F8FAFC);
+    font-size: 12.5px;
+    outline: none;
+}
+.aexos-search-wrap input:focus { border-color: var(--accent-primary, #e0a308); }
+.aexos-cat-tabs { display: flex; gap: 6px; overflow-x: auto; }
+.aexos-cat-tab {
+    height: 28px; padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-secondary, #A1A1AA);
+    font-size: 11px; font-weight: 500;
+    cursor: pointer; white-space: nowrap;
+}
+.aexos-cat-tab.is-active {
+    background: var(--accent-primary, #e0a308);
+    border-color: var(--accent-primary, #e0a308);
+    color: #06030C; font-weight: 600;
+}
+.aexos-start-list {
+    padding: 12px;
+    max-height: 290px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.aexos-start-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-obsidian, #06030C);
+}
+.aexos-start-row:hover { border-color: var(--border-strong, #2E2447); }
+.aexos-start-open {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 10px;
+    border: none; background: transparent; color: inherit;
+    text-align: left; cursor: pointer; padding: 0;
+}
+.aexos-start-ico {
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-surface, #0D0818);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.aexos-start-name { font-size: 12.5px; font-weight: 600; color: var(--text-primary, #F8FAFC); }
+.aexos-start-desc { font-size: 11px; color: var(--text-muted, #71717A); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aexos-pin-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 28px; padding: 0 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: transparent;
+    color: var(--text-muted, #71717A);
+    font-size: 11px; cursor: pointer; flex-shrink: 0;
+}
+.aexos-pin-btn.is-pinned {
+    border-color: color-mix(in srgb, var(--accent-primary, #e0a308) 50%, transparent);
+    background: var(--bg-surface, #0D0818);
+    color: var(--accent-primary, #e0a308);
+}
+
+.aexos-start-foot {
+    position: relative;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-elevated, #16101F);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.aexos-power-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong, #2E2447);
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-primary, #F8FAFC);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.aexos-power-btn:hover, .aexos-power-btn.is-open { border-color: var(--accent-primary, #e0a308); }
+.aexos-power-popover {
+    position: absolute;
+    right: 12px; bottom: 52px;
+    width: 215px;
+    border-radius: 12px;
+    border: 1px solid var(--border-strong, #2E2447);
+    background: var(--bg-surface, #0D0818);
+    padding: 6px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.55);
+    z-index: 95;
+    display: flex; flex-direction: column; gap: 2px;
+}
+.aexos-power-popover[hidden] { display: none; }
+.aexos-pop-head {
+    padding: 4px 10px;
+    font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-muted, #71717A);
+}
+.aexos-pop-item {
+    width: 100%; display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 8px;
+    border: none; background: transparent;
+    color: var(--text-primary, #F8FAFC);
+    font-size: 12px; font-weight: 500; text-align: left; cursor: pointer;
+}
+.aexos-pop-item:hover { background: var(--bg-obsidian, #06030C); }
+.aexos-pop-item.danger { color: var(--status-err, #DC2626); }
+.aexos-pop-item.danger:hover { background: color-mix(in srgb, var(--status-err, #DC2626) 14%, transparent); }
+.aexos-pop-sep { height: 1px; background: var(--border-subtle, #1E1830); margin: 4px 0; }
+
+/* Settings App inside Window */
+.aex-settings-wrap { height: 100%; display: flex; flex-direction: column; background: var(--bg-obsidian, #06030C); }
+.aex-settings-tabs {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-surface, #0D0818);
+    display: flex; align-items: center; gap: 6px; overflow-x: auto; flex-shrink: 0;
+}
+.aex-settings-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-obsidian, #06030C);
+    color: var(--text-secondary, #A1A1AA);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+}
+.aex-settings-tab:hover { color: var(--text-primary, #F8FAFC); }
+.aex-settings-tab.is-active {
+    background: var(--accent-primary, #e0a308);
+    border-color: var(--accent-primary, #e0a308);
+    color: #06030C;
+}
+.aex-settings-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.aex-settings-body.is-iframe { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.aex-subtabs {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle, #1E1830);
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    background: var(--bg-obsidian, #06030C);
+}
+.aex-subtab {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--text-secondary, #A1A1AA); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.aex-subtab.is-active {
+    background: var(--bg-elevated, #16101F);
+    border-color: var(--accent-primary, #e0a308);
+    color: var(--text-primary, #F8FAFC);
+}
+.aex-sec-title {
+    font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-muted, #71717A); margin-bottom: 8px;
+}
+.aex-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.aex-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 600px) { .aex-grid-2, .aex-grid-3 { grid-template-columns: 1fr; } }
+
+.aex-choice-card {
+    padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--border-subtle, #1E1830);
+    background: var(--bg-surface, #0D0818);
+    color: var(--text-primary, #F8FAFC);
+    text-align: left; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.aex-choice-card.is-active {
+    border-color: var(--accent-primary, #e0a308);
+    background: var(--bg-elevated, #16101F);
+}
+
+/* Terminal & Notes & Calc */
+.aexos-term {
+    background: #05030a; color: #e2e8f0; padding: 12px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px;
+    display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
+}
+.aexos-term-out { flex: 1; overflow-y: auto; white-space: pre-wrap; margin-bottom: 8px; line-height: 1.5; }
+.aexos-term-in { display: flex; gap: 6px; align-items: center; border-top: 1px solid #1e293b; padding-top: 8px; }
+.aexos-term-in input { flex: 1; background: transparent; border: none; color: #fff; outline: none; font-family: inherit; }
+
+/* Desktop Right-Click Context Menu */
+.aex-ctx-menu {
+    position: absolute; z-index: 90; width: 220px;
+    border-radius: 12px; border: 1px solid var(--border-strong, #2E2447);
+    background: color-mix(in srgb, var(--bg-surface, #0D0818) 96%, transparent);
+    backdrop-filter: blur(12px);
+    padding: 6px; box-shadow: 0 18px 42px rgba(0,0,0,.55);
+}
+.aex-ctx-menu[hidden] { display: none; }
+
+@media (max-width: 720px) {
+    .aexos-icons { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); height: auto; }
+    .aexos-icon-btn { width: 100%; }
+    .aexos-window {
+        left: 6px !important; top: 6px !important;
+        width: calc(100% - 12px) !important; height: calc(100% - 12px) !important;
+    }
+    .aexos-task-btn span.lbl, .aexos-clock-box .dt { display: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="aexos-shell" id="aexos-shell" data-wp="nebula">
+    <!-- Wallpaper Layer -->
+    <div class="aexos-wp" aria-hidden="true">
+        <div class="aexos-wp-blob1"></div>
+        <div class="aexos-wp-blob2"></div>
+        <div class="aexos-wp-horizon-glow"></div>
+        <svg class="aexos-wp-horizon-svg" preserveAspectRatio="none" viewBox="0 0 1200 600">
+            <path d="M0,420 C300,320 600,510 1200,350 L1200,600 L0,600 Z" fill="var(--accent-secondary, #00d4ff)" fill-opacity="0.25"/>
+            <path d="M0,470 C400,390 800,540 1200,430 L1200,600 L0,600 Z" fill="var(--accent-primary, #e0a308)" fill-opacity="0.22"/>
+        </svg>
+    </div>
+
+    <!-- Power Off / Booting / Restarting Screen -->
+    <div class="aexos-power-screen" id="aexos-power-screen" hidden></div>
+
+    <!-- Lock / Multi-User Login Screen -->
+    <div class="aexos-lock-wrap" id="aexos-lock-wrap" hidden></div>
+
+    <!-- Desktop Area -->
+    <div class="aexos-desktop" id="aexos-desktop">
+        <div class="aexos-icons" id="aexos-icons"></div>
+        <div id="aexos-windows"></div>
+        <div class="aex-ctx-menu" id="aexos-ctx-menu" hidden></div>
+    </div>
+
+    <!-- Start Menu -->
+    <div class="aexos-start-menu" id="aexos-start-menu" hidden>
+        <div class="aexos-start-head">
+            <div class="aexos-search-wrap">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="aexos-launcher-search" placeholder="Buscar aplicaciones y webs en aexOS…" autocomplete="off">
+            </div>
+            <div class="aexos-cat-tabs" id="aexos-cat-tabs">
+                <button type="button" class="aexos-cat-tab is-active" data-cat="all">Todas (17)</button>
+                <button type="button" class="aexos-cat-tab" data-cat="webs">Webs</button>
+                <button type="button" class="aexos-cat-tab" data-cat="sistema">Sistema</button>
+            </div>
+        </div>
+
+        <div class="aexos-start-list" id="aexos-start-list"></div>
+
+        <div class="aexos-start-foot">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span id="aexos-start-avatar" style="width:28px;height:28px;border-radius:9999px;border:1px solid var(--accent-primary,#e0a308);background:var(--bg-obsidian,#06030C);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent-primary,#e0a308);text-transform:uppercase;flex-shrink:0;"></span>
+                <span id="aexos-start-username" style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            </div>
+
+            <div style="position:relative;">
+                <button type="button" class="aexos-power-btn" id="aexos-power-btn" aria-expanded="false">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-primary,#e0a308)" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                    <span>Energía</span>
+                </button>
+                <div class="aexos-power-popover" id="aexos-power-popover" hidden></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Taskbar -->
+    <div class="aexos-taskbar" id="aexos-taskbar">
+        <div class="aexos-task-left">
+            <button type="button" class="aexos-start-btn" id="aexos-start-btn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                <span>Inicio</span>
+            </button>
+            <div class="aexos-task-sep"></div>
+            <div id="aexos-task-items" style="display:flex;align-items:center;gap:6px;"></div>
+        </div>
+
+        <div class="aexos-task-right">
+            <button type="button" class="aexos-tray-btn" id="aexos-fullscreen-btn" title="Pantalla completa" aria-label="Pantalla completa">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            </button>
+            <div class="aexos-clock-box">
+                <div class="tm" id="aexos-clock">--:--</div>
+                <div class="dt" id="aexos-date">--/--/----</div>
+            </div>
+            <a href="/hub" id="aexos-exit-hub" style="color:var(--accent-primary,#e0a308);text-decoration:none;font-weight:700;font-size:12px;margin-left:2px;">← Hub</a>
+            <button type="button" class="aexos-show-desktop-btn" id="aexos-show-desktop-btn" title="Mostrar escritorio"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+    var PRIMARY_USER = "{{ username }}";
+    var PRIMARY_DISPLAY = "{{ display }}";
+    var PRIMARY_ROLE = "{{ role_display }}";
+    var PRIMARY_AVATAR = "{{ avatar }}";
+    var CAN_ADMIN = {% if can_access_admin %}true{% else %}false{% endif %};
+    var STORAGE_KEY = 'aexos_state_v2_' + PRIMARY_USER;
+
+    var SVGS = {
+        files: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>',
+        terminal: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+        notes: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>',
+        calc: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></svg>',
+        paint: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.37 2.63 14 7l-1.59-1.59a2 2 0 0 0-2.82 0L8 7l9 9 1.59-1.59a2 2 0 0 0 0-2.82L17 10l4.37-4.37a2.12 2.12 0 1 0-3-3Z"/><path d="M9 8c-2 3-4 3.5-7 4l8 10c2-1 6-5 6-7"/><path d="M14.5 17.5 4.5 15"/></svg>',
+        settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+        aris: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
+        chat: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+        communities: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
+        docs: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        friends: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+        transmitir: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><line x1="2" x2="2.01" y1="20" y2="20"/></svg>',
+        aextube: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 8 6 4-6 4Z"/></svg>',
+        'neon-canvas': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>',
+        playground: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>',
+        support: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>',
+        descargas: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
+    };
+
+    var APP_CATALOG = [
+        { id: 'files', name: 'Archivos', shortName: 'Archivos', desc: 'Explora carpetas y crea documentos.', cat: 'sistema', accent: '#e0a308', w: 620, h: 420 },
+        { id: 'terminal', name: 'Terminal', shortName: 'Terminal', desc: 'Consola interactiva y acceso rápido a Aris.', cat: 'sistema', accent: '#00d4ff', w: 580, h: 390 },
+        { id: 'notes', name: 'Bloc de Notas', shortName: 'Notas', desc: 'Edita y guarda notas en tu perfil local.', cat: 'sistema', accent: '#38bdf8', w: 540, h: 400 },
+        { id: 'calc', name: 'Calculadora', shortName: 'Calc', desc: 'Operaciones rápidas con soporte numérico.', cat: 'sistema', accent: '#22c55e', w: 320, h: 420 },
+        { id: 'paint', name: 'Boceto Rápido', shortName: 'Dibujo', desc: 'Lienzo libre para diagramas e ideas rápidas.', cat: 'sistema', accent: '#f43f5e', w: 580, h: 420 },
+        { id: 'settings', name: 'Ajustes', shortName: 'Ajustes', desc: 'Escritorio, temas, cuenta, usuarios y ajustes admin.', cat: 'sistema', accent: '#94a3b8', w: 840, h: 550 },
+        { id: 'aris', name: 'Aris', shortName: 'Aris', desc: 'Asistente de IA conectado con chats e informes.', cat: 'webs', accent: '#e0a308', w: 820, h: 520, url: '/aris?embed=1' },
+        { id: 'chat', name: 'AexChat', shortName: 'AexChat', desc: 'Mensajería en tiempo real con DMs y grupos.', cat: 'webs', accent: '#00d4ff', w: 780, h: 500, url: '/chat?embed=1' },
+        { id: 'communities', name: 'Comunidades', shortName: 'Comunidades', desc: 'Grupos temáticos, canales públicos y eventos.', cat: 'webs', accent: '#818cf8', w: 760, h: 500, url: '/communities?embed=1' },
+        { id: 'docs', name: 'Documentos', shortName: 'Docs', desc: 'Guías técnicas y descargas del estudio.', cat: 'webs', accent: '#60a5fa', w: 760, h: 480, url: '/docs?embed=1' },
+        { id: 'friends', name: 'Amigos', shortName: 'Amigos', desc: 'Red de contactos y presencia del estudio.', cat: 'webs', accent: '#38bdf8', w: 720, h: 480, url: '/friends?embed=1' },
+        { id: 'transmitir', name: 'Transmitir', shortName: 'Transmitir', desc: 'Comparte tu pantalla en vivo vía WebRTC.', cat: 'webs', accent: '#f43f5e', w: 740, h: 460, url: '/transmitir?embed=1' },
+        { id: 'aextube', name: 'AexTube', shortName: 'AexTube', desc: 'Videos del estudio y devlogs.', cat: 'webs', accent: '#ef4444', w: 780, h: 480, url: '/aextube?embed=1' },
+        { id: 'neon-canvas', name: 'Neon Canvas', shortName: 'Neon Canvas', desc: 'Lienzo neón interactivo para trazos luminosos.', cat: 'webs', accent: '#22d3ee', w: 780, h: 520, url: '/juegos/neon-canvas?embed=1' },
+        { id: 'playground', name: 'Playground', shortName: 'Playground', desc: 'Sandbox HTML y CSS en vivo.', cat: 'webs', accent: '#a855f7', w: 820, h: 520, url: '/playground?embed=1' },
+        { id: 'support', name: 'Soporte', shortName: 'Soporte', desc: 'Centro de tickets y asistencia directa.', cat: 'webs', accent: '#f59e0b', w: 760, h: 500, url: '/support?embed=1' },
+        { id: 'descargas', name: 'Descargas', shortName: 'Descargas', desc: 'Clientes nativos para escritorio y móvil.', cat: 'webs', accent: '#0ea5e9', w: 740, h: 440, url: '/descargas?embed=1' }
+    ];
+
+    var DEFAULT_PINNED = ['files', 'terminal', 'aris', 'chat', 'aextube'];
+    var WALLPAPERS = [
+        { id: 'nebula', name: 'Nebulosa del Estudio', desc: 'Bruma suave con acentos del tema activo' },
+        { id: 'grid', name: 'Retícula Técnica', desc: 'Cuadrícula sutil de alta precisión' },
+        { id: 'horizon', name: 'Horizonte Prisma', desc: 'Ondas geométricas limpias' },
+        { id: 'solid', name: 'Obsidiana Pura', desc: 'Fondo limpio sin distracciones' }
+    ];
+
+    function defaultUser(name, isPrimary) {
+        return {
+            user_id: 0,
+            username: name,
+            display_name: PRIMARY_DISPLAY || name,
+            avatar: isPrimary ? PRIMARY_AVATAR : '',
+            isPrimary: !!isPrimary,
+            can_admin: isPrimary ? CAN_ADMIN : false,
+            wallpaper: isPrimary ? 'nebula' : 'horizon',
+            showDesktopIcons: true,
+            pinnedApps: DEFAULT_PINNED.slice(),
+            files: [
+                { name: 'bienvenida.txt', content: 'Bienvenido a aexOS, @' + name + '.\n\nEsta cuenta ejecuta todo de forma independiente dentro de aexOS.', created: 'Hoy' }
+            ],
+            notes: ''
+        };
+    }
+
+    function mapServerProfile(p) {
+        var pinned = DEFAULT_PINNED.slice();
+        var files = [];
+        try { var pj = JSON.parse(p.pinned_apps_json || '[]'); if (Array.isArray(pj) && pj.length) pinned = pj; } catch (_) {}
+        try { var fj = JSON.parse(p.files_json || '[]'); if (Array.isArray(fj)) files = fj; } catch (_) {}
+        return {
+            user_id: p.user_id,
+            username: p.username,
+            display_name: p.display_name || p.username,
+            avatar: p.avatar || '',
+            isPrimary: !!p.is_primary,
+            can_admin: !!p.can_admin,
+            wallpaper: p.wallpaper || (p.is_primary ? 'nebula' : 'horizon'),
+            showDesktopIcons: p.show_desktop_icons !== false,
+            pinnedApps: pinned,
+            files: files,
+            notes: p.notes_text || ''
+        };
+    }
+
+    var persisted = {
+        osUsers: [defaultUser(PRIMARY_USER, true)],
+        activeOsUser: PRIMARY_USER
+    };
+
+    var prefsTimer = null;
+    function saveState() {
+        var u = currentUser();
+        if (!u || !u.user_id) return;
+        if (prefsTimer) clearTimeout(prefsTimer);
+        prefsTimer = setTimeout(function() {
+            fetch('/api/aexos/prefs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    profile_user_id: u.user_id,
+                    wallpaper: u.wallpaper || 'nebula',
+                    show_desktop_icons: u.showDesktopIcons !== false,
+                    pinned_apps_json: JSON.stringify(u.pinnedApps || DEFAULT_PINNED),
+                    files_json: JSON.stringify(u.files || []),
+                    notes_text: u.notes || ''
+                })
+            }).catch(function() {});
+        }, 250);
+    }
+
+    function currentUser() {
+        return persisted.osUsers.find(function(u) { return u.username === persisted.activeOsUser; }) || persisted.osUsers[0];
+    }
+
+    function applyServerProfilesPayload(data) {
+        if (!data || !Array.isArray(data.profiles) || data.profiles.length === 0) return;
+        persisted.osUsers = data.profiles.map(mapServerProfile);
+        if (data.active_username) {
+            persisted.activeOsUser = data.active_username;
+            selectedLoginUser = data.active_username;
+        }
+        CAN_ADMIN = !!currentUser().can_admin;
+    }
+
+    async function hydrateProfiles() {
+        try {
+            var r = await fetch('/api/aexos/profiles');
+            if (!r.ok) return;
+            var d = await r.json();
+            applyServerProfilesPayload(d);
+            renderPhase();
+        } catch (_) {}
+    }
+
+    var phase = 'desktop';
+    var selectedLoginUser = persisted.activeOsUser;
+    var addingLoginUser = false;
+    var launcherOpen = false;
+    var powerMenuOpen = false;
+    var launcherCat = 'all';
+    var launcherQuery = '';
+    var settingsTab = 'escritorio';
+    var settingsAdminSub = 'panel';
+    var settingsAccountSub = 'perfil';
+    var isFullscreen = false;
+
+    var windows = [];
+    var zTop = 20;
+    var winSeq = 1;
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    function updateClock() {
+        var now = new Date();
+        var cl = document.getElementById('aexos-clock');
+        var dt = document.getElementById('aexos-date');
+        if (cl) cl.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        if (dt) dt.textContent = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+    setInterval(updateClock, 15000);
+    updateClock();
+
+    function applyWallpaper() {
+        var shell = document.getElementById('aexos-shell');
+        var u = currentUser();
+        shell.setAttribute('data-wp', u.wallpaper || 'nebula');
+        shell.classList.toggle('is-fullscreen', isFullscreen);
+    }
+
+    function renderPhase() {
+        applyWallpaper();
+        var powerScreen = document.getElementById('aexos-power-screen');
+        var lockWrap = document.getElementById('aexos-lock-wrap');
+        var desktop = document.getElementById('aexos-desktop');
+        var taskbar = document.getElementById('aexos-taskbar');
+        var startMenu = document.getElementById('aexos-start-menu');
+
+        if (phase === 'off' || phase === 'booting' || phase === 'restarting') {
+            powerScreen.hidden = false;
+            lockWrap.hidden = true;
+            desktop.hidden = true;
+            taskbar.hidden = true;
+            startMenu.hidden = true;
+            if (phase === 'off') {
+                powerScreen.innerHTML =
+                    '<img src="/static/img/logo.png" alt="aexOS" style="width:56px;height:56px;border-radius:14px;object-fit:contain;opacity:.9">' +
+                    '<div><h2 style="margin:0;font-size:20px;font-weight:700;">aexOS apagado</h2><p class="muted" style="margin:6px 0 0;font-size:13px;">Tu sesión se cerró de forma segura.</p></div>' +
+                    '<div style="display:flex;gap:10px;align-items:center;">' +
+                    '<button type="button" class="btn btn-primary" id="aexos-btn-poweron">Encender aexOS</button>' +
+                    '<a href="/hub" class="btn btn-secondary">Volver al Hub</a>' +
+                    '</div>';
+                document.getElementById('aexos-btn-poweron').onclick = function() {
+                    phase = 'booting';
+                    renderPhase();
+                    setTimeout(function() { phase = 'login'; renderPhase(); }, 800);
+                };
+            } else {
+                powerScreen.innerHTML =
+                    '<img src="/static/img/logo.png" alt="aexOS" style="width:56px;height:56px;border-radius:14px;object-fit:contain;opacity:.9">' +
+                    '<div class="aexos-spinner"></div>' +
+                    '<div style="font-size:15px;font-weight:600;">' + (phase === 'restarting' ? 'Reiniciando aexOS…' : 'Iniciando aexOS…') + '</div>';
+            }
+            return;
+        }
+
+        if (phase === 'login') {
+            powerScreen.hidden = true;
+            lockWrap.hidden = false;
+            desktop.hidden = true;
+            taskbar.hidden = true;
+            startMenu.hidden = true;
+            renderLockScreen();
+            return;
+        }
+
+        powerScreen.hidden = true;
+        lockWrap.hidden = true;
+        desktop.hidden = false;
+        taskbar.hidden = false;
+        renderDesktopIcons();
+        renderTaskbar();
+        renderLauncher();
+    }
+
+    var pendingUnlockUserInSettings = '';
+
+    function renderLockScreen() {
+        var wrap = document.getElementById('aexos-lock-wrap');
+        var target = persisted.osUsers.find(function(u) { return u.username === selectedLoginUser; }) || persisted.osUsers[0];
+        if (addingLoginUser) {
+            wrap.innerHTML =
+                '<div class="aexos-lock-card">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+                '<strong style="font-size:16px;">Agregar usuario a aexOS</strong>' +
+                '<button type="button" class="aexos-tray-btn" id="lk-cancel-add">×</button></div>' +
+                '<p class="muted" style="font-size:12px;margin:0;">Ingresa el usuario y contraseña de una cuenta existente de Aethravox Studios. Solo se guardará el nombre (nunca la contraseña) y al entrar todo funcionará con esa cuenta.</p>' +
+                '<form id="lk-add-form" style="display:flex;flex-direction:column;gap:10px;" autocomplete="off">' +
+                '<div class="input-group"><label>Usuario o correo de Aethravox Studios</label><input id="lk-new-name" type="text" required autocomplete="off" placeholder="ej. lena_ui"></div>' +
+                '<div class="input-group"><label>Contraseña de su cuenta</label><input id="lk-new-pass" type="password" required autocomplete="new-password" placeholder="••••••••"></div>' +
+                '<div id="lk-add-err" class="auth-inline-error" hidden></div>' +
+                '<div style="display:flex;gap:8px;margin-top:4px;">' +
+                '<button type="button" class="btn btn-secondary" style="flex:1" id="lk-back-btn">Cancelar</button>' +
+                '<button type="submit" class="btn btn-primary" style="flex:1">Entrar a su cuenta</button></div></form></div>';
+            document.getElementById('lk-cancel-add').onclick = document.getElementById('lk-back-btn').onclick = function() {
+                addingLoginUser = false; renderLockScreen();
+            };
+            document.getElementById('lk-add-form').onsubmit = async function(e) {
+                e.preventDefault();
+                var userIn = document.getElementById('lk-new-name').value;
+                var passIn = document.getElementById('lk-new-pass').value;
+                var res = await addOsUser(userIn, passIn);
+                document.getElementById('lk-new-pass').value = '';
+                if (res.error) {
+                    var er = document.getElementById('lk-add-err');
+                    er.textContent = res.error; er.hidden = false; return;
+                }
+                addingLoginUser = false;
+                pendingUnlockUserInSettings = '';
+                windows = [];
+                var winHost = document.getElementById('aexos-windows');
+                if (winHost) winHost.innerHTML = '';
+                phase = 'desktop';
+                renderPhase();
+            };
+            return;
+        }
+
+        var avHtml = target.avatar
+            ? '<img src="' + esc(target.avatar) + '" alt="avatar">'
+            : esc(target.username.slice(0, 1));
+        var chips = persisted.osUsers.map(function(u) {
+            return '<button type="button" class="aexos-user-chip ' + (u.username === target.username ? 'is-active' : '') + '" data-sel-user="' + esc(u.username) + '">@' + esc(u.username) + '</button>';
+        }).join('') + '<button type="button" class="aexos-user-chip aexos-user-chip-add" id="lk-open-add">+ Agregar usuario</button>';
+
+        var passFieldHtml =
+            '<div class="input-group"><label>Contraseña de @' + esc(target.username) + '</label>' +
+            '<input id="lk-login-pass" type="password" required autocomplete="off" placeholder="Ingresa la contraseña de su cuenta"></div>' +
+            '<div id="lk-login-err" class="auth-inline-error" hidden></div>';
+
+        wrap.innerHTML =
+            '<div class="aexos-lock-card">' +
+            '<div style="text-align:center;">' +
+            '<div class="aexos-avatar-lg">' + avHtml + '</div>' +
+            '<h2 style="margin:10px 0 2px;font-size:18px;font-weight:700;">@' + esc(target.username) + '</h2>' +
+            '<p class="muted" style="margin:0;font-size:12px;">' + (target.isPrimary ? 'Cuenta principal · Requiere contraseña' : 'Cuenta guardada (solo nombre) · Requiere contraseña') + '</p>' +
+            '</div>' +
+            '<form id="lk-login-form" style="display:flex;flex-direction:column;gap:10px;" autocomplete="off">' +
+            passFieldHtml +
+            '<button type="submit" class="btn btn-primary btn-block">Entrar como @' + esc(target.username) + '</button>' +
+            '</form>' +
+            '<div style="border-top:1px solid var(--border-subtle,#1E1830);padding-top:12px;display:flex;flex-wrap:wrap;gap:6px;">' + chips + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--text-muted,#71717A);">' +
+            '<a href="/hub" id="lk-exit-hub" style="color:var(--text-secondary,#A1A1AA);text-decoration:none;">← Salir al Hub</a>' +
+            '<button type="button" id="lk-shutdown-btn" style="background:transparent;border:none;color:var(--status-err,#DC2626);cursor:pointer;font-size:11.5px;">Apagar</button>' +
+            '</div></div>';
+
+        wrap.querySelectorAll('[data-sel-user]').forEach(function(b) {
+            b.onclick = function() { selectedLoginUser = b.getAttribute('data-sel-user'); renderLockScreen(); };
+        });
+        document.getElementById('lk-open-add').onclick = function() { addingLoginUser = true; renderLockScreen(); };
+        document.getElementById('lk-shutdown-btn').onclick = function() {
+            if (navigator.sendBeacon) navigator.sendBeacon('/api/aexos/exit');
+            phase = 'off'; renderPhase();
+        };
+        document.getElementById('lk-exit-hub').onclick = function() {
+            if (navigator.sendBeacon) navigator.sendBeacon('/api/aexos/exit');
+        };
+        document.getElementById('lk-login-form').onsubmit = async function(e) {
+            e.preventDefault();
+            var passEl = document.getElementById('lk-login-pass');
+            var pw = passEl ? passEl.value : null;
+            var res = await switchOsUserById(target.user_id, pw);
+            if (passEl) passEl.value = '';
+            if (res && res.error) {
+                var er = document.getElementById('lk-login-err');
+                if (er) { er.textContent = res.error; er.hidden = false; }
+                return;
+            }
+            phase = 'desktop';
+            renderPhase();
+        };
+    }
+
+    async function addOsUser(rawName, password) {
+        var clean = (rawName || '').trim().replace(/^@+/, '').toLowerCase();
+        if (!clean || clean.length < 2) return { error: 'Ingresa un usuario válido de Aethravox Studios.' };
+        if (!password) return { error: 'Ingresa la contraseña de esa cuenta.' };
+        try {
+            var r = await fetch('/api/aexos/profiles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: clean,
+                    password: password
+                })
+            });
+            var d = await r.json();
+            if (!r.ok || !d.ok) {
+                return { error: d.error || 'No se pudo verificar esa cuenta.' };
+            }
+            applyServerProfilesPayload(d);
+            return { ok: true, created_user_id: d.created_user_id };
+        } catch (_) {
+            return { error: 'Error de red verificando la cuenta.' };
+        }
+    }
+
+    async function switchOsUserById(userId, password) {
+        try {
+            var body = { user_id: Number(userId) };
+            if (password != null && password !== '') body.password = password;
+            var r = await fetch('/api/aexos/switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            var d = await r.json();
+            if (!r.ok || !d.ok) {
+                return { error: d.error || 'No se pudo cambiar de cuenta.' };
+            }
+            applyServerProfilesPayload(d);
+        } catch (_) {
+            return { error: 'Error de red cambiando de usuario.' };
+        }
+        launcherOpen = false;
+        powerMenuOpen = false;
+        pendingUnlockUserInSettings = '';
+        windows = [];
+        var winHost = document.getElementById('aexos-windows');
+        if (winHost) winHost.innerHTML = '';
+        renderPhase();
+        return { ok: true };
+    }
+
+    async function switchOsUser(username, password) {
+        var u = persisted.osUsers.find(function(x) { return x.username === username; });
+        if (!u) return { error: 'Usuario no encontrado.' };
+        if (!password) {
+            launcherOpen = false;
+            powerMenuOpen = false;
+            selectedLoginUser = u.username;
+            addingLoginUser = false;
+            phase = 'login';
+            renderPhase();
+            return { ok: true };
+        }
+        return await switchOsUserById(u.user_id, password);
+    }
+
+    async function deleteOsUser(username) {
+        var u = persisted.osUsers.find(function(x) { return x.username === username; });
+        if (!u || u.isPrimary) return;
+        try {
+            var r = await fetch('/api/aexos/profiles/' + encodeURIComponent(u.user_id) + '/delete', {
+                method: 'POST'
+            });
+            var d = await r.json();
+            if (r.ok && d.ok) {
+                applyServerProfilesPayload(d);
+            }
+        } catch (_) {}
+        pendingUnlockUserInSettings = '';
+        windows = [];
+        var winHost = document.getElementById('aexos-windows');
+        if (winHost) winHost.innerHTML = '';
+        renderPhase();
+    }
+
+    function renderDesktopIcons() {
+        var host = document.getElementById('aexos-icons');
+        var u = currentUser();
+        host.style.display = u.showDesktopIcons === false ? 'none' : 'grid';
+        host.innerHTML = APP_CATALOG.map(function(app) {
+            var isOpen = windows.some(function(w) { return w.id === app.id; });
+            return '<button type="button" class="aexos-icon-btn" data-open-app="' + app.id + '">' +
+                '<div class="aexos-icon-box" style="color:' + app.accent + '">' + SVGS[app.id] + '</div>' +
+                '<span class="lbl">' + esc(app.shortName) + '</span>' +
+                (isOpen ? '<span class="aexos-icon-dot" style="background:' + app.accent + '"></span>' : '') +
+                '</button>';
+        }).join('');
+        host.querySelectorAll('[data-open-app]').forEach(function(btn) {
+            btn.onclick = function() { openApp(btn.getAttribute('data-open-app')); };
+        });
+    }
+
+    function renderLauncher() {
+        var u = currentUser();
+        var startMenu = document.getElementById('aexos-start-menu');
+        var startBtn = document.getElementById('aexos-start-btn');
+        startMenu.hidden = !launcherOpen;
+        startBtn.classList.toggle('is-open', launcherOpen);
+
+        document.getElementById('aexos-start-avatar').textContent = u.username.slice(0, 1);
+        document.getElementById('aexos-start-username').textContent = '@' + u.username;
+
+        document.querySelectorAll('.aexos-cat-tab').forEach(function(tab) {
+            tab.classList.toggle('is-active', tab.getAttribute('data-cat') === launcherCat);
+        });
+
+        var q = launcherQuery.toLowerCase().trim();
+        var list = APP_CATALOG.filter(function(app) {
+            if (launcherCat !== 'all' && app.cat !== launcherCat) return false;
+            if (!q) return true;
+            return app.name.toLowerCase().includes(q) || app.desc.toLowerCase().includes(q) || app.id.includes(q);
+        });
+
+        var listEl = document.getElementById('aexos-start-list');
+        listEl.innerHTML = list.length === 0
+            ? '<div class="muted" style="text-align:center;padding:24px;font-size:12px;">No hay aplicaciones que coincidan.</div>'
+            : list.map(function(app) {
+                var pinned = u.pinnedApps.indexOf(app.id) !== -1;
+                return '<div class="aexos-start-row">' +
+                    '<button type="button" class="aexos-start-open" data-launch="' + app.id + '">' +
+                    '<div class="aexos-start-ico" style="color:' + app.accent + '">' + SVGS[app.id] + '</div>' +
+                    '<div style="min-width:0;flex:1;">' +
+                    '<div class="aexos-start-name">' + esc(app.name) + '</div>' +
+                    '<div class="aexos-start-desc">' + esc(app.desc) + '</div>' +
+                    '</div></button>' +
+                    '<button type="button" class="aexos-pin-btn ' + (pinned ? 'is-pinned' : '') + '" data-pin="' + app.id + '">' +
+                    (pinned ? 'Quitar' : 'Fijar') + '</button></div>';
+            }).join('');
+
+        listEl.querySelectorAll('[data-launch]').forEach(function(b) {
+            b.onclick = function() { openApp(b.getAttribute('data-launch')); };
+        });
+        listEl.querySelectorAll('[data-pin]').forEach(function(b) {
+            b.onclick = function() { togglePinApp(b.getAttribute('data-pin')); };
+        });
+
+        renderPowerPopover();
+    }
+
+    function renderPowerPopover() {
+        var pop = document.getElementById('aexos-power-popover');
+        var pBtn = document.getElementById('aexos-power-btn');
+        pop.hidden = !powerMenuOpen;
+        pBtn.classList.toggle('is-open', powerMenuOpen);
+        pBtn.setAttribute('aria-expanded', powerMenuOpen ? 'true' : 'false');
+        if (!powerMenuOpen) return;
+
+        var u = currentUser();
+        var others = persisted.osUsers.filter(function(x) { return x.username !== u.username; });
+        var html = '';
+        if (persisted.osUsers.length > 1) {
+            html += '<div class="aexos-pop-head">Cambiar de usuario</div>';
+            others.forEach(function(o) {
+                html += '<button type="button" class="aexos-pop-item" data-switch-u="' + esc(o.username) + '">' +
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-secondary)"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>' +
+                    '<span>@' + esc(o.username) + '</span></button>';
+            });
+            html += '<div class="aexos-pop-sep"></div>';
+        }
+        html +=
+            '<button type="button" class="aexos-pop-item" id="pop-logout">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-secondary)"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>' +
+            '<span>Cerrar sesión</span></button>' +
+            '<button type="button" class="aexos-pop-item" id="pop-restart">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent-primary)"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>' +
+            '<span>Reiniciar</span></button>' +
+            '<button type="button" class="aexos-pop-item danger" id="pop-shutdown">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>' +
+            '<span>Apagar</span></button>';
+
+        pop.innerHTML = html;
+        pop.querySelectorAll('[data-switch-u]').forEach(function(b) {
+            b.onclick = function() { switchOsUser(b.getAttribute('data-switch-u')); };
+        });
+        function clearTempOsSession() {
+            fetch('/api/aexos/exit', { method: 'POST' }).catch(function() {});
+            persisted.activeOsUser = PRIMARY_USER;
+        }
+        document.getElementById('pop-logout').onclick = function() {
+            var curName = currentUser().username;
+            launcherOpen = false; powerMenuOpen = false;
+            windows = []; document.getElementById('aexos-windows').innerHTML = '';
+            clearTempOsSession();
+            selectedLoginUser = curName;
+            phase = 'login'; renderPhase();
+        };
+        document.getElementById('pop-restart').onclick = function() {
+            launcherOpen = false; powerMenuOpen = false;
+            windows = []; document.getElementById('aexos-windows').innerHTML = '';
+            clearTempOsSession();
+            phase = 'restarting'; renderPhase();
+            setTimeout(function() { selectedLoginUser = PRIMARY_USER; phase = 'login'; renderPhase(); }, 1000);
+        };
+        document.getElementById('pop-shutdown').onclick = function() {
+            launcherOpen = false; powerMenuOpen = false;
+            windows = []; document.getElementById('aexos-windows').innerHTML = '';
+            clearTempOsSession();
+            selectedLoginUser = PRIMARY_USER;
+            phase = 'off'; renderPhase();
+        };
+    }
+
+    function togglePinApp(appId) {
+        var u = currentUser();
+        var idx = u.pinnedApps.indexOf(appId);
+        if (idx !== -1) u.pinnedApps.splice(idx, 1);
+        else u.pinnedApps.push(appId);
+        saveState();
+        renderTaskbar();
+        renderLauncher();
+    }
+
+    function renderTaskbar() {
+        var u = currentUser();
+        var ids = u.pinnedApps.slice();
+        windows.forEach(function(w) { if (ids.indexOf(w.id) === -1) ids.push(w.id); });
+
+        var activeWin = windows.filter(function(w) { return !w.minimized; }).sort(function(a, b) { return b.z - a.z; })[0];
+        var container = document.getElementById('aexos-task-items');
+        container.innerHTML = ids.map(function(id) {
+            var app = APP_CATALOG.find(function(a) { return a.id === id; });
+            if (!app) return '';
+            var w = windows.find(function(x) { return x.id === id; });
+            var isAct = !!(w && activeWin && activeWin.winId === w.winId);
+            return '<button type="button" class="aexos-task-btn ' + (w ? 'is-open' : '') + (isAct ? ' is-active' : '') + '" data-tb-app="' + id + '" title="' + esc(app.name) + '">' +
+                '<span style="color:' + app.accent + ';display:inline-flex;">' + SVGS[app.id].replace(/width="20" height="20"/g, 'width="16" height="16"') + '</span>' +
+                '<span class="lbl">' + esc(app.shortName) + '</span>' +
+                (w ? '<span class="aexos-task-ind"></span>' : '') +
+                '</button>';
+        }).join('');
+
+        container.querySelectorAll('[data-tb-app]').forEach(function(b) {
+            b.onclick = function() {
+                var id = b.getAttribute('data-tb-app');
+                var w = windows.find(function(x) { return x.id === id; });
+                if (!w) openApp(id);
+                else if (w.minimized) { w.minimized = false; focusWin(w.winId); }
+                else if (activeWin && activeWin.winId === w.winId) minWin(w.winId);
+                else focusWin(w.winId);
+            };
+        });
+    }
+
+    function openApp(appId) {
+        var app = APP_CATALOG.find(function(a) { return a.id === appId; });
+        if (!app) return;
+        launcherOpen = false;
+        powerMenuOpen = false;
+        document.getElementById('aexos-ctx-menu').hidden = true;
+        renderLauncher();
+
+        var existing = windows.find(function(w) { return w.id === appId; });
+        if (existing) {
+            existing.minimized = false;
+            focusWin(existing.winId);
+            return;
+        }
+
+        var desk = document.getElementById('aexos-desktop');
+        var dw = desk.clientWidth || 960;
+        var dh = desk.clientHeight || 540;
+        var w = Math.min(app.w, Math.max(290, dw - 32));
+        var h = Math.min(app.h, Math.max(280, dh - 36));
+        var winId = winSeq++;
+        var winObj = {
+            winId: winId,
+            id: app.id,
+            title: app.name,
+            accent: app.accent,
+            x: Math.min(Math.max(16, 42 + ((windows.length * 26) % 140)), Math.max(16, dw - w - 12)),
+            y: Math.min(Math.max(14, 24 + ((windows.length * 22) % 90)), Math.max(14, dh - h - 16)),
+            w: w, h: h,
+            z: ++zTop,
+            minimized: false,
+            maximized: false
+        };
+        windows.push(winObj);
+        mountWindow(winObj, app);
+        renderDesktopIcons();
+        renderTaskbar();
+    }
+
+    function mountWindow(winObj, app) {
+        var host = document.getElementById('aexos-windows');
+        var el = document.createElement('div');
+        el.className = 'aexos-window is-focused';
+        el.id = 'win-' + winObj.winId;
+        el.style.left = winObj.x + 'px';
+        el.style.top = winObj.y + 'px';
+        el.style.width = winObj.w + 'px';
+        el.style.height = winObj.h + 'px';
+        el.style.zIndex = winObj.z;
+        el.onmousedown = function() { focusWin(winObj.winId); };
+
+        el.innerHTML =
+            '<div class="aexos-win-bar">' +
+                '<div class="aexos-win-title">' +
+                    '<span style="color:' + app.accent + ';display:inline-flex;">' + SVGS[app.id].replace(/width="20" height="20"/g, 'width="15" height="15"') + '</span>' +
+                    '<span>' + esc(app.name) + '</span>' +
+                '</div>' +
+                '<div class="aexos-win-controls">' +
+                    '<button type="button" data-min title="Minimizar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>' +
+                    '<button type="button" data-max title="Maximizar"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="16" x="4" y="4" rx="2"/></svg></button>' +
+                    '<button type="button" class="btn-close" data-cls title="Cerrar"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="aexos-win-body ' + (app.url ? 'no-pad' : '') + '"></div>';
+
+        el.querySelector('[data-min]').onclick = function(e) { e.stopPropagation(); minWin(winObj.winId); };
+        el.querySelector('[data-max]').onclick = function(e) { e.stopPropagation(); maxWin(winObj.winId); };
+        el.querySelector('[data-cls]').onclick = function(e) { e.stopPropagation(); closeWin(winObj.winId); };
+
+        var bar = el.querySelector('.aexos-win-bar');
+        bar.addEventListener('dblclick', function(e) {
+            if (!e.target.closest('button')) maxWin(winObj.winId);
+        });
+        bar.addEventListener('mousedown', function(e) {
+            if (e.target.closest('button') || winObj.maximized) return;
+            var sx = e.clientX - winObj.x;
+            var sy = e.clientY - winObj.y;
+            function mv(ev) {
+                winObj.x = Math.max(0, ev.clientX - sx);
+                winObj.y = Math.max(0, ev.clientY - sy);
+                el.style.left = winObj.x + 'px';
+                el.style.top = winObj.y + 'px';
+            }
+            function up() {
+                window.removeEventListener('mousemove', mv);
+                window.removeEventListener('mouseup', up);
+            }
+            window.addEventListener('mousemove', mv);
+            window.addEventListener('mouseup', up);
+        });
+
+        var body = el.querySelector('.aexos-win-body');
+        if (app.url) {
+            body.innerHTML = '<iframe src="' + app.url + '" title="' + esc(app.name) + '"></iframe>';
+        } else if (app.id === 'files') {
+            initFilesApp(body);
+        } else if (app.id === 'terminal') {
+            initTerminalApp(body);
+        } else if (app.id === 'notes') {
+            initNotesApp(body);
+        } else if (app.id === 'calc') {
+            initCalcApp(body);
+        } else if (app.id === 'paint') {
+            initPaintApp(body);
+        } else if (app.id === 'settings') {
+            initSettingsApp(body);
+        }
+
+        host.appendChild(el);
+        focusWin(winObj.winId);
+    }
+
+    function focusWin(winId) {
+        var w = windows.find(function(x) { return x.winId === winId; });
+        if (!w) return;
+        w.z = ++zTop;
+        w.minimized = false;
+        windows.forEach(function(item) {
+            var dom = document.getElementById('win-' + item.winId);
+            if (!dom) return;
+            dom.hidden = item.minimized;
+            dom.style.zIndex = item.z;
+            dom.classList.toggle('is-focused', item.winId === winId);
+        });
+        renderTaskbar();
+    }
+
+    function minWin(winId) {
+        var w = windows.find(function(x) { return x.winId === winId; });
+        if (!w) return;
+        w.minimized = true;
+        var dom = document.getElementById('win-' + winId);
+        if (dom) dom.hidden = true;
+        renderTaskbar();
+    }
+
+    function maxWin(winId) {
+        var w = windows.find(function(x) { return x.winId === winId; });
+        if (!w) return;
+        w.maximized = !w.maximized;
+        var dom = document.getElementById('win-' + winId);
+        if (dom) dom.classList.toggle('is-maximized', w.maximized);
+    }
+
+    function closeWin(winId) {
+        windows = windows.filter(function(x) { return x.winId !== winId; });
+        var dom = document.getElementById('win-' + winId);
+        if (dom) dom.remove();
+        renderDesktopIcons();
+        renderTaskbar();
+    }
+
+    /* ============ Apps nativas de aexOS ============ */
+    function initFilesApp(body) {
+        function draw() {
+            var u = currentUser();
+            body.innerHTML =
+                '<div style="padding:14px;display:flex;flex-direction:column;gap:12px;">' +
+                '<div style="display:flex;gap:8px;align-items:center;">' +
+                '<input id="fx-name" placeholder="nuevo_archivo.txt" style="flex:1;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--bg-surface);color:var(--text-primary);">' +
+                '<button type="button" class="btn btn-primary btn-sm" id="fx-add">+ Crear</button>' +
+                '<button type="button" class="btn btn-secondary btn-sm" id="fx-docs">Docs Estudio</button>' +
+                '</div>' +
+                '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">' +
+                (u.files.length === 0
+                    ? '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;">Carpeta vacía. Crea un archivo arriba.</p>'
+                    : u.files.map(function(f, i) {
+                        return '<div style="padding:12px;border-radius:10px;border:1px solid var(--border-subtle);background:var(--bg-surface);display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+                            '<div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(f.name) + '</div><div class="muted" style="font-size:10.5px;">' + esc(f.created || 'Local') + '</div></div>' +
+                            '<button type="button" class="btn-icon delete" data-del="' + i + '" title="Eliminar">×</button></div>';
+                    }).join('')) +
+                '</div></div>';
+
+            body.querySelector('#fx-add').onclick = function() {
+                var val = body.querySelector('#fx-name').value.trim();
+                if (!val) return;
+                u.files.push({ name: val, created: 'Ahora' });
+                saveState();
+                draw();
+            };
+            body.querySelector('#fx-docs').onclick = function() { openApp('docs'); };
+            body.querySelectorAll('[data-del]').forEach(function(b) {
+                b.onclick = function() {
+                    u.files.splice(Number(b.getAttribute('data-del')), 1);
+                    saveState();
+                    draw();
+                };
+            });
+        }
+        draw();
+    }
+
+    function initTerminalApp(body) {
+        var u = currentUser();
+        body.innerHTML =
+            '<div class="aexos-term">' +
+            '<div class="aexos-term-out" id="term-out">aexOS Terminal — Sesión @' + esc(u.username) + '. Escribe "help" para ver comandos.\n</div>' +
+            '<form class="aexos-term-in" id="term-form">' +
+            '<span style="color:var(--accent-primary,#e0a308);">' + esc(u.username) + '@aexos:~$</span>' +
+            '<input type="text" id="term-in" autocomplete="off" autofocus>' +
+            '</form></div>';
+        var out = body.querySelector('#term-out');
+        var inp = body.querySelector('#term-in');
+        body.querySelector('#term-form').onsubmit = async function(e) {
+            e.preventDefault();
+            var raw = inp.value.trim();
+            if (!raw) return;
+            inp.value = '';
+            out.textContent += '\n$ ' + raw + '\n';
+            var parts = raw.split(/\s+/);
+            var cmd = parts[0];
+            var arg = parts.slice(1).join(' ');
+            if (cmd === 'help') {
+                out.textContent += 'Comandos: help, whoami, ls, date, clear, open <app>, aris <pregunta>\n';
+            } else if (cmd === 'whoami') {
+                out.textContent += u.username + '\n';
+            } else if (cmd === 'ls') {
+                out.textContent += (u.files.map(function(f) { return f.name; }).join('  ') || '(vacío)') + '\n';
+            } else if (cmd === 'date') {
+                out.textContent += new Date().toLocaleString() + '\n';
+            } else if (cmd === 'clear') {
+                out.textContent = '';
+            } else if (cmd === 'open') {
+                openApp(arg || 'files');
+                out.textContent += 'Abriendo ' + (arg || 'files') + '...\n';
+            } else if (cmd === 'aris') {
+                if (!arg) { out.textContent += 'Uso: aris <tu pregunta>\n'; }
+                else {
+                    out.textContent += 'Consultando a Aris...\n';
+                    try {
+                        var cr = await fetch('/api/aris/chats', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: 'title=' + encodeURIComponent('Terminal aexOS') + '&history_limit=50'
+                        });
+                        var cd = await cr.json();
+                        if (cd.ok) {
+                            var sr = await fetch('/api/aris/chats/' + cd.chat_id + '/send', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: 'content=' + encodeURIComponent(arg)
+                            });
+                            var reader = sr.body.getReader();
+                            var dec = new TextDecoder();
+                            var buf = '';
+                            while (true) {
+                                var step = await reader.read();
+                                if (step.done) break;
+                                buf += dec.decode(step.value, { stream: true });
+                                var evts = buf.split('\n\n');
+                                buf = evts.pop() || '';
+                                for (var i = 0; i < evts.length; i++) {
+                                    if (evts[i].indexOf('event: chunk') !== -1) {
+                                        var m = evts[i].match(/data:\s*(.*)/s);
+                                        if (m) {
+                                            try { out.textContent += JSON.parse(m[1]).text || ''; }
+                                            catch (_) { out.textContent += m[1]; }
+                                        }
+                                    }
+                                }
+                                out.scrollTop = out.scrollHeight;
+                            }
+                            out.textContent += '\n';
+                        }
+                    } catch (_) { out.textContent += 'Error conectando con Aris.\n'; }
+                }
+            } else {
+                out.textContent += 'Comando no encontrado: ' + cmd + '\n';
+            }
+            out.scrollTop = out.scrollHeight;
+        };
+    }
+
+    function initNotesApp(body) {
+        var u = currentUser();
+        body.innerHTML =
+            '<div style="height:100%;display:flex;flex-direction:column;padding:12px;box-sizing:border-box;gap:8px;">' +
+            '<textarea id="aex-note-area" style="flex:1;width:100%;box-sizing:border-box;resize:none;padding:12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--bg-surface);color:var(--text-primary);font-family:inherit;font-size:13px;" placeholder="Escribe tus notas aquí..."></textarea>' +
+            '<div class="muted" style="font-size:11.5px;">Guardado automático local en el perfil @' + esc(u.username) + '.</div></div>';
+        var area = body.querySelector('#aex-note-area');
+        area.value = u.notes || '';
+        area.oninput = function() { u.notes = area.value; saveState(); };
+    }
+
+    function initCalcApp(body) {
+        var expr = '';
+        var keys = ['C','(',')','/','7','8','9','*','4','5','6','-','1','2','3','+','0','.','=','%'];
+        body.innerHTML =
+            '<div style="height:100%;display:flex;flex-direction:column;padding:12px;box-sizing:border-box;gap:10px;">' +
+            '<input id="calc-disp" readonly value="0" style="width:100%;box-sizing:border-box;padding:12px 14px;text-align:right;font-size:22px;font-weight:700;font-family:\'JetBrains Mono\',monospace;border-radius:10px;border:1px solid var(--border-subtle);background:var(--bg-surface);color:var(--text-primary);">' +
+            '<div style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">' +
+            keys.map(function(k) {
+                var isEq = k === '=';
+                return '<button type="button" class="' + (isEq ? 'btn btn-primary' : 'btn btn-secondary') + '" style="height:auto;font-family:\'JetBrains Mono\',monospace;" data-k="' + k + '">' + k + '</button>';
+            }).join('') +
+            '</div></div>';
+        var disp = body.querySelector('#calc-disp');
+        body.querySelectorAll('[data-k]').forEach(function(btn) {
+            btn.onclick = function() {
+                var k = btn.getAttribute('data-k');
+                if (k === 'C') { expr = ''; disp.value = '0'; return; }
+                if (k === '=') {
+                    try {
+                        if (/^[0-9+\-*/.%() ]+$/.test(expr)) {
+                            expr = String(Number(Number(Function('"use strict";return (' + expr + ')')()).toFixed(8)));
+                            disp.value = expr;
+                        }
+                    } catch (_) { disp.value = 'Error'; expr = ''; }
+                    return;
+                }
+                expr += k;
+                disp.value = expr;
+            };
+        });
+    }
+
+    function initPaintApp(body) {
+        body.innerHTML =
+            '<div style="height:100%;display:flex;flex-direction:column;">' +
+            '<div style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface);display:flex;gap:8px;align-items:center;justify-content:space-between;">' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<input type="color" id="pt-color" value="#00d4ff">' +
+            '<input type="range" id="pt-size" min="2" max="24" value="4">' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;">' +
+            '<button type="button" class="btn btn-secondary btn-sm" id="pt-clear">Limpiar</button>' +
+            '<button type="button" class="btn btn-primary btn-sm" id="pt-save">PNG</button>' +
+            '</div></div>' +
+            '<div style="flex:1;min-height:0;background:#06030C;padding:8px;">' +
+            '<canvas id="pt-cv" width="600" height="360" style="width:100%;height:100%;display:block;border-radius:8px;background:#06030C;cursor:crosshair;touch-action:none;"></canvas>' +
+            '</div></div>';
+        var cv = body.querySelector('#pt-cv');
+        var ctx = cv.getContext('2d');
+        var drawing = false;
+        function pos(e) {
+            var r = cv.getBoundingClientRect();
+            return { x: ((e.clientX - r.left) / r.width) * cv.width, y: ((e.clientY - r.top) / r.height) * cv.height };
+        }
+        cv.onpointerdown = function(e) { drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+        cv.onpointermove = function(e) {
+            if (!drawing) return;
+            var p = pos(e);
+            ctx.strokeStyle = body.querySelector('#pt-color').value;
+            ctx.lineWidth = Number(body.querySelector('#pt-size').value);
+            ctx.lineCap = 'round';
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+        };
+        window.addEventListener('pointerup', function() { drawing = false; });
+        body.querySelector('#pt-clear').onclick = function() { ctx.clearRect(0, 0, cv.width, cv.height); };
+        body.querySelector('#pt-save').onclick = function() {
+            var a = document.createElement('a'); a.download = 'boceto_aexos.png'; a.href = cv.toDataURL('image/png'); a.click();
+        };
+    }
+
+    function initSettingsApp(body) {
+        function draw() {
+            var u = currentUser();
+            var tabs = [
+                { id: 'escritorio', label: 'Escritorio' },
+                { id: 'temas', label: 'Temas' },
+                { id: 'cuenta', label: 'Cuenta y Perfil' },
+                { id: 'usuarios', label: 'Cuentas y usuarios' }
+            ];
+            if (CAN_ADMIN) tabs.push({ id: 'admin', label: 'Ajustes de Admin' });
+
+            var tabsHtml = tabs.map(function(t) {
+                return '<button type="button" class="aex-settings-tab ' + (settingsTab === t.id ? 'is-active' : '') + '" data-st-tab="' + t.id + '">' + t.label + '</button>';
+            }).join('');
+
+            var isIframeTab = settingsTab === 'temas' || settingsTab === 'cuenta' || settingsTab === 'admin';
+            var contentHtml = '';
+
+            if (settingsTab === 'escritorio') {
+                var curMode = document.documentElement.getAttribute('data-mode') === 'light' ? 'light' : 'dark';
+                contentHtml =
+                    '<div style="display:flex;flex-direction:column;gap:20px;max-width:720px;">' +
+                    '<div><div class="aex-sec-title">Modo de color</div><div class="aex-grid-2">' +
+                    '<button type="button" class="aex-choice-card ' + (curMode === 'dark' ? 'is-active' : '') + '" id="st-mode-dark"><span>Modo oscuro</span></button>' +
+                    '<button type="button" class="aex-choice-card ' + (curMode === 'light' ? 'is-active' : '') + '" id="st-mode-light"><span>Modo claro</span></button>' +
+                    '</div></div>' +
+                    '<div><div class="aex-sec-title">Fondo del escritorio</div><div class="aex-grid-2">' +
+                    WALLPAPERS.map(function(w) {
+                        return '<button type="button" class="aex-choice-card ' + (u.wallpaper === w.id ? 'is-active' : '') + '" data-st-wp="' + w.id + '">' +
+                            '<div><div style="font-size:12.5px;font-weight:600;">' + w.name + '</div><div class="muted" style="font-size:11px;margin-top:2px;">' + w.desc + '</div></div></button>';
+                    }).join('') +
+                    '</div></div>' +
+                    '<div><div class="aex-sec-title">Accesos rápidos en la barra de tareas</div><div class="aex-grid-3">' +
+                    APP_CATALOG.map(function(a) {
+                        var p = u.pinnedApps.indexOf(a.id) !== -1;
+                        return '<button type="button" class="aex-choice-card ' + (p ? 'is-active' : '') + '" data-st-pin="' + a.id + '">' +
+                            '<span style="font-size:12px;font-weight:500;">' + esc(a.shortName) + '</span>' +
+                            '<span style="font-size:11px;color:' + (p ? 'var(--accent-primary)' : 'var(--text-muted)') + ';">' + (p ? 'Fijada' : 'Fijar') + '</span></button>';
+                    }).join('') +
+                    '</div></div>' +
+                    '<div style="padding-top:12px;border-top:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;">' +
+                    '<div><div style="font-size:13px;font-weight:600;">Iconos en el escritorio</div><div class="muted" style="font-size:11.5px;">Usuario activo: @' + esc(u.username) + '</div></div>' +
+                    '<button type="button" class="btn ' + (u.showDesktopIcons !== false ? 'btn-primary' : 'btn-secondary') + ' btn-sm" id="st-toggle-icons">' + (u.showDesktopIcons !== false ? 'Visibles' : 'Ocultos') + '</button>' +
+                    '</div></div>';
+            } else if (settingsTab === 'temas') {
+                contentHtml = '<iframe src="/tema?embed=1" title="Temas" style="flex:1;width:100%;height:100%;border:0;"></iframe>';
+            } else if (settingsTab === 'cuenta') {
+                contentHtml =
+                    '<div class="aex-subtabs">' +
+                    '<button type="button" class="aex-subtab ' + (settingsAccountSub === 'perfil' ? 'is-active' : '') + '" data-ac-sub="perfil">Mi Perfil</button>' +
+                    '<button type="button" class="aex-subtab ' + (settingsAccountSub === 'cuenta' ? 'is-active' : '') + '" data-ac-sub="cuenta">Ajustes de cuenta</button>' +
+                    '</div>' +
+                    '<iframe src="' + (settingsAccountSub === 'perfil' ? '/perfil?embed=1' : '/dashboard?embed=1') + '" title="Cuenta" style="flex:1;width:100%;height:100%;border:0;"></iframe>';
+            } else if (settingsTab === 'usuarios') {
+                contentHtml =
+                    '<div style="display:flex;flex-direction:column;gap:18px;max-width:680px;">' +
+                    '<div><h3 style="margin:0;font-size:16px;font-weight:700;">Cuentas en aexOS</h3>' +
+                    '<p class="muted" style="margin:4px 0 0;font-size:12.5px;">Cada perfil es una cuenta real de Aethravox Studios. Al añadir otra cuenta, solo se guarda su nombre (nunca la contraseña) y al entrar todo se ejecuta con esa cuenta.</p></div>' +
+                    '<form id="st-add-user-form" autocomplete="off" style="padding:14px;border-radius:12px;border:1px solid var(--border-subtle);background:var(--bg-surface);display:flex;flex-direction:column;gap:10px;">' +
+                    '<div style="font-size:13px;font-weight:600;">Agregar usuario de Aethravox Studios a aexOS</div>' +
+                    '<div class="aex-grid-2">' +
+                    '<input id="st-new-u-name" type="text" required autocomplete="off" placeholder="Usuario o correo (ej. lena_ui)" style="height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--bg-obsidian);color:var(--text-primary);">' +
+                    '<input id="st-new-u-pass" type="password" required autocomplete="new-password" placeholder="Contraseña de su cuenta" style="height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border-strong);background:var(--bg-obsidian);color:var(--text-primary);">' +
+                    '</div>' +
+                    '<div id="st-u-msg" hidden style="font-size:12px;font-weight:500;"></div>' +
+                    '<div><button type="submit" class="btn btn-primary btn-sm">Verificar y entrar con esta cuenta</button></div></form>' +
+                    '<div><div class="aex-sec-title">Usuarios guardados (' + persisted.osUsers.length + ')</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                    persisted.osUsers.map(function(item) {
+                        var isCur = item.username === u.username;
+                        var askingPw = pendingUnlockUserInSettings === item.username;
+                        var inlinePrompt = askingPw
+                            ? '<form class="st-inline-unlock" data-unlock-user="' + esc(item.username) + '" autocomplete="off" style="width:100%;display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:8px;border-top:1px solid var(--border-subtle);">' +
+                              '<input type="password" required autocomplete="off" placeholder="Contraseña de @' + esc(item.username) + '" style="flex:1;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border-strong);background:var(--bg-obsidian);color:var(--text-primary);font-size:12px;">' +
+                              '<button type="submit" class="btn btn-primary btn-sm">Entrar</button>' +
+                              '<button type="button" class="btn btn-secondary btn-sm st-cancel-unlock">Cancelar</button>' +
+                              '</form>'
+                            : '';
+                        return '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--border-subtle);background:var(--bg-surface);">' +
+                            '<div style="display:flex;align-items:center;gap:10px;">' +
+                            '<div style="width:36px;height:36px;border-radius:9999px;border:1px solid var(--accent-primary);background:var(--bg-obsidian);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent-primary);text-transform:uppercase;">' + esc(item.username.slice(0,1)) + '</div>' +
+                            '<div><div style="font-size:13px;font-weight:600;">@' + esc(item.username) +
+                            (item.isPrimary ? ' <span class="muted" style="font-weight:400;font-size:11px;">· Cuenta principal</span>' : ' <span class="muted" style="font-weight:400;font-size:11px;">· Solo nombre guardado</span>') +
+                            (isCur ? ' <span style="color:var(--accent-primary);font-size:11px;">· Activa</span>' : '') +
+                            '</div><div class="muted" style="font-size:11.5px;">' + esc(item.role_display || item.role || 'Usuario') + ' · Fondo ' + esc(item.wallpaper) + '</div></div></div>' +
+                            '<div style="display:flex;gap:8px;">' +
+                            (!isCur ? '<button type="button" class="btn btn-secondary btn-sm" data-st-switch="' + esc(item.username) + '">Abrir cuenta</button>' : '') +
+                            (!item.isPrimary ? '<button type="button" class="btn btn-secondary btn-sm" style="color:var(--status-err);border-color:color-mix(in srgb,var(--status-err) 40%,transparent);" data-st-del="' + esc(item.username) + '">Quitar</button>' : '') +
+                            '</div>' + inlinePrompt + '</div>';
+                    }).join('') +
+                    '</div></div></div>';
+            } else if (settingsTab === 'admin' && CAN_ADMIN) {
+                contentHtml =
+                    '<div class="aex-subtabs">' +
+                    '<button type="button" class="aex-subtab ' + (settingsAdminSub === 'panel' ? 'is-active' : '') + '" data-ad-sub="panel">Panel Admin</button>' +
+                    '<button type="button" class="aex-subtab ' + (settingsAdminSub === 'apis' ? 'is-active' : '') + '" data-ad-sub="apis">APIs de Aris</button>' +
+                    '</div>' +
+                    '<iframe src="' + (settingsAdminSub === 'apis' ? '/admin/apis?embed=1' : '/admin?embed=1') + '" title="Admin" style="flex:1;width:100%;height:100%;border:0;"></iframe>';
+            }
+
+            body.innerHTML =
+                '<div class="aex-settings-wrap">' +
+                '<div class="aex-settings-tabs">' + tabsHtml + '</div>' +
+                '<div class="aex-settings-body ' + (isIframeTab ? 'is-iframe' : '') + '">' + contentHtml + '</div></div>';
+
+            body.querySelectorAll('[data-st-tab]').forEach(function(b) {
+                b.onclick = function() { pendingUnlockUserInSettings = ''; settingsTab = b.getAttribute('data-st-tab'); draw(); };
+            });
+            body.querySelectorAll('[data-ac-sub]').forEach(function(b) {
+                b.onclick = function() { settingsAccountSub = b.getAttribute('data-ac-sub'); draw(); };
+            });
+            body.querySelectorAll('[data-ad-sub]').forEach(function(b) {
+                b.onclick = function() { settingsAdminSub = b.getAttribute('data-ad-sub'); draw(); };
+            });
+            if (body.querySelector('#st-mode-dark')) {
+                body.querySelector('#st-mode-dark').onclick = function() {
+                    if (window.aethravoxSetColorMode) window.aethravoxSetColorMode('dark');
+                    draw();
+                };
+            }
+            if (body.querySelector('#st-mode-light')) {
+                body.querySelector('#st-mode-light').onclick = function() {
+                    if (window.aethravoxSetColorMode) window.aethravoxSetColorMode('light');
+                    draw();
+                };
+            }
+            body.querySelectorAll('[data-st-wp]').forEach(function(b) {
+                b.onclick = function() {
+                    u.wallpaper = b.getAttribute('data-st-wp');
+                    saveState();
+                    applyWallpaper();
+                    draw();
+                };
+            });
+            body.querySelectorAll('[data-st-pin]').forEach(function(b) {
+                b.onclick = function() { togglePinApp(b.getAttribute('data-st-pin')); draw(); };
+            });
+            if (body.querySelector('#st-toggle-icons')) {
+                body.querySelector('#st-toggle-icons').onclick = function() {
+                    u.showDesktopIcons = u.showDesktopIcons === false ? true : false;
+                    saveState();
+                    renderDesktopIcons();
+                    draw();
+                };
+            }
+            if (body.querySelector('#st-add-user-form')) {
+                body.querySelector('#st-add-user-form').onsubmit = async function(e) {
+                    e.preventDefault();
+                    var nameEl = body.querySelector('#st-new-u-name');
+                    var passEl = body.querySelector('#st-new-u-pass');
+                    var res = await addOsUser(nameEl.value, passEl.value);
+                    passEl.value = '';
+                    var msg = body.querySelector('#st-u-msg');
+                    if (res.error) {
+                        msg.style.color = 'var(--status-err)'; msg.textContent = res.error; msg.hidden = false; return;
+                    }
+                    windows = [];
+                    var winHost = document.getElementById('aexos-windows');
+                    if (winHost) winHost.innerHTML = '';
+                    phase = 'desktop';
+                    renderPhase();
+                };
+            }
+            body.querySelectorAll('[data-st-switch]').forEach(function(b) {
+                b.onclick = function() {
+                    var uname = b.getAttribute('data-st-switch');
+                    var target = persisted.osUsers.find(function(x) { return x.username === uname; });
+                    if (!target) return;
+                    pendingUnlockUserInSettings = uname;
+                    draw();
+                };
+            });
+            body.querySelectorAll('.st-cancel-unlock').forEach(function(b) {
+                b.onclick = function() { pendingUnlockUserInSettings = ''; draw(); };
+            });
+            body.querySelectorAll('.st-inline-unlock').forEach(function(f) {
+                f.onsubmit = async function(e) {
+                    e.preventDefault();
+                    var uname = f.getAttribute('data-unlock-user');
+                    var inp = f.querySelector('input[type="password"]');
+                    var pw = inp ? inp.value : '';
+                    if (inp) inp.value = '';
+                    var target = persisted.osUsers.find(function(x) { return x.username === uname; });
+                    if (!target) return;
+                    var res = await switchOsUserById(target.user_id, pw);
+                    if (res && res.error) {
+                        var msg = body.querySelector('#st-u-msg');
+                        if (msg) {
+                            msg.style.color = 'var(--status-err)';
+                            msg.textContent = res.error;
+                            msg.hidden = false;
+                        }
+                    }
+                };
+            });
+            body.querySelectorAll('[data-st-del]').forEach(function(b) {
+                b.onclick = function() { deleteOsUser(b.getAttribute('data-st-del')); };
+            });
+        }
+        draw();
+    }
+
+    /* Eventos globales de Barra de Tareas, Menú Inicio y Clic Derecho */
+    document.getElementById('aexos-start-btn').onclick = function(e) {
+        e.stopPropagation();
+        launcherOpen = !launcherOpen;
+        if (!launcherOpen) powerMenuOpen = false;
+        renderLauncher();
+        if (launcherOpen) document.getElementById('aexos-launcher-search').focus();
+    };
+    document.getElementById('aexos-launcher-search').oninput = function(e) {
+        launcherQuery = e.target.value || '';
+        renderLauncher();
+    };
+    document.querySelectorAll('.aexos-cat-tab').forEach(function(b) {
+        b.onclick = function() { launcherCat = b.getAttribute('data-cat'); renderLauncher(); };
+    });
+    document.getElementById('aexos-power-btn').onclick = function(e) {
+        e.stopPropagation();
+        powerMenuOpen = !powerMenuOpen;
+        renderPowerPopover();
+    };
+    document.getElementById('aexos-fullscreen-btn').onclick = function() {
+        isFullscreen = !isFullscreen;
+        applyWallpaper();
+    };
+    document.getElementById('aexos-show-desktop-btn').onclick = function() {
+        var anyVis = windows.some(function(w) { return !w.minimized; });
+        windows.forEach(function(w) {
+            w.minimized = anyVis;
+            var el = document.getElementById('win-' + w.winId);
+            if (el) el.hidden = anyVis;
+        });
+        renderTaskbar();
+    };
+    document.getElementById('aexos-desktop').addEventListener('click', function() {
+        if (launcherOpen || powerMenuOpen) {
+            launcherOpen = false; powerMenuOpen = false;
+            renderLauncher();
+        }
+        document.getElementById('aexos-ctx-menu').hidden = true;
+    });
+    document.getElementById('aexos-desktop').addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        var ctx = document.getElementById('aexos-ctx-menu');
+        var bounds = this.getBoundingClientRect();
+        ctx.style.left = Math.min(e.clientX - bounds.left, Math.max(12, bounds.width - 228)) + 'px';
+        ctx.style.top = Math.min(e.clientY - bounds.top, Math.max(12, bounds.height - 170)) + 'px';
+        ctx.hidden = false;
+        ctx.innerHTML =
+            '<button type="button" class="aexos-pop-item" id="ctx-notes">Bloc de Notas</button>' +
+            '<button type="button" class="aexos-pop-item" id="ctx-term">Abrir Terminal</button>' +
+            '<button type="button" class="aexos-pop-item" id="ctx-icons">' + (currentUser().showDesktopIcons !== false ? 'Ocultar iconos' : 'Mostrar iconos') + '</button>' +
+            '<div class="aexos-pop-sep"></div>' +
+            '<button type="button" class="aexos-pop-item" id="ctx-settings">Personalizar escritorio</button>';
+        document.getElementById('ctx-notes').onclick = function() { ctx.hidden = true; openApp('notes'); };
+        document.getElementById('ctx-term').onclick = function() { ctx.hidden = true; openApp('terminal'); };
+        document.getElementById('ctx-icons').onclick = function() {
+            ctx.hidden = true;
+            var u = currentUser();
+            u.showDesktopIcons = u.showDesktopIcons === false ? true : false;
+            saveState(); renderDesktopIcons();
+        };
+        document.getElementById('ctx-settings').onclick = function() { ctx.hidden = true; settingsTab = 'escritorio'; openApp('settings'); };
+    });
+
+    var exitHubBtn = document.getElementById('aexos-exit-hub');
+    if (exitHubBtn) {
+        exitHubBtn.addEventListener('click', function() {
+            if (navigator.sendBeacon) navigator.sendBeacon('/api/aexos/exit');
+        });
+    }
+    window.addEventListener('pagehide', function() {
+        if (navigator.sendBeacon) navigator.sendBeacon('/api/aexos/exit');
+    });
+
+    renderPhase();
+    hydrateProfiles();
+})();
+</script>
+{% endblock %}

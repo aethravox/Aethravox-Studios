@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Descargas — Admin{% endblock %}
+{% block tagline %}Owner · Descargas nativas{% endblock %}
+{% block back_url %}/admin{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h2>⬇️ Descargas nativas</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+</div>
+
+<div class="toolbar">
+    <span>📍 {{ files.len() }} archivo{% if files.len() != 1 %}s{% endif %}</span>
+    <button type="button" class="btn btn-primary" onclick="openUploadModal()">➕ Subir archivo</button>
+</div>
+
+<table class="admin-table">
+    <thead>
+        <tr><th>Plataforma</th><th>App</th><th>Versión</th><th>Archivo</th><th>Tamaño</th><th>Fecha</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for f in files %}
+        <tr{% if !f.is_active %} class="web-row-inactive"{% endif %}>
+            <td><span class="badge badge-platform">{{ f.platform }}</span></td>
+            <td><strong>{{ f.app_name }}</strong><br><code class="muted small">{{ f.app_slug }}</code></td>
+            <td>{{ f.version }}</td>
+            <td>{{ f.orig_name }}</td>
+            <td>{{ f.size_mb }}</td>
+            <td class="muted small">{{ f.created_at }}</td>
+            <td>
+                <form method="POST" action="/admin/downloads/{{ f.id }}/delete" class="inline-form"
+                      onsubmit="return confirm('¿Borrar «{{ f.orig_name }}»? El archivo en data/downloads/ también se elimina.');">
+                    <button type="submit" class="btn btn-danger btn-sm" title="Eliminar">🗑️</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if files.is_empty() %}
+        <tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Sin archivos. Sube el primero con ➕ Subir archivo.</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{# ===== Modal: Subir archivo ===== #}
+<div class="modal-overlay" id="upload-modal" hidden>
+    <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>➕ Subir ejecutable</span>
+            <button type="button" class="modal-close" onclick="closeUploadModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="/admin/downloads/create" enctype="multipart/form-data" class="auth-form">
+                <div class="input-group">
+                    <label>Plataforma</label>
+                    <select name="platform" class="role-select" required>
+                        <option value="windows">🪟 Windows</option>
+                        <option value="linux">🐧 Linux</option>
+                        <option value="android">🤖 Android</option>
+                        <option value="macos">🍎 macOS (próximamente)</option>
+                        <option value="ios">📱 iOS (próximamente)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>App slug <span class="muted small">(agrupa archivos de la misma app)</span></label>
+                    <input type="text" name="app_slug" required maxlength="48"
+                           pattern="[a-zA-Z0-9_-]{2,48}" placeholder="ej: aethravox, aethramail">
+                    <p class="muted small">Solo letras, números, _ y -. La misma app usa el mismo slug en todas sus plataformas/versiones.</p>
+                </div>
+                <div class="input-group">
+                    <label>Nombre de la app</label>
+                    <input type="text" name="app_name" required maxlength="64" placeholder="ej: Aethravox">
+                </div>
+                <div class="input-group">
+                    <label>Versión <span class="muted small">(opcional)</span></label>
+                    <input type="text" name="version" maxlength="32" placeholder="ej: 1.0.0">
+                </div>
+                <div class="input-group">
+                    <label>Notas <span class="muted small">(opcional)</span></label>
+                    <textarea name="notes" rows="2" maxlength="280" placeholder="Notas de release"></textarea>
+                </div>
+                <div class="input-group">
+                    <label>Archivo <span class="muted small">(.exe .msi .deb .rpm .AppImage .apk .dmg .ipa .zip .tar.gz .bin · máx 150 MB)</span></label>
+                    <input type="file" name="file" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">⬆️ Subir</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeUploadModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.admin-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.admin-table th, .admin-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--fondo, #1a1a1a); font-size: 0.88rem; }
+.admin-table th { color: var(--texto-secundario, #888); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-platform {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    background: rgba(0,212,255,.12); color: var(--cian, #00d4ff); border: 1px solid rgba(0,212,255,.3);
+}
+.inline-form { display: inline; }
+</style>
+
+<script>
+function openUploadModal() { document.getElementById('upload-modal').hidden = false; }
+function closeUploadModal() { document.getElementById('upload-modal').hidden = true; }
+</script>
+{% endblock %}

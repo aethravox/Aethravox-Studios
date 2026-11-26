@@ -1,0 +1,197 @@
+/* ===== Sender live view ===== */
+
+.transmit-live-card {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+}
+@media (max-width: 900px) {
+    .transmit-live-card {
+        grid-template-columns: 1fr;
+    }
+}
+.transmit-preview-wrap {
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+.transmit-preview-empty {
+    color: var(--muted);
+    text-align: center;
+}
+.transmit-preview-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+.transmit-live-info {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.transmit-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.9rem;
+}
+.transmit-info-row span { color: var(--muted); }
+.transmit-info-row strong { color: var(--texto-claro); font-weight: 600; }
+
+.transmit-receivers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.transmit-receiver-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--negro);
+    border-radius: 6px;
+    font-size: 0.88rem;
+}
+.transmit-receiver-avatar {
+    font-size: 1.1rem;
+}
+.transmit-receiver-name {
+    flex: 1;
+    color: var(--texto-claro);
+    font-weight: 500;
+}
+.transmit-receiver-status {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: lowercase;
+}
+
+/* ===== Sender / Receiver shared form styles ===== */
+
+.transmit-form-card,
+.transmit-live-card,
+.transmit-view-card {
+    flex: 1 1 auto;
+    /* FIX scroll: min-height:0 permite que el flex item encoja por debajo de
+       su contenido (por defecto es auto → no encoge) y overflow-y:auto le da
+       barra de scroll interna. Sin esto, cuando el form (con todos sus
+       inputs en móvil) o el live view superan el viewport, el contenido se
+       corta sin scroll porque body.app-fullscreen tiene overflow:hidden. */
+    min-height: 0;
+    overflow-y: auto;
+    padding: 24px 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+}
+.transmit-form-card h2 {
+    font-size: 1.1rem;
+    color: var(--dorado);
+    margin: 0 0 16px;
+}
+.transmit-form-card .auth-form {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 24px;
+}
+.transmit-form-card .input-group {
+    margin-bottom: 18px;
+}
+.transmit-form-card label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--texto-claro);
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+.transmit-form-card input,
+.transmit-form-card select {
+    width: 100%;
+    background: var(--negro);
+    border: 1px solid var(--fondo);
+    color: var(--texto-claro);
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.92rem;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.transmit-form-card input:focus,
+.transmit-form-card select:focus {
+    border-color: var(--dorado);
+}
+.transmit-form-card .muted.small {
+    margin-top: 5px;
+    margin-bottom: 0;
+    font-size: 0.78rem;
+}
+
+.btn-lg {
+    padding: 12px 18px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* ===== Receiver view ===== */
+
+.transmit-view-card {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 20px;
+}
+@media (max-width: 900px) {
+    .transmit-view-card {
+        grid-template-columns: 1fr;
+    }
+}
+.transmit-view-video-wrap {
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+.transmit-view-video-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+.transmit-view-placeholder {
+    color: var(--muted);
+    text-align: center;
+    padding: 20px;
+}
+.transmit-view-controls {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.transmit-view-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+

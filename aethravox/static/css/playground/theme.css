@@ -1,0 +1,90 @@
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+    tab-size: 2;
+    overflow-y: auto;
+    min-height: 0;
+    width: 100%;
+}
+.editor-panel[hidden] { display: none; }
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--negro-oscuro);
+    border-bottom: 1px solid var(--fondo);
+    flex-shrink: 0;
+}
+.preview-title {
+    color: var(--cian);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.preview-controls { display: flex; align-items: center; gap: 10px; }
+.preview-autorun {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--gris-claro);
+    cursor: pointer;
+}
+.preview-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    border: none;
+    background: white;
+    min-height: 0;
+}
+.playground-status {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    text-align: center;
+    animation: bannerSlide 0.3s ease;
+}
+.playground-status-info    { background: rgba(0,212,255,0.1); color: var(--cian-claro); }
+.playground-status-success { background: rgba(0,255,136,0.1); color: var(--verde); }
+.playground-status-warning { background: rgba(224,163,8,0.12); color: var(--dorado-claro); }
+.playground-status-error   { background: rgba(255,62,62,0.12); color: var(--rojo); }
+.playground-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex-shrink: 0;  /* FIX móvil: no dejar que el foot se encoja */
+    padding-top: 4px;
+}
+.playground-foot .small { font-size: 0.8rem; }
+
+@media (max-width: 768px) {
+    .playground-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(120px, 1fr) minmax(120px, 1fr);
+        min-height: 0;
+        overflow: hidden;
+    }
+    .playground-editor-pane,
+    .playground-preview-pane {
+        min-height: 0;
+        overflow: hidden;
+    }
+    .editor-panel {
+        overflow-y: auto;
+    }
+    .preview-frame {
+        min-height: 0;
+    }
+    .playground-toolbar { gap: 8px; flex-wrap: wrap; }
+    .playground-toolbar h2 { font-size: 1rem; }
+    .playground-actions { margin-left: 0; width: 100%; justify-content: stretch; }
+    .playground-actions .btn { flex: 1; min-width: 0; }
+    .playground-status { font-size: 0.8rem; }
+    .editor-tabs { overflow-x: auto; }
+    /* FIX móvil: el foot con "Volver al panel" no debe cortarse. Aseguramos
+       que el grid se encoja antes que el foot. */
+    .playground-grid { flex: 1 1 0; }
+    .playground-foot { flex: 0 0 auto; }
+}

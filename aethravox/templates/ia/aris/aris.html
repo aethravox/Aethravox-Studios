@@ -1,0 +1,1160 @@
+{% extends "base.html" %}
+
+{% block title %}Aris — Aethravox Studios{% endblock %}
+{% block body_class %}page-aris{% endblock %}
+{% block tagline %}Tu asistente de inteligencia artificial{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/aris.css?v=3">
+{% endblock %}
+
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+
+{% block content %}
+<div class="aris-container">
+    <aside class="aris-sidebar">
+        <div class="aris-sidebar-header">
+            <h2 class="aris-brand-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+                <span>Aris</span>
+            </h2>
+            <button type="button" class="aris-new-chat" onclick="createNewChat()" title="Nuevo chat" aria-label="Nuevo chat">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            </button>
+        </div>
+        <div class="aris-chat-list" id="chat-list"></div>
+    </aside>
+
+    <main class="aris-main">
+        <div class="aris-header">
+            <div class="aris-header-info">
+                <h3 id="chat-title">Nuevo chat</h3>
+                <span class="aris-status" id="aris-status">
+                    <span class="aris-status-dot"></span>
+                    <span id="aris-status-text">En línea · Aris</span>
+                </span>
+            </div>
+            <div class="aris-header-controls">
+                <button type="button" class="aris-credits-pill" id="aris-credits-btn" onclick="openCreditsModal()" title="Abrir Menú de la IA y Créditos">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M16 10H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H8"/></svg>
+                    <span>Menú IA</span>
+                    <span id="aris-credits-pill-text">{{ credits_remaining }} / {{ credits_limit }}</span>
+                </button>
+                <button type="button" class="aris-btn" onclick="toggleSettings()" title="Configuración del chat" aria-label="Configuración">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button type="button" class="aris-btn" onclick="showInviteModal()" title="Invitar y miembros" aria-label="Invitar y miembros">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="aris-mode-bar">
+            <div class="aris-mode-group">
+                <div class="aris-seg" role="group" aria-label="Modo de respuesta de Aris">
+                    <button type="button" class="aris-seg-btn is-active" id="mode-instantaneo-btn" onclick="setArisMode('instantaneo')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <span>Instantáneo</span>
+                    </button>
+                    <button type="button" class="aris-seg-btn" id="mode-rapido-btn" onclick="setArisMode('rapido')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+                        <span>Rápido</span>
+                    </button>
+                </div>
+
+                <button type="button" class="aris-think-toggle" id="think-toggle-btn" onclick="toggleArisThink()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>
+                    <span id="think-toggle-label">No pensamiento</span>
+                </button>
+
+                <select id="thinking-level-select" class="aris-level-select" hidden onchange="setThinkingLevel(this.value)" aria-label="Nivel de pensamiento">
+                    <option value="muy_bajo">Pensamiento: Muy bajo (+1)</option>
+                    <option value="bajo">Pensamiento: Bajo (+2)</option>
+                    <option value="medio" selected>Pensamiento: Medio (+4)</option>
+                    <option value="alto">Pensamiento: Alto (+7)</option>
+                    <option value="muy_alto">Pensamiento: Muy alto (+12)</option>
+                    <option value="extremo">Pensamiento: Extremo (+18)</option>
+                </select>
+            </div>
+
+            <div class="aris-cost-preview" id="aris-cost-preview">
+                <span>Costo estimado:</span>
+                <strong id="aris-cost-value">1 crédito</strong>
+            </div>
+        </div>
+
+        <div class="aris-messages" id="messages">
+            <div class="aris-welcome" id="aris-welcome">
+                <div class="aris-avatar-big">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+                </div>
+                <h3>Hola, soy Aris</h3>
+                <p id="aris-role-summary" class="muted" style="font-size:.85rem;">Conectado al núcleo de Aethravox ({{ role_display }}).</p>
+                <div id="aris-starter-chips" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:14px 0;"></div>
+                <p class="aris-hint">Elige modo instantáneo o rápido, activa pensamiento y adjunta imágenes, audio o vídeo.</p>
+            </div>
+        </div>
+
+        <div class="aris-input-area">
+            <div class="aris-composer-box">
+                <div class="aris-pending-attachments" id="pending-attachments" hidden></div>
+
+                <div class="aris-media-tools">
+                    <label class="aris-media-btn" title="Adjuntar imagen (+4 créditos)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                        <span>Imagen</span>
+                        <input type="file" id="attach-image-input" accept="image/*" multiple hidden onchange="handleMediaFiles(this.files, 'image'); this.value='';">
+                    </label>
+                    <label class="aris-media-btn" title="Adjuntar audio (+5 créditos)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        <span>Audio</span>
+                        <input type="file" id="attach-audio-input" accept="audio/*" multiple hidden onchange="handleMediaFiles(this.files, 'audio'); this.value='';">
+                    </label>
+                    <label class="aris-media-btn" title="Adjuntar vídeo (+10 créditos)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+                        <span>Vídeo</span>
+                        <input type="file" id="attach-video-input" accept="video/*" multiple hidden onchange="handleMediaFiles(this.files, 'video'); this.value='';">
+                    </label>
+                </div>
+
+                <div class="aris-input-wrapper">
+                    <textarea id="message-input" class="aris-input"
+                        placeholder="Escribe tu mensaje para Aris..." rows="1"
+                        onkeydown="handleKeyDown(event)"></textarea>
+                    <button type="button" class="aris-send-btn" id="aris-send-btn" onclick="sendMessage()" title="Enviar" aria-label="Enviar mensaje">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                    </button>
+                </div>
+
+                <div class="aris-input-footer">
+                    <span class="aris-disclaimer">Aris puede cometer errores. Verifica la información importante.</span>
+                    <span class="aris-disclaimer" id="aris-credit-warning" hidden style="color:#ff6b6b;font-weight:600;">Créditos diarios insuficientes para esta configuración.</span>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Modal Menú de la IA y Créditos -->
+<div id="credits-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog modal-wide">
+        <div class="modal-header">
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--dorado)" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M16 10H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H8"/></svg>
+                <span>Menú de la IA · Aris y Créditos diarios</span>
+            </span>
+            <button type="button" class="modal-close" onclick="closeCreditsModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="aris-credits-summary">
+                <div class="aris-credit-stat">
+                    <span>Créditos disponibles</span>
+                    <strong id="cm-remaining">{{ credits_remaining }}</strong>
+                </div>
+                <div class="aris-credit-stat">
+                    <span>Consumidos hoy</span>
+                    <strong id="cm-used">{{ credits_used }}</strong>
+                </div>
+                <div class="aris-credit-stat">
+                    <span>Límite diario</span>
+                    <strong id="cm-limit">{{ credits_limit }}</strong>
+                </div>
+            </div>
+
+            <div class="aris-credit-bar-bg">
+                <div class="aris-credit-bar-fill" id="cm-progress-fill" style="width:100%"></div>
+            </div>
+
+            <h4 style="margin:0 0 8px;font-size:.9rem;">Tabla de consumo por envío</h4>
+            <table class="aris-cost-table">
+                <thead>
+                    <tr><th>Opción</th><th>Detalle</th><th>Costo</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Modo Instantáneo</td><td>Respuestas directas y breves</td><td>1 crédito</td></tr>
+                    <tr><td>Modo Rápido</td><td>Respuestas balanceadas completas</td><td>3 créditos</td></tr>
+                    <tr><td>Pensamiento desactivado</td><td>Sin cadena de razonamiento</td><td>+0 créditos</td></tr>
+                    <tr><td>Pensamiento Muy bajo / Bajo</td><td>Razonamiento ligero</td><td>+1 / +2 créditos</td></tr>
+                    <tr><td>Pensamiento Medio / Alto</td><td>Análisis profundo</td><td>+4 / +7 créditos</td></tr>
+                    <tr><td>Pensamiento Muy alto / Extremo</td><td>Razonamiento máximo paso a paso</td><td>+12 / +18 créditos</td></tr>
+                    <tr><td>Adjuntos multimedia</td><td>Imagen (+4), Audio (+5), Vídeo (+10)</td><td>+4 / +5 / +10</td></tr>
+                </tbody>
+            </table>
+
+            <h4 style="margin:0 0 8px;font-size:.9rem;">Historial reciente de consumo</h4>
+            <div id="cm-logs-container" style="max-height:190px;overflow-y:auto;">
+                <p class="muted" style="font-size:.82rem;">Cargando historial...</p>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-primary" onclick="closeCreditsModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal invitación y miembros -->
+<div id="invite-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <span>Participantes e invitaciones</span>
+            <button type="button" class="modal-close" onclick="hideInviteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <input type="text" id="invite-username" placeholder="Nombre de usuario" class="form-input">
+            <div class="invite-permissions">
+                <label><input type="checkbox" id="perm-read"> Puede leer historial</label>
+                <label><input type="checkbox" id="perm-send" checked> Puede enviar mensajes</label>
+            </div>
+            <div class="aris-members-box">
+                <h4>Miembros invitados</h4>
+                <div id="aris-members-list" class="aris-members-list">
+                    <span class="muted">Cargando...</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="hideInviteModal()">Cerrar</button>
+            <button type="button" class="btn btn-primary" onclick="sendInvite()">Invitar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal configuración -->
+<div id="settings-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <span>Configuración del chat</span>
+            <button type="button" class="modal-close" onclick="hideSettingsModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <label>Título del chat:</label>
+            <input type="text" id="chat-title-input" class="form-input" placeholder="Chat con Aris">
+            <label>Límite de historial (anti-abuso):</label>
+            <select id="history-limit" class="form-select">
+                <option value="20">20 mensajes — estricto</option>
+                <option value="50" selected>50 mensajes — recomendado</option>
+                <option value="100">100 mensajes</option>
+                <option value="200">200 mensajes — máximo</option>
+            </select>
+            <p class="muted" style="font-size:.8rem;margin-top:8px">
+                Cuando el chat supera el límite, los mensajes más antiguos se eliminan
+                automáticamente. Aris solo recuerda lo que cabe en el límite.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-danger" onclick="deleteCurrentChat()">Borrar chat</button>
+            <button type="button" class="btn btn-secondary" onclick="hideSettingsModal()">Cerrar</button>
+            <button type="button" class="btn btn-primary" onclick="saveSettings()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const THINK_COSTS = {
+    muy_bajo: 1,
+    bajo: 2,
+    medio: 4,
+    alto: 7,
+    muy_alto: 12,
+    extremo: 18
+};
+
+const LEVEL_LABELS = {
+    muy_bajo: 'Muy bajo',
+    bajo: 'Bajo',
+    medio: 'Medio',
+    alto: 'Alto',
+    muy_alto: 'Muy alto',
+    extremo: 'Extremo'
+};
+
+let currentChatId = null;
+let chatsCache = [];
+let sending = false;
+let coreStatus = null;
+let openMenuChatId = null;
+
+let arisMode = 'instantaneo';
+let arisThink = false;
+let arisThinkingLevel = 'medio';
+let pendingAttachments = [];
+let creditStatus = {
+    daily_limit: {{ credits_limit }},
+    daily_used: {{ credits_used }},
+    remaining: {{ credits_remaining }}
+};
+
+window.addEventListener('DOMContentLoaded', async () => {
+    updateCostUI();
+    await Promise.all([loadCoreStatus(), loadChats(), loadCredits()]);
+});
+
+document.addEventListener('click', () => {
+    if (openMenuChatId !== null) {
+        openMenuChatId = null;
+        document.querySelectorAll('.aris-chat-dropdown').forEach(el => el.remove());
+    }
+});
+
+function setArisMode(mode) {
+    arisMode = mode === 'rapido' ? 'rapido' : 'instantaneo';
+    document.getElementById('mode-instantaneo-btn')?.classList.toggle('is-active', arisMode === 'instantaneo');
+    document.getElementById('mode-rapido-btn')?.classList.toggle('is-active', arisMode === 'rapido');
+    updateCostUI();
+}
+
+function toggleArisThink() {
+    arisThink = !arisThink;
+    const btn = document.getElementById('think-toggle-btn');
+    const lbl = document.getElementById('think-toggle-label');
+    const sel = document.getElementById('thinking-level-select');
+    if (btn) btn.classList.toggle('is-on', arisThink);
+    if (lbl) lbl.textContent = arisThink ? 'Pensamiento' : 'No pensamiento';
+    if (sel) sel.hidden = !arisThink;
+    updateCostUI();
+}
+
+function setThinkingLevel(lvl) {
+    arisThinkingLevel = THINK_COSTS[lvl] ? lvl : 'medio';
+    updateCostUI();
+}
+
+function estimateCost() {
+    const base = arisMode === 'instantaneo' ? 1 : 3;
+    const tCost = arisThink ? (THINK_COSTS[arisThinkingLevel] || 4) : 0;
+    let mCost = 0;
+    for (const att of pendingAttachments) {
+        if (att.kind === 'image') mCost += 4;
+        else if (att.kind === 'audio') mCost += 5;
+        else if (att.kind === 'video') mCost += 10;
+    }
+    return base + tCost + mCost;
+}
+
+function updateCostUI() {
+    const cost = estimateCost();
+    const costValue = document.getElementById('aris-cost-value');
+    const preview = document.getElementById('aris-cost-preview');
+    const pillText = document.getElementById('aris-credits-pill-text');
+    const warn = document.getElementById('aris-credit-warning');
+    const sendBtn = document.getElementById('aris-send-btn');
+
+    if (pillText) {
+        pillText.textContent = creditStatus.remaining + ' / ' + creditStatus.daily_limit;
+    }
+    if (costValue) {
+        costValue.textContent = cost + (cost === 1 ? ' crédito' : ' créditos');
+    }
+    const insufficient = creditStatus.remaining < cost;
+    if (preview) preview.classList.toggle('is-insufficient', insufficient);
+    if (warn) warn.hidden = !insufficient;
+    if (sendBtn && !(coreStatus && coreStatus.lanes && !coreStatus.lanes.chat)) {
+        sendBtn.disabled = insufficient || sending;
+    }
+}
+
+async function loadCredits() {
+    try {
+        const res = await fetch('/api/aris/credits', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status) {
+            creditStatus = data.status;
+            updateCostUI();
+        }
+    } catch (_) {}
+}
+
+async function openCreditsModal() {
+    document.getElementById('credits-modal').hidden = false;
+    renderCreditStats();
+    const logsEl = document.getElementById('cm-logs-container');
+    if (logsEl) logsEl.innerHTML = '<p class="muted" style="font-size:.82rem;">Actualizando historial...</p>';
+    try {
+        const res = await fetch('/api/aris/credits', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status) {
+            creditStatus = data.status;
+            renderCreditStats();
+            updateCostUI();
+        }
+        renderCreditLogs(data.logs || []);
+    } catch (_) {
+        if (logsEl) logsEl.innerHTML = '<p class="aris-error" style="font-size:.82rem;">Error cargando historial.</p>';
+    }
+}
+
+function closeCreditsModal() {
+    document.getElementById('credits-modal').hidden = true;
+}
+
+function renderCreditStats() {
+    const remEl = document.getElementById('cm-remaining');
+    const usedEl = document.getElementById('cm-used');
+    const limEl = document.getElementById('cm-limit');
+    const fillEl = document.getElementById('cm-progress-fill');
+    if (remEl) remEl.textContent = String(creditStatus.remaining);
+    if (usedEl) usedEl.textContent = String(creditStatus.daily_used);
+    if (limEl) limEl.textContent = String(creditStatus.daily_limit);
+    if (fillEl) {
+        const pct = creditStatus.daily_limit > 0
+            ? Math.max(0, Math.min(100, Math.round((creditStatus.remaining / creditStatus.daily_limit) * 100)))
+            : 0;
+        fillEl.style.width = pct + '%';
+    }
+}
+
+function renderCreditLogs(logs) {
+    const logsEl = document.getElementById('cm-logs-container');
+    if (!logsEl) return;
+    if (!logs.length) {
+        logsEl.innerHTML = '<p class="muted" style="font-size:.82rem;">Aún no has consumido créditos hoy.</p>';
+        return;
+    }
+    let html = '<table class="aris-cost-table"><thead><tr><th>Modo</th><th>Pensamiento</th><th>Adjuntos</th><th>Costo</th></tr></thead><tbody>';
+    for (const row of logs) {
+        const thinkDesc = row.thinking_enabled ? (LEVEL_LABELS[row.thinking_level] || row.thinking_level) : 'No';
+        const attDesc = row.attachments_summary || '—';
+        html += '<tr><td>' + escapeHtml(row.mode) + '</td><td>' + escapeHtml(thinkDesc) + '</td><td>' + escapeHtml(attDesc) + '</td><td>-' + row.credits_cost + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    logsEl.innerHTML = html;
+}
+
+async function handleMediaFiles(fileList, kind) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    for (const file of files) {
+        const sizeLabel = formatBytes(file.size);
+        const previewUrl = URL.createObjectURL(file);
+        const entry = {
+            id: Date.now() + '-' + Math.random().toString(16).slice(2),
+            kind,
+            name: file.name,
+            mime_type: file.type || '',
+            size_label: sizeLabel,
+            duration_label: '',
+            preview_url: previewUrl,
+            base64_data: null
+        };
+        if (kind === 'image') {
+            entry.base64_data = await readFileAsRawBase64(file);
+        } else if (kind === 'audio' || kind === 'video') {
+            entry.duration_label = await probeMediaDuration(previewUrl, kind);
+        }
+        pendingAttachments.push(entry);
+    }
+    renderPendingAttachments();
+    updateCostUI();
+}
+
+function readFileAsRawBase64(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const res = String(reader.result || '');
+            const idx = res.indexOf(',');
+            resolve(idx !== -1 ? res.slice(idx + 1) : res);
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+    });
+}
+
+function probeMediaDuration(url, kind) {
+    return new Promise((resolve) => {
+        const el = document.createElement(kind === 'audio' ? 'audio' : 'video');
+        el.preload = 'metadata';
+        el.src = url;
+        el.onloadedmetadata = () => {
+            const d = Number(el.duration || 0);
+            if (!Number.isFinite(d) || d <= 0) { resolve(''); return; }
+            const mins = Math.floor(d / 60);
+            const secs = Math.round(d % 60);
+            resolve(mins + ':' + String(secs).padStart(2, '0'));
+        };
+        el.onerror = () => resolve('');
+    });
+}
+
+function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderPendingAttachments() {
+    const wrap = document.getElementById('pending-attachments');
+    if (!wrap) return;
+    if (!pendingAttachments.length) {
+        wrap.hidden = true;
+        wrap.innerHTML = '';
+        return;
+    }
+    wrap.hidden = false;
+    wrap.innerHTML = '';
+    for (const att of pendingAttachments) {
+        const chip = document.createElement('div');
+        chip.className = 'aris-pending-chip';
+        const costLbl = att.kind === 'image' ? '+4 cr' : (att.kind === 'audio' ? '+5 cr' : '+10 cr');
+        const extra = [att.size_label, att.duration_label, costLbl].filter(Boolean).join(' · ');
+        if (att.kind === 'image' && att.preview_url) {
+            const img = document.createElement('img');
+            img.src = att.preview_url;
+            img.alt = att.name;
+            chip.appendChild(img);
+        }
+        const meta = document.createElement('div');
+        meta.className = 'aris-pending-chip-meta';
+        meta.innerHTML = '<strong>' + escapeHtml(att.name) + '</strong><small>' + escapeHtml(extra) + '</small>';
+        chip.appendChild(meta);
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'aris-pending-remove';
+        rm.textContent = '×';
+        rm.onclick = () => {
+            pendingAttachments = pendingAttachments.filter(x => x.id !== att.id);
+            renderPendingAttachments();
+            updateCostUI();
+        };
+        chip.appendChild(rm);
+        wrap.appendChild(chip);
+    }
+}
+
+async function loadCoreStatus() {
+    try {
+        const res = await fetch('/api/aris/core/status', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        coreStatus = data;
+        const lanes = data.lanes || {};
+        const activeNames = [];
+        if (lanes.chat) activeNames.push('Chat');
+        if (lanes.quick_drawer) activeNames.push('Rápido');
+        if (lanes.playground) activeNames.push('Playground');
+        if (lanes.studio) activeNames.push('Estudio');
+        if (lanes.social) activeNames.push('Social DM');
+        if (lanes.analytics) activeNames.push('Analíticas');
+        if (lanes.admin_ops) activeNames.push('Ops Admin');
+
+        const summaryEl = document.getElementById('aris-role-summary');
+        if (summaryEl) {
+            summaryEl.textContent = 'Rol: ' + (data.role_display || 'Usuario') + ' · Carriles activos: ' + (activeNames.length ? activeNames.join(', ') : 'ninguno');
+        }
+
+        const chipsEl = document.getElementById('aris-starter-chips');
+        if (chipsEl && lanes.chat) {
+            const starters = [];
+            if (lanes.analytics) {
+                starters.push('Resumen de las webs más usadas en 7 días');
+                starters.push('¿Cuántas personas entraron a playground en 3 días?');
+            }
+            if (lanes.social) {
+                starters.push('Lista mis amigos aceptados para enviarles un saludo');
+            }
+            if (lanes.playground) {
+                starters.push('Escribe HTML, CSS y JS para un cronómetro neón');
+            }
+            if (!starters.length) {
+                starters.push('¿Qué puedo hacer con mi rol actual en Aethravox?');
+                starters.push('Ayúdame a estructurar una idea técnica');
+            }
+            chipsEl.innerHTML = '';
+            for (const text of starters) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-secondary btn-sm';
+                btn.textContent = text;
+                btn.onclick = () => {
+                    const input = document.getElementById('message-input');
+                    if (input) {
+                        input.value = text;
+                        sendMessage();
+                    }
+                };
+                chipsEl.appendChild(btn);
+            }
+        }
+
+        if (!lanes.chat) {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('aris-send-btn');
+            if (input) {
+                input.disabled = true;
+                input.placeholder = 'Carril aris.lane.chat bloqueado para tu rol actual.';
+            }
+            if (sendBtn) sendBtn.disabled = true;
+            if (summaryEl) {
+                summaryEl.innerHTML = '<span class="aris-error">Tu rol (' + escapeHtml(data.role_display || '') + ') no tiene acceso a /aris (<code>aris.lane.chat</code>).</span>';
+            }
+        }
+    } catch (_) {}
+}
+
+async function loadChats() {
+    const res = await fetch('/api/aris/chats');
+    const data = await res.json();
+    const list = document.getElementById('chat-list');
+    list.innerHTML = '';
+    chatsCache = data.chats || [];
+
+    if (chatsCache.length === 0) {
+        list.innerHTML = '<div class="aris-empty"><p>No tienes chats aún</p><button class="btn btn-primary btn-sm" onclick="createNewChat()">Iniciar chat</button></div>';
+        return;
+    }
+
+    for (const c of chatsCache) {
+        const div = document.createElement('div');
+        div.className = 'aris-chat-item' + (c.id === currentChatId ? ' active' : '');
+        div.onclick = () => openChat(c.id, c.title);
+
+        const titleWrap = document.createElement('div');
+        titleWrap.className = 'aris-chat-title-wrap';
+        if (c.pinned) {
+            const pinSpan = document.createElement('span');
+            pinSpan.className = 'aris-pin-ico';
+            pinSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>';
+            titleWrap.appendChild(pinSpan);
+        }
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'aris-chat-title';
+        titleSpan.textContent = c.title;
+        titleWrap.appendChild(titleSpan);
+
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'aris-chat-menu-btn';
+        menuBtn.title = 'Opciones del chat';
+        menuBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
+        menuBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            toggleChatDropdown(div, c);
+        };
+
+        div.appendChild(titleWrap);
+        div.appendChild(menuBtn);
+        list.appendChild(div);
+    }
+}
+
+function toggleChatDropdown(itemEl, chat) {
+    document.querySelectorAll('.aris-chat-dropdown').forEach(el => el.remove());
+    if (openMenuChatId === chat.id) {
+        openMenuChatId = null;
+        return;
+    }
+    openMenuChatId = chat.id;
+    const menu = document.createElement('div');
+    menu.className = 'aris-chat-dropdown';
+    menu.onclick = (ev) => ev.stopPropagation();
+
+    const pinBtn = document.createElement('button');
+    pinBtn.type = 'button';
+    pinBtn.textContent = chat.pinned ? 'Desfijar chat' : 'Fijar arriba';
+    pinBtn.onclick = async () => {
+        openMenuChatId = null;
+        menu.remove();
+        await togglePinChat(chat.id);
+    };
+
+    const renameBtn = document.createElement('button');
+    renameBtn.type = 'button';
+    renameBtn.textContent = 'Renombrar';
+    renameBtn.onclick = () => {
+        openMenuChatId = null;
+        menu.remove();
+        currentChatId = chat.id;
+        toggleSettings();
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'danger';
+    delBtn.textContent = 'Eliminar chat';
+    delBtn.onclick = async () => {
+        openMenuChatId = null;
+        menu.remove();
+        await fetch('/api/aris/chats/' + chat.id, { method: 'DELETE' });
+        if (currentChatId === chat.id) {
+            currentChatId = null;
+            document.getElementById('chat-title').textContent = 'Nuevo chat';
+            document.getElementById('messages').innerHTML = '';
+        }
+        await loadChats();
+    };
+
+    menu.appendChild(pinBtn);
+    menu.appendChild(renameBtn);
+    menu.appendChild(delBtn);
+    itemEl.appendChild(menu);
+}
+
+async function togglePinChat(chatId) {
+    const res = await fetch('/api/aris/chats/' + chatId + '/pin', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) await loadChats();
+}
+
+async function createNewChat() {
+    const res = await fetch('/api/aris/chats', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'title=Nuevo chat&history_limit=50'
+    });
+    const data = await res.json();
+    if (data.ok) {
+        await loadChats();
+        openChat(data.chat_id, data.title || 'Nuevo chat');
+    }
+}
+
+async function openChat(chatId, title) {
+    currentChatId = chatId;
+    document.getElementById('chat-title').textContent = title;
+    document.getElementById('aris-welcome')?.remove();
+
+    const res = await fetch('/api/aris/chats/' + chatId + '/messages');
+    const data = await res.json();
+
+    const messagesDiv = document.getElementById('messages');
+    messagesDiv.innerHTML = '';
+
+    if (data.partial) {
+        const note = document.createElement('div');
+        note.className = 'aris-partial-note';
+        note.textContent = 'Solo puedes ver los mensajes recientes (sin permiso de historial completo)';
+        messagesDiv.appendChild(note);
+    }
+
+    for (const m of (data.messages || [])) {
+        let meta = null;
+        if (m.meta_json) {
+            try { meta = JSON.parse(m.meta_json); } catch (_) {}
+        }
+        appendMessage(
+            m.role === 'aris' ? 'aris' : 'user',
+            m.content,
+            false,
+            m.provider || null,
+            m.model || null,
+            meta
+        );
+    }
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    await loadChats();
+}
+
+async function sendMessage() {
+    if (sending) return;
+    const input = document.getElementById('message-input');
+    const content = input.value.trim();
+    if (!content && pendingAttachments.length === 0) return;
+
+    const cost = estimateCost();
+    if (creditStatus.remaining < cost) {
+        openCreditsModal();
+        return;
+    }
+
+    if (!currentChatId) {
+        const rawTitle = content || (pendingAttachments[0] ? pendingAttachments[0].name : 'Multimedia con Aris');
+        const autoTitle = rawTitle.length > 42 ? rawTitle.slice(0, 42) + '…' : rawTitle;
+        const createRes = await fetch('/api/aris/chats', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'title=' + encodeURIComponent(autoTitle) + '&history_limit=50'
+        });
+        const created = await createRes.json();
+        if (!created.ok) return;
+        currentChatId = created.chat_id;
+        document.getElementById('chat-title').textContent = created.title || autoTitle;
+        await loadChats();
+    }
+
+    const attachmentsSnapshot = pendingAttachments.slice();
+    pendingAttachments = [];
+    renderPendingAttachments();
+
+    sending = true;
+    updateCostUI();
+    document.getElementById('aris-welcome')?.remove();
+
+    const userText = content || 'Analiza los archivos adjuntos';
+    appendMessage('user', userText, true, null, null, {
+        mode: arisMode,
+        thinking_enabled: arisThink,
+        thinking_level: arisThinkingLevel,
+        credit_cost: cost,
+        attachments: attachmentsSnapshot
+    });
+    input.value = '';
+    input.style.height = 'auto';
+
+    const messagesDiv = document.getElementById('messages');
+    const arisMsg = document.createElement('div');
+    arisMsg.className = 'aris-message aris';
+    arisMsg.innerHTML = '<div class="aris-avatar">'
+        + '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>'
+        + '</div><div class="aris-content">'
+        + '<details class="aris-thinking-box" hidden><summary>Proceso de pensamiento</summary><div class="aris-thinking-body"></div></details>'
+        + '<div class="aris-msg-body"><span class="aris-typing">Procesando con Aris...</span></div></div>';
+    messagesDiv.appendChild(arisMsg);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    const contentEl = arisMsg.querySelector('.aris-content');
+    const thinkBox = arisMsg.querySelector('.aris-thinking-box');
+    const thinkBody = arisMsg.querySelector('.aris-thinking-body');
+    const bodyEl = arisMsg.querySelector('.aris-msg-body');
+    const statusTextEl = document.getElementById('aris-status-text');
+    if (statusTextEl) statusTextEl.textContent = arisThink ? 'Razonando (' + (LEVEL_LABELS[arisThinkingLevel] || '') + ')...' : 'Generando respuesta...';
+
+    try {
+        const reqBody = {
+            content: userText,
+            source: 'chat',
+            mode: arisMode,
+            think: arisThink,
+            thinking_level: arisThinkingLevel,
+            attachments: attachmentsSnapshot.map(a => ({
+                kind: a.kind,
+                name: a.name,
+                size_label: a.size_label,
+                duration_label: a.duration_label,
+                mime_type: a.mime_type,
+                base64_data: a.base64_data
+            }))
+        };
+
+        const res = await fetch('/api/aris/chats/' + currentChatId + '/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reqBody)
+        });
+
+        if (!res.ok || !res.body) {
+            bodyEl.innerHTML = '<span class="aris-error">Error de conexión con Aris</span>';
+            sending = false;
+            updateCostUI();
+            if (statusTextEl) statusTextEl.textContent = 'En línea · Aris';
+            return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+        let fullThinking = '';
+        let started = false;
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, {stream: true});
+            const events = buffer.split('\n\n');
+            buffer = events.pop() || '';
+
+            for (const evt of events) {
+                const lines = evt.split('\n');
+                let eventName = 'message';
+                const dataParts = [];
+
+                for (const line of lines) {
+                    if (line.startsWith('event:')) eventName = line.slice(6).trim();
+                    else if (line.startsWith('data:')) dataParts.push(line.slice(5).replace(/^ /, ''));
+                }
+                const data = dataParts.join('\n');
+
+                if (eventName === 'start') {
+                    started = true;
+                    bodyEl.innerHTML = '';
+                    continue;
+                }
+                if (eventName === 'thinking') {
+                    let thinkChunk = data;
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (typeof parsed.text === 'string') thinkChunk = parsed.text;
+                    } catch (_) {}
+                    fullThinking += thinkChunk;
+                    if (thinkBox && thinkBody) {
+                        thinkBox.hidden = false;
+                        thinkBody.textContent = fullThinking;
+                    }
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    continue;
+                }
+                if (eventName === 'chunk') {
+                    started = true;
+                    let textChunk = data;
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (typeof parsed.text === 'string') textChunk = parsed.text;
+                    } catch (_) {}
+                    fullText += textChunk;
+                    bodyEl.innerHTML = formatMessage(fullText);
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    continue;
+                }
+                if (eventName === 'error') {
+                    bodyEl.innerHTML = '<span class="aris-error">' + escapeHtml(data) + '</span>';
+                    continue;
+                }
+                if (eventName === 'done') {
+                    if (statusTextEl) statusTextEl.textContent = 'En línea · Aris';
+                    try {
+                        const meta = JSON.parse(data);
+                        if (typeof meta.final_text === 'string' && meta.final_text.trim()) {
+                            fullText = meta.final_text;
+                            bodyEl.innerHTML = formatMessage(fullText);
+                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                        }
+                        if (typeof meta.credits_remaining === 'number') {
+                            creditStatus.remaining = meta.credits_remaining;
+                            creditStatus.daily_used = meta.credits_used ?? creditStatus.daily_used;
+                            creditStatus.daily_limit = meta.credits_limit ?? creditStatus.daily_limit;
+                        }
+                        attachMetaRow(contentEl, meta.provider, meta.model, meta);
+                    } catch (_) {}
+                }
+            }
+        }
+
+        if (!started && !bodyEl.querySelector('.aris-error')) {
+            bodyEl.innerHTML = '<span class="aris-error">Sin respuesta del servidor</span>';
+        }
+    } catch (e) {
+        bodyEl.innerHTML = '<span class="aris-error">Error: ' + escapeHtml(String(e)) + '</span>';
+    }
+
+    sending = false;
+    if (statusTextEl) statusTextEl.textContent = 'En línea · Aris';
+    await loadCredits();
+    updateCostUI();
+}
+
+function attachMetaRow(contentEl, provider, model, meta) {
+    if (!contentEl) return;
+    if (contentEl.querySelector('.aris-msg-meta-row')) return;
+    const row = document.createElement('div');
+    row.className = 'aris-msg-meta-row';
+
+    if (provider || model) {
+        const badge = document.createElement('span');
+        badge.className = 'aris-provider-badge';
+        badge.textContent = [provider, model].filter(Boolean).join(' · ');
+        row.appendChild(badge);
+    }
+    if (meta && meta.mode) {
+        const mChip = document.createElement('span');
+        mChip.className = 'aris-meta-chip';
+        mChip.textContent = meta.mode === 'instantaneo' ? 'Instantáneo' : 'Rápido';
+        row.appendChild(mChip);
+    }
+    if (meta && meta.thinking_enabled) {
+        const tChip = document.createElement('span');
+        tChip.className = 'aris-meta-chip';
+        tChip.textContent = 'Pensamiento: ' + (LEVEL_LABELS[meta.thinking_level] || meta.thinking_level || 'Activo');
+        row.appendChild(tChip);
+    }
+    if (meta && typeof meta.credit_cost === 'number') {
+        const cChip = document.createElement('span');
+        cChip.className = 'aris-meta-chip';
+        cChip.textContent = '-' + meta.credit_cost + ' cr';
+        row.appendChild(cChip);
+    }
+    if (row.children.length > 0) contentEl.appendChild(row);
+}
+
+function appendMessage(role, content, scroll = true, provider = null, model = null, meta = null) {
+    const messagesDiv = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'aris-message ' + role;
+
+    const botSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>';
+    const userSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+    let attachmentsHtml = '';
+    if (meta && Array.isArray(meta.attachments) && meta.attachments.length) {
+        attachmentsHtml = '<div class="aris-msg-attachments">' + meta.attachments.map(att => {
+            const mediaSrc = att.preview_url || (att.base64_data ? 'data:' + (att.mime_type || 'image/png') + ';base64,' + att.base64_data : '');
+            let inner = '';
+            if (att.kind === 'image' && mediaSrc) {
+                inner = '<img src="' + mediaSrc + '" alt="' + escapeHtml(att.name || 'imagen') + '">';
+            } else if (att.kind === 'audio' && mediaSrc) {
+                inner = '<audio controls src="' + mediaSrc + '"></audio>';
+            } else if (att.kind === 'video' && mediaSrc) {
+                inner = '<video controls src="' + mediaSrc + '"></video>';
+            }
+            const label = [att.name, att.duration_label, att.size_label].filter(Boolean).join(' · ');
+            return '<div class="aris-att-card">' + inner + '<span>' + escapeHtml(label || att.kind) + '</span></div>';
+        }).join('') + '</div>';
+    }
+
+    let thinkingHtml = '';
+    if (meta && meta.thinking_text) {
+        thinkingHtml = '<details class="aris-thinking-box"><summary>Proceso de pensamiento (' + escapeHtml(LEVEL_LABELS[meta.thinking_level] || 'Activo') + ')</summary><div class="aris-thinking-body">' + escapeHtml(meta.thinking_text) + '</div></details>';
+    }
+
+    if (role === 'user') {
+        div.innerHTML = '<div class="aris-content">' + attachmentsHtml + '<div class="aris-msg-body">' + formatMessage(content) + '</div></div><div class="aris-avatar user-av">' + userSvg + '</div>';
+    } else {
+        div.innerHTML = '<div class="aris-avatar">' + botSvg + '</div><div class="aris-content">' + thinkingHtml + '<div class="aris-msg-body">' + formatMessage(content) + '</div></div>';
+        attachMetaRow(div.querySelector('.aris-content'), provider, model, meta);
+    }
+    messagesDiv.appendChild(div);
+    if (scroll) messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function formatMessage(text) {
+    const parts = [];
+    const codeFence = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g;
+    let last = 0;
+    let match;
+    while ((match = codeFence.exec(text)) !== null) {
+        if (match.index > last) {
+            parts.push({ type: 'text', value: text.slice(last, match.index) });
+        }
+        parts.push({ type: 'code', lang: match[1] || 'código', value: match[2] });
+        last = codeFence.lastIndex;
+    }
+    if (last < text.length) {
+        parts.push({ type: 'text', value: text.slice(last) });
+    }
+
+    return parts.map(p => {
+        if (p.type === 'code') {
+            return '<div class="aris-code-block"><div class="aris-code-head"><span>' + escapeHtml(p.lang) + '</span><button type="button" class="aris-copy-btn" onclick="copyCodeBlock(this)">Copiar</button></div><pre><code>' + escapeHtml(p.value.replace(/\n$/, '')) + '</code></pre></div>';
+        }
+        let html = escapeHtml(p.value);
+        html = html.replace(/\n/g, '<br>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/`([^`]+?)`/g, '<code class="aris-inline-code">$1</code>');
+        return html;
+    }).join('');
+}
+
+function copyCodeBlock(btn) {
+    const code = btn.closest('.aris-code-block')?.querySelector('code')?.textContent || '';
+    if (!code) return;
+    navigator.clipboard?.writeText(code).then(() => {
+        const prev = btn.textContent;
+        btn.textContent = 'Copiado';
+        setTimeout(() => { btn.textContent = prev; }, 1400);
+    }).catch(() => {});
+}
+
+function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
+
+function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+async function showInviteModal() {
+    if (!currentChatId) return;
+    document.getElementById('invite-modal').hidden = false;
+    await loadMembers();
+}
+function hideInviteModal() { document.getElementById('invite-modal').hidden = true; }
+
+async function loadMembers() {
+    const listEl = document.getElementById('aris-members-list');
+    if (!listEl || !currentChatId) return;
+    listEl.innerHTML = '<span class="muted">Cargando...</span>';
+    try {
+        const res = await fetch('/api/aris/chats/' + currentChatId + '/members');
+        const data = await res.json();
+        const members = data.members || [];
+        if (members.length === 0) {
+            listEl.innerHTML = '<span class="muted">Sin invitados en este chat.</span>';
+            return;
+        }
+        listEl.innerHTML = '';
+        for (const m of members) {
+            const row = document.createElement('div');
+            row.className = 'aris-member-row';
+            const perms = [
+                m.can_read_history ? 'Historial' : 'Reciente',
+                m.can_send ? 'Puede enviar' : 'Solo lectura'
+            ].join(' · ');
+            row.innerHTML = '<div><strong>@' + escapeHtml(m.username) + '</strong><small>' + perms + '</small></div>';
+            const kickBtn = document.createElement('button');
+            kickBtn.type = 'button';
+            kickBtn.className = 'btn btn-danger btn-sm';
+            kickBtn.textContent = 'Expulsar';
+            kickBtn.onclick = () => removeMember(m.user_id);
+            row.appendChild(kickBtn);
+            listEl.appendChild(row);
+        }
+    } catch (_) {
+        listEl.innerHTML = '<span class="aris-error">Error al cargar miembros.</span>';
+    }
+}
+
+async function removeMember(userId) {
+    await fetch('/api/aris/chats/' + currentChatId + '/members/' + userId, { method: 'DELETE' });
+    await loadMembers();
+}
+
+function toggleSettings() {
+    if (!currentChatId) return;
+    const active = chatsCache.find(c => c.id === currentChatId);
+    if (active) {
+        document.getElementById('chat-title-input').value = active.title || '';
+        document.getElementById('history-limit').value = String(active.history_limit || 50);
+    }
+    document.getElementById('settings-modal').hidden = false;
+}
+function hideSettingsModal() { document.getElementById('settings-modal').hidden = true; }
+
+async function sendInvite() {
+    const username = document.getElementById('invite-username').value.trim();
+    if (!username) return;
+    const canRead = document.getElementById('perm-read').checked;
+    const canSend = document.getElementById('perm-send').checked;
+
+    const res = await fetch('/api/aris/chats/' + currentChatId + '/invite', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'username=' + encodeURIComponent(username) + '&can_read_history=' + canRead + '&can_send=' + canSend
+    });
+    const data = await res.json();
+    if (data.ok) {
+        document.getElementById('invite-username').value = '';
+        await loadMembers();
+    }
+}
+
+async function saveSettings() {
+    const title = document.getElementById('chat-title-input').value.trim();
+    const limit = document.getElementById('history-limit').value;
+    await fetch('/api/aris/chats/' + currentChatId + '/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'title=' + encodeURIComponent(title) + '&history_limit=' + limit
+    });
+    if (title) document.getElementById('chat-title').textContent = title;
+    hideSettingsModal();
+    await loadChats();
+}
+
+async function deleteCurrentChat() {
+    await fetch('/api/aris/chats/' + currentChatId, {method: 'DELETE'});
+    currentChatId = null;
+    hideSettingsModal();
+    document.getElementById('chat-title').textContent = 'Nuevo chat';
+    document.getElementById('messages').innerHTML = '';
+    await loadChats();
+}
+</script>
+{% endblock %}

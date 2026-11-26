@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva Contraseña — Aethravox Studios{% endblock %}
+{% block tagline %}Forjar Nueva Contraseña{% endblock %}
+
+{# Página pre-login: sin engranaje ni FAB de perfil. #}
+{% block header_icons %}{% endblock %}
+{% block profile_fab %}{% endblock %}
+{# Página pre-login: sin navegación global (no hay sesión). #}
+{% block global_nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a href="/" class="tab active">Iniciar Sesión</a>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">⚠️ {{ e }}</div>
+    {% endif %}
+
+    {% if !token.is_empty() %}
+    <form method="POST" action="/reset" class="auth-form">
+        <input type="hidden" name="token" value="{{ token }}">
+
+        <div class="input-group">
+            <label for="password">Nueva contraseña</label>
+            <input type="password" id="password" name="password" autocomplete="new-password" required
+                   placeholder="Mínimo 8 caracteres">
+        </div>
+
+        <div class="input-group">
+            <label for="password_confirm">Repite la nueva contraseña</label>
+            <input type="password" id="password_confirm" name="password_confirm" autocomplete="new-password" required
+                   placeholder="Confirma tu nueva contraseña">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">🗡️ Forjar Contraseña</button>
+    </form>
+    {% endif %}
+
+    <div class="auth-foot">
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Administración — Aethravox{% endblock %}
+{% block tagline %}Panel de administración{% endblock %}
+
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>Panel de administración</h2>
+    <p>Bienvenido, <strong>{{ username }}</strong> · <span class="role-badge role-{{ role_css_key }}">{{ role_display }}</span></p>
+</div>
+
+<div class="grid-stats">
+    <div class="card">
+        <h3>Total usuarios</h3>
+        <div class="stat-value">{{ total_users }}</div>
+    </div>
+    <div class="card">
+        <h3>Owner</h3>
+        <div class="stat-value">{{ owner_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Admin</h3>
+        <div class="stat-value">{{ admin_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Staff</h3>
+        <div class="stat-value">{{ staff_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Usuario</h3>
+        <div class="stat-value">{{ user_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Secciones</h3>
+        <div class="stat-value">{{ web_count }}</div>
+    </div>
+    <div class="card">
+        <h3>Registros de auditoría</h3>
+        <div class="stat-value">{{ audit_total }}</div>
+    </div>
+    <div class="card">
+        <h3>Visitas (7 días)</h3>
+        <div class="stat-value">{{ visits_7d }}</div>
+    </div>
+</div>
+
+{% if !top_webs_7d.is_empty() %}
+<div class="card" style="margin-bottom:20px;">
+    <h3 style="margin-top:0;">Secciones más usadas (últimos 7 días)</h3>
+    <table class="apis-table">
+        <thead>
+            <tr>
+                <th>Sección</th>
+                <th>Visitas</th>
+                <th>Usuarios únicos</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for w in top_webs_7d %}
+            <tr>
+                <td><code>/{{ w.slug }}</code></td>
+                <td>{{ w.visits }}</td>
+                <td>{{ w.unique_users }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="admin-nav">
+    <a href="/admin/users" class="btn btn-primary">Gestión de usuarios</a>
+    <a href="/admin/docs" class="btn btn-primary">Documentos</a>
+    {% if role == "owner" %}
+    <a href="/admin/webs" class="btn btn-primary">Gestión de secciones</a>
+    <a href="/admin/config" class="btn btn-primary">Configuración global</a>
+    {% endif %}
+    <a href="/admin/roles" class="btn btn-primary">Roles y permisos</a>
+    <a href="/admin/titles" class="btn btn-primary">Títulos</a>
+    <a href="/admin/ip_bans" class="btn btn-primary">Baneos de IP</a>
+    <a href="/admin/tickets" class="btn btn-primary">Tickets de asistencia</a>
+    <a href="/admin/downloads" class="btn btn-primary">Descargas nativas</a>
+    <a href="/admin/apis" class="btn btn-primary">APIs de Aris</a>
+    <a href="/admin/audit" class="btn btn-secondary">Ver auditoría</a>
+</div>
+{% endblock %}

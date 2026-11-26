@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Tema — Ajustes{% endblock %}
+{% block tagline %}Personalizá tu experiencia{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+
+{% block content %}
+<div class="theme-page">
+    <div class="admin-header">
+        <h2 style="display:flex;align-items:center;gap:10px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-primary)" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            Tema visual y modo de color
+        </h2>
+        <p class="muted">Elegí el estilo y la luminosidad de tu plataforma. Podés cambiarlo cuando quieras.</p>
+    </div>
+
+    <div class="mode-toggle-row" role="group" aria-label="Modo de color">
+        <button type="button" class="mode-choice-btn" id="mode-btn-dark" onclick="setPageColorMode('dark')">
+            <span class="mc-ico" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            </span>
+            <div>
+                <strong>Oscuro</strong>
+                <small>Obsidiana y alto contraste nocturno</small>
+            </div>
+        </button>
+        <button type="button" class="mode-choice-btn" id="mode-btn-light" onclick="setPageColorMode('light')">
+            <span class="mc-ico" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            </span>
+            <div>
+                <strong>Claro</strong>
+                <small>Superficies luminosas y lectura diurna</small>
+            </div>
+        </button>
+    </div>
+
+    <div class="theme-grid">
+        {% for (id, name) in themes %}
+        <div class="theme-card {% if self.eq_current(id) %}theme-card-active{% endif %}"
+             onclick="selectTheme('{{ id }}')"
+             data-theme="{{ id }}">
+            <div class="theme-preview theme-preview-{{ id }}">
+                <div class="tp-header"></div>
+                <div class="tp-body">
+                    <div class="tp-card"></div>
+                    <div class="tp-card"></div>
+                    <div class="tp-card"></div>
+                </div>
+            </div>
+            <div class="theme-info">
+                <h3>{{ name }}</h3>
+                <span class="badge badge-ok" {% if !self.eq_current(id) %}hidden{% endif %}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    Activo
+                </span>
+            </div>
+            <p class="theme-sub"></p>
+            <p class="theme-desc"></p>
+            <div class="theme-swatches">
+                <span class="sw sw-1"></span>
+                <span class="sw sw-2"></span>
+                <span class="sw sw-3"></span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function syncModeCards() {
+    var mode = document.documentElement.getAttribute('data-mode') === 'light' ? 'light' : 'dark';
+    document.getElementById('mode-btn-dark')?.classList.toggle('is-active', mode === 'dark');
+    document.getElementById('mode-btn-light')?.classList.toggle('is-active', mode === 'light');
+}
+function setPageColorMode(mode) {
+    if (typeof window.aethravoxSetColorMode === 'function') {
+        window.aethravoxSetColorMode(mode);
+    } else {
+        document.documentElement.setAttribute('data-mode', mode);
+        try { localStorage.setItem('aethravox_color_mode', mode); } catch (_) {}
+    }
+    syncModeCards();
+}
+window.addEventListener('DOMContentLoaded', syncModeCards);
+
+async function selectTheme(theme) {
+    if (typeof window.aethravoxApplyTheme === 'function') {
+        window.aethravoxApplyTheme(theme, true);
+        return;
+    }
+    try {
+        await fetch('/api/theme/select', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'theme=' + encodeURIComponent(theme)
+        });
+    } catch (_) {}
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('aethravox_theme', theme); } catch (_) {}
+    let link = document.querySelector('link[data-theme-css]');
+    if (link) link.href = `/static/css/themes/${theme}.css?v=1`;
+    document.querySelectorAll('.theme-card').forEach(c => {
+        const active = c.dataset.theme === theme;
+        c.classList.toggle('theme-card-active', active);
+        const badge = c.querySelector('.badge-ok');
+        if (badge) badge.hidden = !active;
+    });
+}
+</script>
+{% endblock %}

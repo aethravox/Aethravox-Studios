@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de usuarios — Aethravox{% endblock %}
+{% block tagline %}Administración · Usuarios{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>👥 Gestión de usuarios</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+</div>
+
+<div class="toolbar">
+    <span>📍 Total: {{ users.len() }} usuarios</span>
+    <span>· 🟢 <strong>{{ online_count }}</strong> en línea ahora</span>
+    <input type="search" id="user-search" class="user-search-input"
+           placeholder="🔎 Buscar por nombre…" autocomplete="off">
+    <a href="/admin/users/new" class="btn btn-primary">+ Nuevo usuario</a>
+</div>
+
+<p class="muted small user-list-hint">
+    👆 Toca un usuario para ver sus datos completos y acciones.
+</p>
+
+<ul class="user-list" id="user-list">
+    {% for u in users %}
+    <li class="user-list-item" data-name="{{ u.username }} {{ u.display }}">
+        <button type="button" class="user-list-header" aria-expanded="false"
+                onclick="toggleUserRow(this)">
+            <span class="user-list-avatar
+                {% if u.is_online %}user-list-avatar-online{% else %}user-list-avatar-offline{% endif %}"
+                title="{% if u.is_online %}En línea{% else %}Offline{% endif %}"></span>
+            <span class="user-list-name">
+                {{ u.username }}
+                {% if u.is_self %}<span class="badge-you">tú</span>{% endif %}
+            </span>
+            {% if u.display != u.username %}
+            <span class="user-list-display muted">· {{ u.display }}</span>
+            {% endif %}
+            <span class="user-list-role role-badge role-{{ u.role_css_key }}">{{ u.role }}</span>
+            {% if u.status == "active" %}<span class="status-active user-list-status">activo</span>{% endif %}
+            {% if u.status == "suspended" %}<span class="status-suspended user-list-status">suspendido</span>{% endif %}
+            {% if u.status == "banned" %}<span class="status-banned user-list-status">baneado</span>{% endif %}
+            <span class="user-list-chevron" aria-hidden="true">▾</span>
+        </button>
+
+        <div class="user-list-detail" hidden>
+            <dl class="user-data-list">
+                <dt>👤 Usuario</dt>
+                <dd>
+                    <strong>{{ u.username }}</strong>
+                    {% if u.display != u.username %}<span class="muted"> · {{ u.display }}</span>{% endif %}
+                    {% if u.is_self %} <span class="badge-you">tú</span>{% endif %}
+                </dd>
+
+                <dt>✉️ Email</dt>
+                <dd class="muted">{{ u.email }}</dd>
+
+                <dt>🎭 Rol</dt>
+                <dd>
+                    {# Rol configurable: dropdown con los roles de la DB (tabla `roles`).
+                       El owner del sistema se marca como disabled (no se asigna vía UI,
+                       se crea en bootstrap). El form apunta al handler que asigna por
+                       role_id. #}
+                    <form method="POST" action="/admin/users/{{ u.id }}/role" class="inline-form">
+                        <select name="role_id" class="role-select role-{{ u.role_css_key }}"
+                            {% if u.role_css_key == "owner" && actor_role != "owner" %}disabled{% endif %}>
+                            {% for o in u.role_options %}
+                            <option value="{{ o.id }}"
+                                {% if o.selected %}selected{% endif %}
+                                {% if o.is_owner %}disabled{% endif %}>
+                                {% if o.is_owner %}👑 {% endif %}{{ o.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn-icon" title="Guardar rol">💾 Guardar</button>
+                    </form>
+                </dd>
+
+                <dt>📌 Estado</dt>
+                <dd>
+                    {% if u.status == "active" %}<span class="status-active">activo</span>{% endif %}
+                    {% if u.status == "suspended" %}<span class="status-suspended">suspendido</span>{% endif %}
+                    {% if u.status == "banned" %}<span class="status-banned">baneado</span>{% endif %}
+                </dd>
+
+                <dt>🟢 En línea</dt>
+                <dd>
+                    {% if u.is_online %}
+                    <span class="online-status online-status-online" title="En línea ahora">
+                        <span class="online-status-dot"></span>
+                        <span class="online-status-text">en línea</span>
+                    </span>
+                    {% else %}
+                    <span class="online-status online-status-offline" title="Sin actividad reciente">
+                        <span class="online-status-dot"></span>
+                        <span class="online-status-text">offline</span>
+                    </span>
+                    {% endif %}
+                </dd>
+
+                <dt>📡 Última IP</dt>
+                <dd>
+                    {% if let Some(ip) = u.last_ip.as_deref() %}
+                    <button type="button" class="ip-link" title="Ver historial de IPs"
+                            onclick="openIpHistoryModal({{ u.id }}, '{{ u.username }}')">
+                        📡 {{ ip }}
+                    </button>
+                    {% else %}
+                    <span class="muted">—</span>
+                    {% endif %}
+                </dd>
+
+                <dt>📅 Registro</dt>
+                <dd class="muted">{{ u.created_at }}</dd>
+
+                <dt>🕒 Último acceso</dt>
+                <dd class="muted">{{ u.last_login }}</dd>
+            </dl>
+
+            <div class="user-actions">
+                <form method="POST" action="/admin/users/{{ u.id }}/force_logout" class="inline-form">
+                    <button type="submit" class="btn-icon" title="Cerrar sesión remota"
+                            {% if u.role_css_key == "owner" %}disabled{% endif %}>🚪</button>
+                </form>
+                <button type="button" class="btn-icon" title="Suspender"
+                        {% if u.role_css_key == "owner" %}disabled{% endif %}
+                        onclick="openSuspendModal({{ u.id }}, '{{ u.username }}')">
+                    ⏸️
+                </button>
+                <button type="button" class="btn-icon delete" title="Banear"
+                        {% if u.role_css_key == "owner" %}disabled{% endif %}
+                        onclick="openBanModal({{ u.id }}, '{{ u.username }}')">
+                    ⛔
+                </button>
+                {% if u.status != "active" %}
+                <form method="POST" action="/admin/users/{{ u.id }}/unban" class="inline-form">
+                    <button type="submit" class="btn-icon" title="Levantar suspensión/ban">🔓</button>
+                </form>
+                {% endif %}
+                <button type="button" class="btn-icon delete" title="Eliminar usuario"
+                        {% if u.role_css_key == "owner" %}disabled{% endif %}
+                        onclick="openDeleteUserModal({{ u.id }}, '{{ u.username }}')">🗑️</button>
+            </div>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+
+<p class="muted small user-list-empty" id="user-list-empty" hidden>
+    Sin resultados para esa búsqueda.
+</p>
+
+<style>
+/* ===== Lista de usuarios (vista colapsable) =====
+   Antes era una tabla ancha con 9 columnas; en móvil era ilegible y
+   siempre mostraba todo. Ahora cada usuario es una fila pulsable que
+   al expandirse muestra sus datos como <dl> y las acciones. */
+.user-list-hint { margin: -4px 0 14px 0; }
+.user-search-input {
+    flex: 1;
+    min-width: 180px;
+    max-width: 320px;
+    padding: 8px 14px;
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 999px;
+    color: var(--blanco);
+    font-size: 0.88rem;
+}
+.user-search-input:focus {
+    outline: none;
+    border-color: var(--dorado);
+}
+.user-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.user-list-item {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+}
+.user-list-item:hover {
+    border-color: rgba(224, 163, 8, 0.35);
+}
+.user-list-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: transparent;
+{% include "_admin_users_mid.html" %}
+                            <input type="radio" name="ban_type" value="permanent" id="ban-permanent-radio" checked>
+                            <span>🔒 Permanente</span>
+                        </label>
+                        <label class="ban-duration-option">
+                            <input type="radio" name="ban_type" value="duration" id="ban-duration-radio">
+                            <span>⏱️ Temporal</span>
+                        </label>
+                    </div>
+                    <input type="hidden" name="permanent" value="" id="ban-permanent-field">
+                </div>
+                <div class="input-group" id="ban-duration-fields" style="display:none;">
+                    <label>Duración</label>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <input type="number" name="duration_value" value="7" min="1" max="365"
+                               style="flex:1; min-width:100px;">
+                        <select name="duration_unit" style="flex:1; min-width:120px;">
+                            <option value="minutes">Minutos</option>
+                            <option value="hours">Horas</option>
+                            <option value="days" selected>Días</option>
+                            <option value="weeks">Semanas</option>
+                            <option value="months">Meses</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">⛔ Aplicar ban</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeBanModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.ban-duration-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.ban-duration-option {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--negro);
+    color: var(--blanco);
+    justify-content: center;
+    text-align: center;
+}
+.ban-duration-option:has(input:checked) {
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.08);
+}
+.ban-duration-option input {
+    accent-color: var(--dorado);
+}
+</style>
+
+<script src="/static/js/admin/admin_users_2.js" defer></script>
+{# ===== Modal: Historial de IPs ===== #}
+<div class="modal-overlay" id="ip-history-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>📡 Historial de IPs</span>
+            <button type="button" class="modal-close" onclick="closeIpHistoryModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom:14px;">
+                IPs desde las que ha iniciado sesión
+                <strong id="ip-history-username" class="gold">—</strong>:
+            </p>
+            <div id="ip-history-list" class="ip-history-list">
+                <p class="muted">Cargando…</p>
+            </div>
+            <p class="muted small" style="margin-top:12px;">
+                Las IPs marcadas con ⚠️ son la primera vez que el usuario accede desde esa IP.
+                Si ves una IP nueva de un país distinto al habitual, podría ser login sospechoso.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeIpHistoryModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.ip-link {
+    background: transparent;
+    border: 1px solid var(--fondo);
+    color: var(--cian);
+    padding: 4px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: 'Menlo', 'Monaco', monospace;
+    transition: border-color 0.15s, background 0.15s;
+}
+.ip-link:hover {
+    border-color: var(--cian);
+    background: rgba(0, 212, 255, 0.08);
+}
+.ip-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+.ip-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+}
+.ip-row-new {
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.06);
+}
+.ip-row-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+.ip-row-info {
+    flex: 1;
+    min-width: 0;
+}
+.ip-row-ip {
+    color: var(--blanco);
+    font-family: 'Menlo', 'Monaco', monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+.ip-row-meta {
+    font-size: 0.8rem;
+    margin-top: 2px;
+}
+.ip-new-badge {
+    display: inline-block;
+    background: rgba(224, 163, 8, 0.15);
+    color: var(--dorado);
+    border: 1px solid rgba(224, 163, 8, 0.4);
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 8px;
+    letter-spacing: 1px;
+}
+.small {
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+</style>
+
+{# ===== Modal: Eliminar usuario ===== #}
+<div class="modal-overlay" id="delete-user-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>🗑️ Eliminar usuario</span>
+            <button type="button" class="modal-close" onclick="closeDeleteUserModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Eliminar definitivamente al usuario <strong id="delete-user-name" class="gold">—</strong>?</p>
+            <div class="alert alert-error" style="margin:14px 0;">
+                ⚠️ Esta acción <strong>NO se puede deshacer</strong>. Se borrará:
+                <ul style="margin:6px 0 0 20px;">
+                    <li>Su cuenta y credenciales</li>
+                    <li>Todas sus sesiones activas</li>
+                    <li>Su perfil público <code>/u/username</code></li>
+                    <li>Su historial de IPs</li>
+                </ul>
+                <strong>NO se borrarán</strong> los mensajes del chat ni las amistades que tenga creadas.
+                Si quieres mantener su cuenta sin acceso, usa <strong>Banear</strong> en su lugar.
+            </div>
+            <form method="POST" action="#" id="delete-user-form">
+                <button type="submit" class="btn btn-primary btn-block">🗑️ Sí, eliminar definitivamente</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeDeleteUserModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/admin/admin_users_3.js" defer></script>{% endblock %}

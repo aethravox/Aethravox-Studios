@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == "terminos" %}Términos de uso{% else %}Política de privacidad{% endif %} — Aethravox Studios{% endblock %}
+{% block tagline %}Documento legal{% endblock %}
+{# Página pública: no requiere sesión. Accesible desde el checkbox del registro
+   y desde cualquier enlace directo. El contenido es el mismo que aparece en
+   Ajustes → Privacidad / Términos (dashboard.html), pero aquí sin auth. #}
+{% block header_icons %}{% endblock %}
+{% block profile_fab %}{% endblock %}
+{# Página pública: sin navegación global (no requiere sesión). #}
+{% block global_nav %}{% endblock %}
+
+{% block content %}
+<div class="dashboard-card settings-page legal-page">
+    <div class="profile-header">
+        <div class="profile-info">
+            <h2>📄 Documentos legales</h2>
+            <span class="role-badge role-usuario">Aethravox Studios</span>
+        </div>
+    </div>
+
+    <nav class="settings-tabs" id="settings-tabs" aria-label="Secciones legales">
+        <button type="button" class="settings-tab {% if mode != "terminos" %}is-active{% endif %}" data-tab="privacidad">📜 Privacidad</button>
+        <button type="button" class="settings-tab {% if mode == "terminos" %}is-active{% endif %}" data-tab="terminos">📄 Términos</button>
+    </nav>
+
+    {# ===== Privacidad ===== #}
+    <section class="settings-section {% if mode != "terminos" %}is-active{% endif %}" data-section="privacidad" {% if mode == "terminos" %}hidden{% endif %}>
+        <div class="account-section privacy-section">
+            <h3 class="stat-label" style="margin-bottom:10px;">📜 Política de privacidad</h3>
+            <p class="muted small" style="margin-bottom:14px;">
+                Última actualización: 1 de noviembre de 2026 · Esta política se aplica a tu cuenta
+                y a todas las funciones del sitio (chat, documentos, transmisión, comunidades, etc.).
+            </p>
+
+            <h4 class="privacy-h4">1. Responsable del tratamiento</h4>
+            <p class="privacy-p">
+                El responsable del tratamiento de tus datos personales es
+                <strong>Aethravox Studios</strong>, responsable también del dominio
+                <code>aethravoxstudios.duckdns.org</code>. Puedes contactar con el responsable
+                desde la sección <strong>Soporte</strong> (tras iniciar sesión) abriendo un ticket
+                marcado como "Privacidad / RGPD"; esa vía se usa también para ejercer tus derechos.
+            </p>
+
+            <h4 class="privacy-h4">2. Datos que tratamos</h4>
+            <ul class="privacy-list">
+                <li><strong>Cuenta:</strong> nombre de usuario, correo electrónico, hash de contraseña (Argon2), rol y fecha de alta.</li>
+                <li><strong>Perfil:</strong> nombre público (display name), biografía y foto de avatar (redimensionada a 400 px y convertida a WebP).</li>
+                <li><strong>Sesiones:</strong> token de sesión firmado, fecha de creación, última actividad y "recordar sesión" (1 h o 30 días). La cookie es <code>HttpOnly</code>, <code>SameSite=Lax</code> y <code>Secure</code> en producción.</li>
+                <li><strong>Contenido que generas:</strong> mensajes de chat, archivos, imágenes y notas de voz que envíes; documentos que subas; tickets de soporte.</li>
+                <li><strong>Transmitir:</strong> las salas de transmisión viven <strong>solo en memoria del servidor</strong> mientras dura la sesión y <strong>no se guarda ningún vídeo ni audio</strong>. El servidor solo intercambia los "saludos" iniciales (señalización WebRTC); el media viaja P2P cifrado con DTLS-SRTP entre los dispositivos.</li>
+                <li><strong>Llamadas y videollamadas:</strong> igual que Transmitir, son P2P; el servidor no graba ni reenvía el audio/vídeo, solo lleva la señalización.</li>
+                <li><strong>Trazas técnicas:</strong> dirección IP y <code>User-Agent</code> se registran en el log de auditoría al iniciar sesión, registrarse o cambiar contraseña, para prevenir abusos. Si un admin aplica un bloqueo de IP, esta se guarda en una tabla de bloqueos.</li>
+            </ul>
+
+            <h4 class="privacy-h4">3. Finalidad y base legal</h4>
+            <p class="privacy-p">
+                Tratamos tus datos para: (a) darte acceso y mantener tu cuenta operativa
+                —base: ejecución del contrato/consentimiento al registrarte—; (b) prestar las
+                funciones que activas (chat, documentos, transmisión, llamadas) —base: consentimiento
+                y relación contractual—; (c) seguridad, control de fraude y cumplimiento de la
+                política de uso aceptable —base: interés legítimo—; (d) responder a tus solicitudes
+                de soporte —base: consentimiento y/o cumplimiento de obligaciones—.
+            </p>
+
+            <h4 class="privacy-h4">4. Conservación</h4>
+            <p class="privacy-p">
+                Los datos de cuenta y perfil se conservan mientras tu cuenta esté activa. Si pides
+                borrarla, se eliminan perfil, avatar, mensajes de chat, documentos y tickets en un
+                plazo máximo de 30 días; los logs de auditoría esenciales pueden conservarse
+                anonimizados durante el plazo legal aplicable. Las salas de Transmitir y llamadas no
+                dejan ningún dato al cerrarse (memoria efímera). Los tokens de sesión caducan a la
+                hora o a los 30 días según la opción elegida, y se borran al cerrar sesión.
+            </p>
+
+            <h4 class="privacy-h4">5. Destinatarios</h4>
+            <p class="privacy-p">
+                No vendemos ni cedemos tus datos a terceros. Los <strong>servidores STUN públicos
+                de Google</strong> (<code>stun.l.google.com</code>) solo reciben tu IP para permitir
+                la conexión WebRTC; no reciben contenido del chat ni de las transmisiones. Si
+                configuras un servidor TURN propio, tu IP se envía también a ese servidor durante
+                la señalización. Los miembros de una conversación o sala reciben los mensajes y
+                media que tú envíes a esa conversación/sala.
+            </p>
+
+            <h4 class="privacy-h4">6. Medidas de seguridad</h4>
+            <ul class="privacy-list">
+                <li>Contraseñas con <strong>Argon2</strong> (anti-rainbow, anti-fuerza bruta) — nunca se guardan en claro ni se envían en claro tras el login.</li>
+                <li>Sesiones con cookies <code>HttpOnly</code> + <code>SameSite=Lax</code> + <code>Secure</code> (en HTTPS) y token aleatorio almacenado solo en servidor.</li>
+                <li>Subida de archivos con límite de tamaño (200 MB por petición) y validación de tipo MIME.</li>
+                <li>Panel admin con doble candado: requiere sesión + desbloqueo reciente por re-autenticación.</li>
+                <li>WebRTC P2P cifrado de extremo a extremo con DTLS-SRTP para Transmitir, llamadas y videollamadas.</li>
+            </ul>
+
+            <h4 class="privacy-h4">7. Cookies</h4>
+            <p class="privacy-p">
+                Usamos <strong>una sola cookie de sesión esencial</strong> (no se usa ni analytics
+                ni publicidad). Es estrictamente necesaria para mantenerte identificado entre
+                peticiones, por lo que no requiere consentimiento previo según la normativa de
+                cookies. No hay cookies de terceros.
+            </p>
+
+            <h4 class="privacy-h4">8. Tus derechos (ARCO / RGPD)</h4>
+            <p class="privacy-p">
+                Puedes ejercer en cualquier momento tus derechos de <strong>acceso</strong>,
+                <strong>rectificación</strong>, <strong>supresión</strong> ("derecho al olvido"),
+                <strong>oposición</strong>, <strong>limitación del tratamiento</strong> y
+                <strong>portabilidad</strong> de tus datos, así como retirar el consentimiento
+                dado, abriendo un ticket desde Soporte (tras iniciar sesión) con el asunto
+                "Privacidad / RGPD". La respuesta se dará en el plazo máximo de un mes. Si
+                consideras que no hemos atendido tu solicitud correctamente, puedes presentar una
+                reclamación ante tu autoridad de protección de datos (en España, la AEPD;
+                <a href="https://www.aepd.es" target="_blank" rel="noopener">www.aepd.es</a>).
+            </p>
+
+            <h4 class="privacy-h4">9. Menores</h4>
+            <p class="privacy-p">
+                El registro está reservado a personas mayores de 13 años. Si eres menor de esa edad
+                no puedes crear una cuenta. Si detectamos una cuenta abierta por un menor, la
+                cerraremos y borraremos sus datos.
+            </p>
+
+            <h4 class="privacy-h4">10. Transferencias internacionales</h4>
+            <p class="privacy-p">
+                El servidor donde se aloja Aethravox Studios está en la ubicación indicada por el
+                operador del dominio. Si usas Transmitir o llamadas, los datos de media viajan
+                directamente entre los dispositivos de los participantes (P2P), sin pasar por
+                un servidor intermedio distinto de la señalización inicial.
+            </p>
+
+            <h4 class="privacy-h4">11. Cambios en esta política</h4>
+            <p class="privacy-p">
+                Podemos actualizar esta política cuando añadamos o cambiemos funciones. Te avisaremos
+                en el panel con un aviso visible; la fecha de "última actualización" arriba siempre
+                reflejará la versión vigente. Continuar usando la cuenta tras los cambios equivale a
+                aceptar la nueva política.
+            </p>
+        </div>
+    </section>
+
+    {# ===== Términos ===== #}
+    <section class="settings-section {% if mode == "terminos" %}is-active{% endif %}" data-section="terminos" {% if mode != "terminos" %}hidden{% endif %}>
+        <div class="account-section privacy-section">
+            <h3 class="stat-label" style="margin-bottom:10px;">📄 Términos de uso</h3>
+            <p class="muted small" style="margin-bottom:14px;">
+                Última actualización: 1 de noviembre de 2026 · Al registrarte y usar Aethravox
+                Studios aceptas estos términos.
+            </p>
+
+            <h4 class="privacy-h4">1. Aceptación</h4>
+            <p class="privacy-p">
+                Al crear una cuenta o usar cualquier función del sitio aceptas los presentes
+                Términos y la Política de Privacidad. Si no estás de acuerdo, no uses el servicio.
+            </p>
+
+            <h4 class="privacy-h4">2. Uso aceptable</h4>
+            <ul class="privacy-list">
+                <li>No publiques contenido ilegal, abusivo, difamatorio, sexual explícito, o que infrinja derechos de terceros (copyright, marca, privacidad).</li>
+                <li>No uses el chat, Transmitir, llamadas ni comunidades para acosar, amenazar o spam.</li>
+                <li>No intentes acceder a cuentas ajenas, explotar vulnerabilidades, hacer ingeniería inversa ni realizar ataques de denegación de servicio.</li>
+                <li>No uses bots automatizados sin autorización expresa del operador del sitio.</li>
+            </ul>
+
+            <h4 class="privacy-h4">3. Contenido del usuario</h4>
+            <p class="privacy-p">
+                Mantienes la propiedad del contenido que subas (mensajes, imágenes, notas de voz,
+                documentos, transmisiones). Al publicarlo en una conversación o sala con otras
+                personas, concedes a los participantes de esa conversación/sala el derecho de
+                visualizarlo en el contexto del servicio.
+            </p>
+
+            <h4 class="privacy-h4">4. Moderación y suspenciones</h4>
+            <p class="privacy-p">
+                Los administradores pueden eliminar contenido que infrinja estos términos, suspender
+                o cerrar cuentas, bloquear direcciones IP y revocar salas de transmisión en curso,
+                sin previo aviso. Recibirás aviso por la vía disponible cuando sea posible.
+            </p>
+
+            <h4 class="privacy-h4">5. Disponibilidad del servicio</h4>
+            <p class="privacy-p">
+                El servicio se ofrece "tal cual" sin garantía de disponibilidad continua. Pueden
+                producirse paradas por mantenimiento, errores de red o limitaciones del equipo.
+                No nos responsabilizamos de pérdidas derivadas de la interrupción del servicio.
+            </p>
+
+            <h4 class="privacy-h4">6. Transmisiones y llamadas P2P</h4>
+            <p class="privacy-p">
+                Las funciones de Transmitir y de llamadas/videollamadas envían audio y vídeo
+                directamente entre los dispositivos de los participantes (P2P). El servidor solo
+                gestiona la señalización inicial y la autenticación de las salas. Eres responsable
+                del contenido que transmitas y de contar con el consentimiento de las personas
+                aparecidas antes de transmitir su imagen o voz.
+            </p>
+
+            <h4 class="privacy-h4">7. Limitación de responsabilidad</h4>
+            <p class="privacy-p">
+                En la máxima medida permitida por la ley, Aethravox Studios no se responsabiliza de
+                daños directos, indirectos o lucro cesante derivados del uso o imposibilidad de uso
+                del servicio. La responsabilidad se limita, en todo caso, a las cantidades que, en
+                su caso, hubieras abonado por el servicio (actualmente ninguna, salvo acuerdos
+                específicos).
+            </p>
+
+            <h4 class="privacy-h4">8. Modificación de los términos</h4>
+            <p class="privacy-p">
+                Podemos modificar estos términos. La fecha de "última actualización" reflejará el
+                cambio. Continuar usando el servicio tras la modificación implica aceptación. Si no
+                aceptas, debes dejar de usar la cuenta y solicitar su baja.
+            </p>
+        </div>
+    </section>
+</div>
+
+<script>
+// Tab switcher para la página legal pública (mismo comportamiento que dashboard).
+(function() {
+    const tabs = document.querySelectorAll('.settings-tab');
+    const sections = document.querySelectorAll('.settings-section');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('is-active'));
+            tab.classList.add('is-active');
+            const target = tab.getAttribute('data-tab');
+            sections.forEach(s => {
+                const match = s.getAttribute('data-section') === target;
+                s.classList.toggle('is-active', match);
+                s.hidden = !match;
+            });
+            // Actualiza la URL sin recargar para que sea compartible.
+            const newUrl = target === 'terminos' ? '/terminos' : '/privacidad';
+            history.replaceState(null, '', newUrl);
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,83 @@
+{# Modal de onboarding: se muestra SOLO si /api/theme/status dice show_onboarding=true #}
+<div id="theme-onboarding" class="theme-onboarding-overlay" hidden>
+    <div class="theme-onboarding-dialog">
+        <h2>Bienvenido a Aethravox Studios</h2>
+        <p class="muted">Elegí tu estilo visual para comenzar. Podés cambiarlo después en Ajustes → Tema o desde la barra superior.</p>
+
+        <div class="theme-grid onboarding-grid">
+            <div class="theme-card" onclick="pickTheme('aethravox')" data-theme="aethravox">
+                <div class="theme-preview theme-preview-aethravox">
+                    <div class="tp-header"></div>
+                    <div class="tp-body"><div class="tp-card"></div><div class="tp-card"></div><div class="tp-card"></div></div>
+                </div>
+                <div class="theme-info"><h3>Aethravox Studios</h3></div>
+                <p class="theme-sub"></p>
+                <div class="theme-swatches"><span class="sw sw-1"></span><span class="sw sw-2"></span><span class="sw sw-3"></span></div>
+            </div>
+
+            <div class="theme-card" onclick="pickTheme('shadow')" data-theme="shadow">
+                <div class="theme-preview theme-preview-shadow">
+                    <div class="tp-header"></div>
+                    <div class="tp-body"><div class="tp-card"></div><div class="tp-card"></div><div class="tp-card"></div></div>
+                </div>
+                <div class="theme-info"><h3>Shadow Studios</h3></div>
+                <p class="theme-sub"></p>
+                <div class="theme-swatches"><span class="sw sw-1"></span><span class="sw sw-2"></span><span class="sw sw-3"></span></div>
+            </div>
+
+            <div class="theme-card" onclick="pickTheme('commoncents')" data-theme="commoncents">
+                <div class="theme-preview theme-preview-commoncents">
+                    <div class="tp-header"></div>
+                    <div class="tp-body"><div class="tp-card"></div><div class="tp-card"></div><div class="tp-card"></div></div>
+                </div>
+                <div class="theme-info"><h3>CommonCents</h3></div>
+                <p class="theme-sub"></p>
+                <div class="theme-swatches"><span class="sw sw-1"></span><span class="sw sw-2"></span><span class="sw sw-3"></span></div>
+            </div>
+        </div>
+        <div style="margin-top:20px;display:flex;justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('theme-onboarding').hidden=true;">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function applyThemeClient(theme) {
+    if (!theme) return;
+    if (typeof window.aethravoxApplyTheme === 'function') {
+        window.aethravoxApplyTheme(theme, false);
+        return;
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('aethravox_theme', theme); } catch (_) {}
+    let link = document.querySelector('link[data-theme-css]');
+    if (link && !link.href.includes(`/themes/${theme}.css`)) {
+        link.href = `/static/css/themes/${theme}.css?v=1`;
+    }
+}
+
+(async function checkOnboarding() {
+    try {
+        const res = await fetch('/api/theme/status');
+        const ct = res.headers.get('content-type') || '';
+        if (!res.ok || !ct.includes('application/json')) return;
+        const data = await res.json();
+        if (data.theme) applyThemeClient(data.theme);
+        if (data.show_onboarding) {
+            document.getElementById('theme-onboarding').hidden = false;
+        }
+    } catch (e) { /* invitado o error: no mostrar */ }
+})();
+
+async function pickTheme(theme) {
+    await fetch('/api/theme/select', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'theme=' + encodeURIComponent(theme)
+    }).catch(() => {});
+    applyThemeClient(theme);
+    let link = document.querySelector('link[data-theme-css]');
+    if (link) link.href = `/static/css/themes/${theme}.css?v=${Date.now()}`;
+    document.getElementById('theme-onboarding').hidden = true;
+}
+</script>

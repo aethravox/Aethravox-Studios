@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de documentos — Aethravox{% endblock %}
+{% block tagline %}Owner · Documentos{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>📄 Gestión de documentos</h2>
+    <p>Solo el Owner puede añadir, editar y eliminar documentos.</p>
+</div>
+
+{% if !libreoffice_ok %}
+<div class="alert alert-error">
+    ⚠️ <strong>LibreOffice no detectado.</strong> La conversión de PPTX/DOCX a PDF
+    no funcionará hasta que lo instales:
+    <code>sudo apt install libreoffice</code>
+</div>
+{% endif %}
+
+<div class="admin-nav" style="margin-bottom:25px">
+    <a href="/admin/docs/new" class="btn btn-primary">➕ Subir nuevo documento</a>
+    <a href="/docs" class="btn btn-secondary">👁️ Ver galería pública</a>
+</div>
+
+{% if documents.is_empty() %}
+<div class="empty-state">
+    <div style="font-size:3rem;margin-bottom:15px">📭</div>
+    <h3>Sin documentos</h3>
+    <p class="muted">Aún no has subido ningún documento. Haz clic en "Subir nuevo documento".</p>
+</div>
+{% else %}
+{# Cada documento es un acordeón: header compacto (icono + título + estado
+   preview + 1 acción rápida de Ver) y al desplegar muestra el resto de
+   datos (archivo, tamaño, descargas, fecha) y las acciones de
+   editar/regenerar/eliminar. Antes era una tabla de 8 columnas con todo
+   al aire; ahora la lista ocupa mucho menos y solo se expande lo que se
+   va a tocar. Rutas POST y el modal de borrado NO cambian. #}
+<div class="doc-list">
+    {% for d in documents %}
+    <details class="doc-accordion collapse">
+        <summary class="doc-accordion-head">
+            <span class="doc-accordion-ico" aria-hidden="true">{{ d.icon }}</span>
+            <span class="doc-accordion-title"><strong>{{ d.title }}</strong>
+                {% if d.preview_status == "ready" %}<span class="status-active">· ✓ listo</span>{% endif %}
+                {% if d.preview_status == "pending" %}<span class="muted">· ⏳ pendiente</span>{% endif %}
+                {% if d.preview_status == "converting" %}<span class="status-suspended">· ⏱️ convirtiendo</span>{% endif %}
+                {% if d.preview_status == "failed" %}<span class="status-banned">· ⚠️ falló</span>{% endif %}
+            </span>
+            <span class="muted small doc-accordion-meta">⬇️ {{ d.downloaded }} · {{ d.size }}</span>
+            <span class="role-accordion-chevron" aria-hidden="true">▾</span>
+        </summary>
+        <div class="doc-accordion-body">
+            {% if !d.description.is_empty() %}
+            <p class="muted small" style="margin:0 0 10px">{{ d.description }}</p>
+            {% endif %}
+            <dl class="doc-accordion-data">
+                <div><dt>Archivo</dt><dd class="muted">{{ d.file_name }}</dd></div>
+                <div><dt>Tamaño</dt><dd class="muted">{{ d.size }}</dd></div>
+                <div><dt>Descargas</dt><dd class="muted">⬇️ {{ d.downloaded }}</dd></div>
+                <div><dt>Subido</dt><dd class="muted">{{ d.created_at }}</dd></div>
+            </dl>
+            <div class="doc-accordion-actions">
+                <a href="/docs/{{ d.id }}" class="btn btn-secondary btn-sm">👁️ Ver</a>
+                <a href="/admin/docs/{{ d.id }}/edit" class="btn btn-secondary btn-sm">✏️ Editar</a>
+                {% if d.preview_status == "failed" || d.preview_status == "ready" %}
+                <form method="POST" action="/admin/docs/{{ d.id }}/regenerate" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm">🔄 Regenerar preview</button>
+                </form>
+                {% endif %}
+                <button type="button" class="btn btn-danger btn-sm"
+                        onclick="openDeleteDocModal({{ d.id }}, '{{ d.title }}')">🗑️ Eliminar</button>
+            </div>
+        </div>
+    </details>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="admin-nav">
+</div>
+
+{# ===== Modal: Eliminar documento ===== #}
+<div class="modal-overlay" id="delete-doc-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>🗑️ Eliminar documento</span>
+            <button type="button" class="modal-close" onclick="closeDeleteDocModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Eliminar el documento <strong id="delete-doc-name" class="gold">—</strong>?</p>
+            <div class="alert alert-error" style="margin:14px 0;">
+                ⚠️ Esta acción <strong>NO se puede deshacer</strong>. Se borrará:
+                <ul style="margin:6px 0 0 20px;">
+                    <li>El archivo original del disco</li>
+                    <li>El PDF preview si fue generado</li>
+                    <li>Los permisos asociados</li>
+                </ul>
+            </div>
+            <form method="POST" action="#" id="delete-doc-form">
+                <button type="submit" class="btn btn-primary btn-block">🗑️ Sí, eliminar</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeDeleteDocModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+    function openModal(id) {
+        const m = document.getElementById(id);
+        m.hidden = false;
+        requestAnimationFrame(() => m.classList.add('modal-visible'));
+    }
+    function closeModal(id) {
+        const m = document.getElementById(id);
+        m.classList.remove('modal-visible');
+        setTimeout(() => { m.hidden = true; }, 200);
+    }
+    window.openDeleteDocModal = function(docId, title) {
+        document.getElementById('delete-doc-name').textContent = title;
+        document.getElementById('delete-doc-form').action = '/admin/docs/' + docId + '/delete';
+        openModal('delete-doc-modal');
+    };
+    window.closeDeleteDocModal = function() { closeModal('delete-doc-modal'); };
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeDeleteDocModal();
+    });
+    document.getElementById('delete-doc-modal').addEventListener('click', e => {
+        if (e.target.id === 'delete-doc-modal') closeDeleteDocModal();
+    });
+})();
+</script>
+{% endblock %}

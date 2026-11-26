@@ -1,0 +1,31 @@
+// Entry point — importa los módulos de sección (sus efectos
+// secundarios: listeners, conexión WS, etc. se ejecutan al cargar).
+import * as Utilidades from './Utilidades.js';
+import * as Estado_global_del_chat from './Estado_global_del_chat.js';
+import * as WebSocket from './WebSocket.js';
+import * as Cargar_conversaciones from './Cargar_conversaciones.js';
+import * as Seleccionar_conversaci_n from './Seleccionar_conversaci_n.js';
+import * as SW___chat from './SW___chat.js';
+import * as Estado_del_mensaje from './Estado_del_mensaje.js';
+import * as Body_del_mensaje from './Body_del_mensaje.js';
+import * as Helpers_de_formato from './Helpers_de_formato.js';
+import * as Men__contextual_del_mensaje from './Men__contextual_del_mensaje.js';
+import * as Bindear_eventos_a_un_mensaje from './Bindear_eventos_a_un_mensaje.js';
+import * as Men__contextual_flotante from './Men__contextual_flotante.js';
+import * as Acciones_del_men_ from './Acciones_del_men_.js';
+import * as Enviar_mensaje from './Enviar_mensaje.js';
+import * as Subir_imagen from './Subir_imagen.js';
+import * as Modal_fullscreen from './Modal_fullscreen.js';
+import * as Recibir_mensajes_WS from './Recibir_mensajes_WS.js';
+import * as Modal__Nuevo_chat from './Modal__Nuevo_chat.js';
+import * as Crear_grupo from './Crear_grupo.js';
+import * as Bot_n__volver_ from './Bot_n__volver_.js';
+import * as Listeners from './Listeners.js';
+import * as Alternar_bot_n_Enviar from './Alternar_bot_n_Enviar.js';
+import * as Subir_archivo_gen_rico from './Subir_archivo_gen_rico.js';
+import * as Nota_de_voz from './Nota_de_voz.js';
+import * as Llamadas___videollamadas from './Llamadas___videollamadas.js';
+import * as Tono_de_llamada from './Tono_de_llamada.js';
+import * as Modo_selecci_n_m_ltiple from './Modo_selecci_n_m_ltiple.js';
+import * as Long_press_en_m_vil from './Long_press_en_m_vil.js';
+import * as Init from './Init.js';

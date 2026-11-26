@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo usuario — Aethravox{% endblock %}
+{% block tagline %}Administración · Crear usuario{% endblock %}
+
+{% block back_url %}/admin/users{% endblock %}
+{% block content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a href="/admin/users" class="tab">← Lista</a>
+        <a href="/admin/users/new" class="tab active">Nuevo</a>
+    </div>
+
+    <h2 class="card-title">Crear nuevo usuario</h2>
+    <p class="card-subtitle">Operando como <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+
+    <form method="POST" action="/admin/users/new" class="auth-form">
+        <div class="input-group">
+            <label>Nombre de usuario</label>
+            <input type="text" name="username" required value="{{ username }}"
+                   placeholder="3-32 chars, letras/números/_-.">
+        </div>
+        <div class="input-group">
+            <label>Email interno (AethraMail)</label>
+            <input type="email" name="email" required value="{{ email }}"
+                   placeholder="usuario@aethra.sac">
+        </div>
+        <div class="input-group">
+            <label>Contraseña</label>
+            <input type="password" name="password" required
+                   placeholder="Mínimo 8 caracteres">
+        </div>
+        <div class="input-group">
+            <label>Rol inicial</label>
+            <select name="role">
+                {% if actor_role == "owner" %}<option value="admin">admin</option>{% endif %}
+                <option value="staff">staff</option>
+                <option value="usuario" selected>usuario</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Crear usuario</button>
+    </form>
+</div>
+{% endblock %}

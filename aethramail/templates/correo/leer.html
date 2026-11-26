@@ -1,0 +1,21 @@
+{% extends "correo/base_correo.html" %}
+
+{% block title %}Leer correo{% endblock %}
+
+{% block content %}
+<article class="am-read">
+    <div class="am-read-head">
+        <h2 class="am-read-subject">{{ email.subject }}</h2>
+        <a href="/bandeja?folder=inbox" class="am-btn am-btn-ghost">← Volver</a>
+    </div>
+    <dl class="am-read-meta">
+        <dt>De</dt><dd>{{ email.from_address }}</dd>
+        <dt>Para</dt><dd>{{ email.to_address }}</dd>
+        <dt>Fecha</dt><dd>{{ email.created_at }}</dd>
+    </dl>
+    <div class="am-read-body">{{ email.body }}</div>
+    <div class="am-read-actions">
+        <a href="/redactar?to={{ email.from_address }}" class="am-btn am-btn-primary">Responder</a>
+    </div>
+</article>
+{% endblock %}

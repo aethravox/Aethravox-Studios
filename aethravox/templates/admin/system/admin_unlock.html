@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Desbloquear panel — Aethravox Studios{% endblock %}
+{% block tagline %}Re-autenticación de administrador{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <div class="admin-unlock-header">
+        <h2>🔒 Desbloquear panel</h2>
+        <p class="muted">
+            Hola <strong>{{ username }}</strong> (<span class="role-badge role-{{ role_css_key }}">{{ role_display }}</span>).
+            Para entrar al panel de administración necesitas confirmar tu contraseña.
+        </p>
+        <p class="muted small">
+            Por seguridad, el panel se vuelve a bloquear tras 30 minutos de inactividad.
+        </p>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">⚠️ {{ e }}</div>
+    {% endif %}
+
+    <form method="POST" action="/admin/unlock" class="auth-form">
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="input-group">
+            <label for="password">Tu contraseña</label>
+            <input type="password" id="password" name="password" autocomplete="current-password"
+                   required autofocus placeholder="Confirma que eres tú">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">🔓 Desbloquear y continuar</button>
+    </form>
+
+    <div class="auth-foot">
+        ¿No quieres entrar ahora?
+    </div>
+</div>
+{% endblock %}

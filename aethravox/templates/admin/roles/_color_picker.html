@@ -1,0 +1,57 @@
+{# Macro reutilizable del picker de color de badge (Sección 1.6).
+   Antes este markup estaba duplicado en admin_roles.html (crear + editar) y
+   admin_titles.html (~42 líneas × 3). El JS role_color_picker.js inicializa
+   todos los .color-picker por CLASE (initAll → querySelectorAll), así que la
+   macro solo debe reproducir el markup exacto: mismas clases y data-slot.
+
+   Parámetros:
+     color_value    → valor del hidden name="color" ("" al crear, r.color al editar)
+     preview_text   → texto del badge de vista previa
+     preview_class  → clase del badge ("role-badge cp-prev-badge" para roles,
+                      "cp-prev-badge" para títulos, que no llevan role-badge)
+     picker_id      → id opcional del div .color-picker (titles lo define)
+     hidden_id      → id opcional del input hidden (titles lo referencia por id) #}
+{% macro color_picker(color_value, preview_text, preview_class, picker_id, hidden_id) %}
+<div class="color-picker"{% if !picker_id.is_empty() %} id="{{ picker_id }}"{% endif %}>
+    <input type="hidden" name="color"{% if !hidden_id.is_empty() %} id="{{ hidden_id }}"{% endif %} value="{{ color_value }}">
+    <div class="cp-row cp-preview-row">
+        <span class="{{ preview_class }}">{{ preview_text }}</span>
+    </div>
+    <div class="cp-row">
+        <label class="muted small">Tipo de fondo</label>
+        <select class="cp-bg-type">
+            <option value="solid">Sólido</option>
+            <option value="gradient">Degradado (2 colores)</option>
+        </select>
+    </div>
+    <div class="cp-row">
+        <label class="muted small">Color principal</label>
+        <div class="cp-controls">
+            <input type="text" class="cp-hex" data-slot="c1" maxlength="7" placeholder="#8b5cf6">
+            <input type="color" class="cp-native" data-slot="c1" value="#8b5cf6">
+        </div>
+        <div class="cp-swatches" data-slot="c1"></div>
+    </div>
+    <div class="cp-row cp-c2" hidden>
+        <label class="muted small">Color secundario</label>
+        <div class="cp-controls">
+            <input type="text" class="cp-hex" data-slot="c2" maxlength="7" placeholder="#22c55e">
+            <input type="color" class="cp-native" data-slot="c2" value="#22c55e">
+        </div>
+        <div class="cp-swatches" data-slot="c2"></div>
+    </div>
+    <div class="cp-row">
+        <label class="muted small">Texto del badge</label>
+        <label class="cp-auto"><input type="checkbox" class="cp-text-auto" checked> Auto (contraste sobre el fondo)</label>
+        <div class="cp-controls">
+            <input type="text" class="cp-hex" data-slot="text" maxlength="7" placeholder="#ffffff">
+            <input type="color" class="cp-native" data-slot="text" value="#ffffff">
+        </div>
+        <div class="cp-swatches" data-slot="text"></div>
+    </div>
+    <div class="cp-row">
+        <label class="muted small">Opacidad: <span class="cp-opacity-out">100</span>%</label>
+        <input type="range" class="cp-opacity" min="0" max="100" value="100">
+    </div>
+</div>
+{% endmacro %}

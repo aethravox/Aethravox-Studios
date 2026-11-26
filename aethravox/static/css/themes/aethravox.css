@@ -1,0 +1,44 @@
+/* ============================================================
+   Tema: Aethravox Studios
+   Paleta: Obsidiana + Dorado + Cian
+   Creador: Jack Maikol Ventura Gutiérrez
+   ============================================================ */
+
+:root,
+[data-theme="aethravox"] {
+    /* Base obsidiana */
+    --obsidiana: #06030C;
+    --obsidiana-claro: #0D0818;
+    --obsidiana-suave: #16101F;
+    --obsidiana-borde: #1E1830;
+
+    /* Acentos Aethravox */
+    --dorado: #e0a308;
+    --dorado-brillante: rgba(224, 163, 8, 0.4);
+    --dorado-claro: #f5c542;
+    --cian: #00d4ff;
+    --cian-brillante: rgba(0, 212, 255, 0.4);
+    --cian-claro: #5ee7ff;
+
+    /* Neutros */
+    --blanco: #ffffff;
+    --gris: #888;
+    --gris-claro: #b0b0b0;
+
+    /* Estados */
+    --rojo: #ff3e3e;
+    --verde: #00ff88;
+
+    /* Gradientes marca */
+    --gradiente-primario: linear-gradient(135deg, var(--dorado), var(--cian));
+    --gradiente-hover: linear-gradient(135deg, var(--dorado-claro), var(--cian-claro));
+
+    /* Sombras */
+    --sombra-dorada: 0 0 20px rgba(224, 163, 8, 0.3);
+    --sombra-cian: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* Logo del tema */
+.theme-logo-aethravox {
+    content: url('/static/img/logo.png');
+}

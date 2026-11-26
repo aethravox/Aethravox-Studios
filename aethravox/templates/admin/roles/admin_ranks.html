@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Rangos — Aethravox{% endblock %}
+{% block tagline %}Owner · Rangos personalizados{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>🏷️ Rangos personalizados</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role }}">{{ actor_role }}</span></p>
+    <p class="muted small">
+        Crea rangos (p.ej. <em>Editor</em>, <em>VIP</em>, <em>Moderador</em>) y decide qué secciones
+        puede ver cada uno en el hub. Los permisos se <strong>suman</strong> a los del rol del sistema:
+        un <em>usuario</em> con rango <em>Editor</em> ve sus secciones de usuario <strong>más</strong> las
+        del rango. El Owner del sistema ignora los rangos (tiene bypass total).
+    </p>
+</div>
+
+<div class="admin-nav">
+    <a href="/admin" class="btn btn-secondary">← Volver al panel</a>
+    <a href="/admin/users" class="btn btn-primary">👥 Asignar rangos a usuarios</a>
+</div>
+
+{# ===== Crear rango ===== #}
+<div class="card" style="margin-top:20px">
+    <h3>➕ Crear rango nuevo</h3>
+    <form method="POST" action="/admin/ranks/create" class="auth-form">
+        <div class="input-group">
+            <label>Nombre <span class="muted small">(2–32 caracteres, único)</span></label>
+            <input type="text" name="name" maxlength="32" required placeholder="p.ej. Editor">
+        </div>
+        <div class="input-group">
+            <label>Color <span class="muted small">(hex, opcional — p.ej. #ff8c42)</span></label>
+            <input type="text" name="color" maxlength="9" placeholder="#ff8c42" pattern="^#[0-9a-fA-F]{3,8}$">
+        </div>
+        <button type="submit" class="btn btn-primary">💾 Crear rango</button>
+    </form>
+</div>
+
+{# ===== Lista de rangos ===== #}
+{% if ranks.is_empty() %}
+<div class="empty-state" style="margin-top:20px">
+    <div style="font-size:4rem">🏷️</div>
+    <h3>Aún no hay rangos</h3>
+    <p class="muted">Crea el primero con el formulario de arriba.</p>
+</div>
+{% endif %}
+
+{% for r in ranks %}
+<div class="card" style="margin-top:20px">
+    <div class="rank-card-header">
+        <h3>
+            <span class="role-badge" style="background:{{ r.color.as_deref().unwrap_or("var(--fondo)") }};color:#fff">{{ r.name }}</span>
+            <span class="muted small">· creado {{ r.created_at }} · {{ r.web_perms_count }} secciones</span>
+        </h3>
+    </div>
+
+    {# Editar nombre/color #}
+    <details class="collapse">
+        <summary>✏️ Editar nombre / color</summary>
+        <form method="POST" action="/admin/ranks/{{ r.id }}/update" class="auth-form">
+            <div class="input-group">
+                <label>Nombre</label>
+                <input type="text" name="name" maxlength="32" required value="{{ r.name }}">
+            </div>
+            <div class="input-group">
+                <label>Color (hex)</label>
+                <input type="text" name="color" maxlength="9" value="{{ r.color.as_deref().unwrap_or("") }}" pattern="^#[0-9a-fA-F]{3,8}$">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">💾 Guardar</button>
+        </form>
+    </details>
+
+    {# Permisos por sección #}
+    <details class="collapse" open>
+        <summary>🔒 Secciones a las que tiene acceso ({{ r.web_perms_count }})</summary>
+        <form method="POST" action="/admin/ranks/{{ r.id }}/perms" class="auth-form">
+            <p class="muted small">Marca las secciones que este rango puede ver en el hub.</p>
+            <div class="perms-grid">
+                {% for w in r.web_checks %}
+                <label class="perm-option">
+                    <input type="checkbox" name="web_ids" value="{{ w.id }}"
+                           {% if w.checked %}checked{% endif %}>
+                    <span class="perm-icon">{{ w.icon_emoji }}</span>
+                    <span>{{ w.name }}</span>
+                    <span class="muted small">/{{ w.slug }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">💾 Guardar permisos</button>
+        </form>
+    </details>
+
+    {# Permisos atómicos (capabilities): qué acciones puede ejecutar el rango #}
+    <details class="collapse">
+        <summary>⚡ Permisos de acción ({{ r.action_perms_count }} concedidos)</summary>
+        <form method="POST" action="/admin/ranks/{{ r.id }}/aperms" class="auth-form">
+            <p class="muted small">
+                Marca qué acciones puede hacer quien tenga este rango. Los permisos se
+                <strong>suman</strong> a los de su rol del sistema. El Owner del sistema ignora
+                esto (tiene bypass total).
+            </p>
+            {% for g in r.perm_groups %}
+            <div class="perm-group">
+                <div class="perm-group-title">{{ g.category }}</div>
+                <div class="perms-grid">
+                    {% for p in g.perms %}
+                    <label class="perm-option">
+                        <input type="checkbox" name="perms" value="{{ p.key }}"
+                               {% if p.checked %}checked{% endif %}>
+                        <span>{{ p.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary btn-sm">💾 Guardar permisos de acción</button>
+        </form>
+    </details>
+
+    {# Borrar #}
+    <form method="POST" action="/admin/ranks/{{ r.id }}/delete" class="inline-form"
+          onsubmit="return confirm('¿Borrar el rango «{{ r.name }}»? Se desasignará de todos los usuarios que lo tengan y se perderán sus permisos. El Owner del sistema no se ve afectado.');">
+        <button type="submit" class="btn btn-icon delete" title="Borrar rango">🗑️ Borrar rango</button>
+    </form>
+</div>
+{% endfor %}
+
+{% endblock %}

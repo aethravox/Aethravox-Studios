@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}No encontrado — Aethravox{% endblock %}
+{% block tagline %}Documento no encontrado{% endblock %}
+
+{% block content %}
+<div class="dashboard-card" style="text-align:center">
+    <div style="font-size:4rem;margin-bottom:20px">🔍</div>
+    <h2>Documento #{{ id }} no encontrado</h2>
+    <p class="muted">El documento que buscas no existe o fue eliminado.</p>
+    <div class="dashboard-actions" style="margin-top:25px">
+    </div>
+</div>
+{% endblock %}

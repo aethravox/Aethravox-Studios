@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Neon Canvas — Aethravox Studios{% endblock %}
+{% block body_class %}app-fullscreen{% endblock %}
+{% block tagline %}Juego canvas 2D{% endblock %}
+{% block back_url %}/hub{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/juegos/neon_canvas.css">
+{% endblock %}
+
+{% block content %}
+<canvas id="bgCanvas"></canvas>
+<canvas id="drawCanvas"></canvas>
+<canvas id="particleCanvas"></canvas>
+
+<!-- Top HUD -->
+<div id="hud">
+  <div class="hud-btn" id="homeBtn" title="Menú">&#127968;</div>
+  <div id="scoreDisplay">0 pts</div>
+  <div id="comboDisplay">x1</div>
+  <div id="challengeText">Toca para dibujar</div>
+  <div id="timerDisplay"></div>
+</div>
+
+<!-- Confirm dialog -->
+<div id="confirmDialog">
+  <h3 id="confirmTitle">¿Salir?</h3>
+  <p id="confirmMsg">Perderás tu progreso actual</p>
+  <div class="dialog-btns">
+    <button class="dialog-btn yes" id="confirmYes">SÍ</button>
+    <button class="dialog-btn no" id="confirmNo">NO</button>
+  </div>
+</div>
+
+<div id="achievementPopup"></div>
+<div id="platformBadge">NEON CANVAS</div>
+
+<!-- Opponent previews -->
+<div id="oppBox"></div>
+
+<!-- Chat box -->
+<div id="chatBox"></div>
+
+<!-- Powerups -->
+<div id="pwBar">
+  <div class="pw" id="pwRainbow" title="Arcoíris"><span>&#127752;</span><span class="c" id="rainbowCount">3</span></div>
+  <div class="pw" id="pwShield" title="Escudo"><span>&#128737;</span><span class="c" id="shieldCount">2</span></div>
+  <div class="pw" id="pwBomb" title="Bomba"><span>&#128163;</span><span class="c" id="bombCount">1</span></div>
+  <div class="pw" id="pwMirror" title="Espejo"><span>&#129526;</span><span class="c" id="mirrorCount">2</span></div>
+  <div class="pw" id="pwTime" title="Tiempo extra"><span>&#9201;</span><span class="c" id="timeCount">2</span></div>
+  <div class="pw" id="pwFreeze" title="Congelar tiempo"><span>&#10052;</span><span class="c" id="freezeCount">1</span></div>
+</div>
+
+<!-- Bottom toolbar -->
+<div id="toolbar">
+  <select id="modeSelect">
+    <option value="brush">Pincel</option>
+    <option value="spray">Spray</option>
+    <option value="glow">Neón</option>
+    <option value="ribbon">Cinta</option>
+    <option value="star">Estrellas</option>
+    <option value="calligraphy">Caligrafía</option>
+    <option value="pixel">Pixel</option>
+    <option value="kaleidoscope">Caleido</option>
+    <option value="fire">Fuego</option>
+    <option value="galaxy">Galaxia</option>
+    <option value="lightning">Rayo</option>
+    <option value="bubble">Burbuja</option>
+    <option value="gravity">Gravedad</option>
+    <option value="dna">DNA</option>
+    <option value="fractal">Fractal</option>
+    <option value="mosaic">Mosaico</option>
+    <option value="wool">Lana</option>
+    <option value="neonpulse">Pulso</option>
+    <option value="eraser">Borrar</option>
+    <option value="fill">Rellenar</option>
+  </select>
+  <select id="symSelect">
+    <option value="1">x1</option><option value="2">x2</option><option value="4">x4</option><option value="6">x6</option><option value="8">x8</option>
+  </select>
+  <div class="tb" id="colorBtn" style="background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red)" title="Color"></div>
+  <div class="tb" id="opacityBtn" style="font-size:11px;color:#0ff" title="Opacidad">1.0</div>
+  <input type="range" id="sizeSlider" min="1" max="50" value="5" title="Tamaño">
+  <div class="tb" id="undoBtn" title="Deshacer">&#8630;</div>
+  <div class="tb" id="redoBtn" title="Rehacer">&#8631;</div>
+  <div class="tb" id="clearBtn" title="Limpiar">&#128465;</div>
+  <div class="tb" id="saveBtn" title="Guardar Imagen">&#128190;</div>
+  <div class="tb" id="gridBtn" title="Rejilla">&#9638;</div>
+  <div class="tb" id="soundBtn" title="Sonido">&#9835;</div>
+</div>
+
+<!-- Color wheel panel -->
+<div id="cwPanel">
+  <canvas id="cwCanvas" width="180" height="180"></canvas>
+  <div id="cwPreview"></div>
+  <div id="cwHex">#00FFFF</div>
+  <div class="slbl">Opacidad</div>
+  <input type="range" id="cwOpacity" min="5" max="100" value="100">
+  <div class="slbl">Tamaño: <span id="sizeVal">5</span></div>
+  <input type="range" id="cwSizeR" min="1" max="50" value="5">
+  <div class="cw-row" id="cwPresets"></div>
+</div>
+
+<!-- Multiplayer panel -->
+<div id="mpPanel">
+  <h3>MULTIJUGADOR WIFI</h3>
+  <p>Conéctate en la misma red local</p>
+  <input id="mpNameInput" placeholder="Tu nombre" value="Jugador" maxlength="12">
+
+  <div class="mp-section">
+    <h4>CREAR SALA (Host)</h4>
+    <p style="text-align:center;font-size:10px;color:#aaa">Otros jugadores se conectan a tu IP</p>
+    <div style="text-align:center">
+      <button class="mp-btn host" id="mpCreate">CREAR SALA</button>
+    </div>
+    <p id="mpHostIp" style="display:none;color:#0f0;font-size:11px;text-align:center;margin-top:4px"></p>
+  </div>
+
+  <div class="mp-section">
+    <h4>UNIRSE A SALA</h4>
+    <input id="mpIpInput" placeholder="IP del host (ej: 192.168.1.5)">
+    <div style="text-align:center">
+      <button class="mp-btn" id="mpJoin">CONECTAR</button>
+    </div>
+  </div>
+
+  <p id="mpStatus"></p>
+  <div id="mpPlayerList"></div>
+  <div style="text-align:center">
+    <button class="mp-btn cancel" id="mpClose">CERRAR</button>
+  </div>
+</div>
+
+<div id="challengeOverlay"><h2 id="overlayTitle"></h2><p id="overlayDesc"></p></div>
+
+<!-- Menu Screen -->
+<div id="menuScreen">
+  <h1>NEON CANVAS</h1>
+  <p class="sub">ULTIMATE EDITION</p>
+  <p class="cross">INTERACTIVE CANVAS GAME</p>
+  <button class="mbtn" id="btnFree">LIBRE</button>
+  <button class="mbtn s" id="btnChallenge">DESAFÍO</button>
+  <button class="mbtn t" id="btnZen">ZEN</button>
+  <button class="mbtn g" id="btnMulti">VS IA</button>
+  <button class="mbtn" id="btnWiFi">WIFI MULTI</button>
+  <button class="mbtn s" id="btnDaily">DIARIO</button>
+  <button class="mbtn t" id="btnAchieve">LOGROS</button>
+</div>
+
+<!-- Results Screen -->
+<div id="resultsScreen">
+  <h2>RESULTADOS</h2>
+  <div class="rstat">Puntos: <span id="finalScore">0</span></div>
+  <div class="rstat">Combo Max: <span id="finalCombo">0</span></div>
+  <div class="rstat">Precisión: <span id="finalAcc">0%</span></div>
+  <div class="rstat">Tiempo: <span id="finalTime">0s</span></div>
+  <div id="vsResult"></div>
+  <button class="mbtn" id="btnAgain">JUGAR DE NUEVO</button>
+  <button class="mbtn s" id="btnMenu">MENÚ</button>
+</div>
+
+<div id="statsBar"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/juegos/neon_canvas.js"></script>
+{% endblock %}

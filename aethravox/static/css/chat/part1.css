@@ -1,0 +1,441 @@
+/* ============================================================
+   CHAT RESPONSIVE (V3.3) — Layout móvil/desktop estilo WhatsApp
+   ============================================================ */
+
+/* ====== Layout flex que ocupa el espacio entre header y footer ======
+   El body es flex column, así que .container tiene flex:1.
+   .chat-app hace flex:1 también, y solo .chat-messages y .chat-list
+   tienen overflow-y:auto. El input bar y footer siempre se ven. */
+.chat-app {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    flex: 1 1 auto;
+    min-height: 0;            /* permite que se encoja dentro del flex del container */
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+/* ===== Sidebar ===== */
+.chat-sidebar {
+    border-right: 1px solid var(--fondo);
+    display: flex;
+    flex-direction: column;
+    background: var(--negro-suave);
+    min-height: 0;            /* permite scroll interno */
+    overflow: hidden;
+}
+.chat-sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--fondo);
+    background: var(--negro-oscuro);
+    flex-shrink: 0;            /* no se comprime, siempre a su tamaño natural */
+}
+.chat-sidebar-header h2 {
+    color: var(--dorado);
+    font-size: 1.05rem;
+    margin: 0;
+    flex: 1;
+    letter-spacing: 0.5px;
+}
+.chat-back, .chat-back-mobile {
+    background: transparent;
+    border: none;
+    color: var(--gris-claro);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    text-decoration: none;
+    line-height: 1;
+}
+.chat-back:hover, .chat-back-mobile:hover { color: var(--dorado); }
+.chat-new-btn {
+    background: var(--dorado);
+    color: #000;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, background 0.15s;
+}
+.chat-new-btn:hover { transform: rotate(90deg); background: var(--dorado-claro); }
+
+/* ===== Lista de conversaciones ===== */
+.chat-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px;
+}
+.chat-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+}
+.chat-list-item:hover { background: rgba(255,255,255,0.04); }
+.chat-list-item.active { background: rgba(224, 163, 8, 0.1); }
+.chat-list-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--negro);
+    border: 1px solid var(--fondo);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+.chat-list-avatar-group { background: rgba(0,212,255,0.1); }
+.chat-list-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+.chat-list-name {
+    color: var(--blanco);
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chat-list-last {
+    color: var(--gris);
+    font-size: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chat-list-badge {
+    background: var(--dorado);
+    color: #000;
+    border-radius: 12px;
+    padding: 2px 7px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    min-width: 20px;
+    text-align: center;
+}
+.chat-list-time {
+    color: var(--gris);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+}
+.chat-empty-mini {
+    padding: 20px;
+    text-align: center;
+}
+
+/* ===== Main ===== */
+.chat-main {
+    display: flex;
+    flex-direction: column;
+    background: var(--negro);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--fondo);
+    background: var(--negro-oscuro);
+    flex-shrink: 0;
+}
+.chat-back-mobile { display: none; }  /* solo visible en móvil */
+.chat-header-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+.chat-header-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--negro);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--fondo);
+}
+.chat-header-name {
+    color: var(--blanco);
+    font-weight: 600;
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ===== Mensajes ===== */
+.chat-messages {
+    flex: 1 1 auto;
+    min-height: 0;        /* CRÍTICO: permite que scroll internamente */
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.chat-empty {
+    text-align: center;
+    margin: auto;
+    color: var(--gris-claro);
+}
+.chat-empty h3 { color: var(--dorado); margin: 10px 0; }
+.chat-msg {
+    max-width: 70%;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+    position: relative;
+    animation: msgIn 0.2s ease;
+    /* FIX: el botón ⋯ va dentro del flujo flex (no absoluto) para que NUNCA
+       se solape con el texto. Enviadas: content + ⋯ (⋯ a la derecha).
+       Recibidas: ⋯ + content (⋯ a la izquierda). */
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+}
+@keyframes msgIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.chat-msg.sent {
+    align-self: flex-end;
+    background: linear-gradient(135deg, var(--dorado) 0%, var(--dorado-claro) 100%);
+    color: #000;
+    border-bottom-right-radius: 4px;
+}
+.chat-msg.received {
+    align-self: flex-start;
+    background: var(--negro-suave);
+    color: var(--blanco);
+    border: 1px solid var(--fondo);
+    border-bottom-left-radius: 4px;
+    /* El ⋯ va a la izquierda de la burbuja (exterior). Como el HTML es
+       content + ⋯, invertimos el orden visual con row-reverse. */
+    flex-direction: row-reverse;
+}
+.chat-msg-sender {
+    color: var(--cian);
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+.chat-msg.sent .chat-msg-sender { color: #553d00; }
+.chat-msg-body { white-space: pre-wrap; }
+.chat-msg-time {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    margin-top: 4px;
+    text-align: right;
+}
+
+/* ===== Input bar ===== */
+.chat-input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 12px;
+    /* safe-area-inset-bottom: en iOS/Android la barra del navegador/botón home
+       puede tapar la barra inferior. Esto añade padding para que el input
+       siempre quede visible por encima de los gestos del sistema. */
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--negro-oscuro);
+    border-top: 1px solid var(--fondo);
+    flex-shrink: 0;   /* siempre visible, no se comprime */
+}
+#chat-input {
+    flex: 1;
+    background: var(--negro-suave);
+    /* Borde dorado suave SIEMPRE visible (no solo en focus) para que el
+       campo se distinga del fondo oscuro en móvil, donde "apenas se nota". */
+    border: 1px solid var(--dorado);
+    color: var(--blanco);
+    padding: 10px 14px;
+    border-radius: 20px;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    font-size: 1rem;  /* >=16px evita que iOS haga zoom automático al focus */
+    max-height: 200px;
+    min-height: 44px;  /* 44px = tamaño táctil recomendado, siempre visible */
+}
+#chat-input:focus { border-color: var(--dorado-brillante); box-shadow: 0 0 0 2px rgba(224,163,8,0.2); }
+#chat-send {
+    background: var(--dorado);
+    color: #000;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: transform 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+#chat-send:hover { background: var(--dorado-claro); transform: scale(1.05); }
+
+/* ====== Slot derecho: Enviar / Nota de voz alternantes ======
+   Los dos botones comparten el mismo sitio (40×40, circular). El JS alterna
+   su visibilidad según si el textbox tiene texto. */
+.chat-action-slot {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+    transition: transform 0.15s, background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.chat-action-slot[hidden] { display: none !important; }
+#chat-send.chat-action-slot {
+    background: var(--dorado);
+    color: #000;
+}
+#chat-send.chat-action-slot:hover { background: var(--dorado-claro); transform: scale(1.05); }
+/* ===== Botón de nota de voz con icono SVG =====
+   El SVG lleva su propio fondo oscuro redondeado (#2b2b2b, rx=12) y el micrófono
+   en blanco. Llena el slot 40×40. Hover y estado grabación se logran cambiando
+   el fill del rect de fondo vía CSS (las presentation attributes del SVG ceden
+   ante el CSS) + un anillo rojo pulsante cuando graba. */
+#chat-voice-btn.chat-action-slot {
+    background: transparent;
+    color: #fff;
+    padding: 0;
+    border-radius: 12px;  /* cuadrado redondeado, igual que el rx=12 del SVG */
+    overflow: visible;     /* el anillo de grabación debe poder desbordar */
+}
+#chat-voice-btn .chat-mic-icon {
+    display: block;
+    width: 40px;
+    height: 40px;
+    transition: transform 0.15s;
+    pointer-events: none;  /* los clics van al botón, no al SVG */
+}
+#chat-voice-btn .chat-mic-bg {
+    transition: fill 0.15s;
+}
+#chat-voice-btn.chat-action-slot:hover {
+    transform: scale(1.05);
+}
+#chat-voice-btn.chat-action-slot:hover .chat-mic-bg {
+    fill: #3d3d3d;  /* fondo un pelín más claro al pasar el cursor */
+}
+
+/* ===== Modal: Nuevo chat ===== */
+.chat-new-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--fondo);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+}
+.chat-new-tab {
+    background: transparent;
+    border: none;
+    color: var(--gris);
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: color 0.15s, background 0.15s;
+}
+.chat-new-tab:hover { color: var(--blanco); background: rgba(255,255,255,0.04); }
+.chat-new-tab.active { color: var(--dorado); background: rgba(224,163,8,0.1); }
+.chat-new-panel {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* ===== Lista de amigos para DM ===== */
+.friends-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.friend-pick {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.friend-pick:hover {
+    border-color: var(--dorado);
+    transform: translateY(-1px);
+}
+.friend-pick-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+.friend-pick-avatar {
+    width: 40px !important;
+    height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    border-radius: 50%;
+    border: 2px solid var(--fondo);
+    object-fit: cover;
+    display: block;
+    flex-shrink: 0;
+}
+.friend-pick-info {
+    flex: 1;
+    min-width: 0;
+}
+.friend-pick-name {
+    color: var(--blanco);
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.friend-pick-username {
+    font-size: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+

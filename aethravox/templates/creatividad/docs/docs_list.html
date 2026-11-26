@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Documentos — Aethravox{% endblock %}
+{% block tagline %}Galería de documentos{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h2>📄 Galería de documentos</h2>
+    <p>Total: <strong>{{ total }}</strong> · Tamaño total: <strong>{{ total_size }}</strong></p>
+</div>
+
+{% if documents.is_empty() %}
+<div class="empty-state">
+    <div style="font-size:4rem;margin-bottom:15px">📭</div>
+    <h3>No hay documentos todavía</h3>
+    <p class="muted">El Owner puede añadir documentos desde el panel de administración.</p>
+</div>
+{% else %}
+<div class="doc-grid">
+    {% for d in documents %}
+    <div class="doc-card">
+        <div class="doc-card-header">
+            <div class="doc-icon doc-icon-{{ d.file_type }}">{{ d.icon }}</div>
+            <div class="doc-info">
+                <div class="doc-title">{{ d.title }}</div>
+                <div class="doc-filename">{{ d.file_name }}</div>
+            </div>
+        </div>
+        {% if !d.description.is_empty() %}
+        <div class="doc-desc">{{ d.description }}</div>
+        {% endif %}
+        <div class="doc-meta">
+            <span class="doc-badge">{{ d.size }}</span>
+            <span class="doc-badge-muted">📅 {{ d.created_at }}</span>
+            <span class="doc-badge-muted">⬇️ {{ d.downloaded }}</span>
+        </div>
+        <div class="doc-actions">
+            <a href="/docs/{{ d.id }}" class="btn btn-primary btn-sm">👁️ Ver</a>
+            <a href="/docs/{{ d.id }}/download" class="btn btn-secondary btn-sm" download>⬇️ Descargar</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="admin-nav">
+</div>
+{% endblock %}

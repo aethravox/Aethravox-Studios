@@ -1,0 +1,333 @@
+/* ===== Sección de Notificaciones (dashboard) ===== */
+.notif-settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+}
+.notif-status {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+.notif-status-label {
+    font-size: 0.78rem;
+    color: var(--muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.notif-status-value {
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+.notif-status-value.notif-status-granted { color: #10b981; }
+.notif-status-value.notif-status-denied { color: #ef4444; }
+.notif-status-value.notif-status-default { color: var(--dorado-brillante, #f0c040); }
+.notif-status-value.notif-status-unsupported { color: var(--muted, #888); }
+@media (max-width: 600px) {
+    .notif-settings-row { flex-direction: column; align-items: stretch; }
+    .notif-settings-row .btn { width: 100%; }
+}
+
+/* ===== Vinculación de dispositivos (V4.5) — /vincular ===== */
+.link-card { max-width: 720px; margin: 0 auto; }
+.link-card-secondary { max-width: 520px; }
+.link-card-confirm { max-width: 520px; }
+
+.link-primary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    margin: 18px 0 22px;
+    align-items: stretch;
+}
+@media (max-width: 640px) {
+    .link-primary-grid { grid-template-columns: 1fr; }
+}
+
+.link-qr-wrap {
+    background: #fff;
+    border: 1px solid var(--fondo);
+    border-radius: 14px;
+    padding: 16px;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+}
+/* El SVG que devuelve qrcode::render::svg viene en escala de grises sobre
+   fondo transparente; lo forzamos a ocupar el ancho del wrap y le damos
+   fondo blanco (ya está) y borde sutil para contraste con el tema oscuro. */
+.link-qr-svg {
+    width: 100%;
+    max-width: 240px;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.link-qr-svg svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.link-qr-svg svg rect:first-child { fill: #fff; }
+.link-qr-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: #333;
+}
+.link-qr-spinner .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #ddd;
+    border-top-color: var(--dorado);
+    border-radius: 50%;
+    animation: link-spin 0.9s linear infinite;
+}
+@keyframes link-spin { to { transform: rotate(360deg); } }
+.link-qr-hint { color: #555 !important; }
+
+.link-code-panel {
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 14px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+}
+.link-code-label {
+    color: var(--gris-claro);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.link-numeric-code {
+    font-family: 'Inter', monospace;
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: 0.35em;
+    text-align: center;
+    color: var(--dorado);
+    text-shadow: 0 0 18px rgba(224,163,8,0.35);
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    padding: 14px 8px;
+    line-height: 1;
+}
+.link-countdown-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 6px;
+}
+.link-countdown {
+    font-family: monospace;
+    font-size: 1.2rem;
+    color: var(--dorado-brillante, #f0c040);
+    font-weight: 700;
+    min-width: 2ch;
+    text-align: right;
+}
+.link-code-panel .btn { align-self: center; }
+
+.link-explainer {
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-top: 8px;
+}
+.link-explainer h3 {
+    color: var(--dorado);
+    font-size: 1rem;
+    margin: 0 0 8px;
+}
+.link-explainer ol {
+    margin: 0 0 10px 1.2em;
+    padding: 0;
+    color: var(--gris-claro);
+    line-height: 1.55;
+}
+.link-explainer li { margin-bottom: 4px; }
+.link-explainer code {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.85em;
+    color: var(--dorado);
+}
+.link-explainer p { margin: 6px 0; line-height: 1.55; }
+
+.link-form .input-group { margin-bottom: 14px; }
+
+.link-confirm-target {
+    text-align: center;
+    padding: 14px 0 8px;
+}
+.link-confirm-username {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--dorado);
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+.link-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+/* Tabla de dispositivos vinculados en el dashboard */
+.linked-devices-table .device-row-expired td { opacity: 0.5; }
+.status-expired {
+    color: var(--muted, #888);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+/* Enlace "Vincular este dispositivo" en /login */
+.auth-link-vincular {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--fondo);
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--gris-claro);
+}
+.auth-link-vincular a {
+    color: var(--dorado);
+    text-decoration: none;
+    font-weight: 600;
+}
+.auth-link-vincular a:hover { text-decoration: underline; }
+
+@media (max-width: 600px) {
+    .link-numeric-code { font-size: 1.9rem; letter-spacing: 0.25em; }
+    .link-confirm-username { font-size: 1.3rem; }
+    .link-explainer { padding: 14px; }
+}
+
+/* ===== Roles configurables (/admin/roles) — cabecera de tarjeta ===== */
+.role-card-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 12px;
+}
+.role-card-header .role-badge {
+    font-size: 0.95rem;
+    padding: 4px 12px;
+    border-radius: 12px;
+    background: var(--fondo);
+    color: var(--blanco);
+}
+
+/* ============================================================
+   Acordeón de roles (admin_roles.html)
+   Cada rol es un <details class="role-accordion collapse">: el
+   summary es una fila compacta (badge + stats + chevron) y al
+   abrir muestra las 4 sub-secciones (editar / permisos / webs /
+   borrar). Reutiliza el .collapse existente; solo compactamos el
+   padding y el margen para que la lista ocupe poco.
+   ============================================================ */
+.role-accordion {
+    margin-top: 10px;           /* menos que los 25px del .collapse base */
+}
+.role-accordion > summary.role-accordion-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    color: var(--blanco);        /* el head no es dorado, solo los sub-details */
+    font-weight: 600;
+}
+.role-accordion > summary.role-accordion-head::before {
+    content: none;               /* quita la flecha ▸ del .collapse base */
+}
+.role-accordion-meta {
+    margin-left: auto;           /* empuja las stats a la derecha */
+    font-size: 0.78rem;
+}
+.role-accordion-chevron {
+    transition: transform 0.2s;
+    color: var(--gris-claro);
+    font-size: 0.9rem;
+}
+.role-accordion[open] > summary .role-accordion-chevron {
+    transform: rotate(180deg);
+}
+/* El body del acordeón sustituye el padding:20px que .collapse pone a
+   los hijos directos. Aquí lo queremos más holgado para los sub-details. */
+.role-accordion > .role-accordion-body {
+    padding: 12px 16px 14px;
+}
+.role-accordion-body .collapse {
+    margin-top: 12px;            /* compacto entre sub-secciones */
+}
+.role-accordion-body .collapse:first-child {
+    margin-top: 0;
+}
+
+/* ============================================================
+   Acordeón de documentos (admin_docs.html)
+   Reutiliza .collapse y .role-accordion-chevron. Cada doc es un
+   <details>: header con icono + título + estado + meta; body con
+   los datos (archivo/tamaño/descargas/fecha) y las acciones.
+   ============================================================ */
+.doc-accordion { margin-top: 10px; }
+.doc-accordion > summary.doc-accordion-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    color: var(--blanco);
+    font-weight: 600;
+}
+.doc-accordion > summary.doc-accordion-head::before { content: none; }
+.doc-accordion-ico { font-size: 1.6rem; flex: 0 0 auto; }
+.doc-accordion-title { flex: 1 1 auto; min-width: 0; }
+.doc-accordion-title .status-active,
+.doc-accordion-title .status-banned,
+.doc-accordion-title .status-suspended,
+.doc-accordion-title .muted { font-weight: 500; font-size: 0.85rem; }
+.doc-accordion-meta { margin-left: auto; font-size: 0.78rem; }
+.doc-accordion-body { padding: 12px 16px 14px; }
+.doc-accordion-data {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px 20px;
+    margin: 0 0 14px;
+}
+.doc-accordion-data > div { display: flex; flex-direction: column; gap: 2px; }
+.doc-accordion-data dt {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--texto-secundario);
+}
+.doc-accordion-data dd { margin: 0; font-size: 0.9rem; word-break: break-word; }
+.doc-accordion-actions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding-top: 10px; border-top: 1px solid var(--fondo);
+}

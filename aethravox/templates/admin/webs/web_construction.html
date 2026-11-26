@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}{{ name }} — Aethravox{% endblock %}
+{% block body_class %}default centered-page{% endblock %}
+{% block tagline %}{{ name }}{% endblock %}
+
+{% block content %}
+<div class="construction-page">
+    <div class="construction-card">
+        <div class="construction-icon">{{ icon_emoji }}</div>
+        <h1 class="construction-name">{{ name }}</h1>
+        <p class="construction-message">{{ message }}</p>
+        {% if has_opens_at %}
+        <p class="construction-opens">📅 {{ opens_at }}</p>
+        {% endif %}
+        <a href="/hub" class="btn btn-primary">← Volver al hub</a>
+    </div>
+</div>
+{% endblock %}

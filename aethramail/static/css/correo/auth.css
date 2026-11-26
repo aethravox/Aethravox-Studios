@@ -1,0 +1,68 @@
+/* AethraMail — auth (login / register). */
+.am-auth-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 1rem;
+    background: radial-gradient(circle at 50% 30%, var(--am-bg-2), var(--am-bg));
+}
+
+.am-auth-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--am-bg-2);
+    border: 1px solid var(--am-border);
+    border-radius: 10px;
+    padding: 2rem 2.2rem;
+}
+
+.am-auth-title {
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 0.2rem;
+}
+.am-auth-sub {
+    text-align: center;
+    color: var(--am-fg-dim);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.am-auth-foot {
+    text-align: center;
+    margin-top: 1.2rem;
+    color: var(--am-fg-dim);
+    font-size: 0.85rem;
+}
+
+/* Form fields compartidos (auth + compose + config) */
+.am-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.am-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.am-field > span { font-size: 0.8rem; color: var(--am-fg-dim); font-weight: 500; }
+
+.am-field input,
+.am-field select,
+.am-field textarea {
+    background: var(--am-bg);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    color: var(--am-fg);
+    padding: 0.5rem 0.7rem;
+    font-size: 0.95rem;
+    font-family: var(--am-font);
+}
+.am-field input:focus,
+.am-field select:focus,
+.am-field textarea:focus {
+    outline: none;
+    border-color: var(--am-accent);
+}
+.am-field textarea { resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+.am-input-row { display: flex; align-items: center; gap: 0.4rem; }
+.am-input-row input { flex: 1; }
+.am-input-row select { min-width: 7rem; }
+.am-at { color: var(--am-fg-dim); font-weight: 700; }
+
+.am-form-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.3rem; }

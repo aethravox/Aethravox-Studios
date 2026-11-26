@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Vincular dispositivo — Aethravox Studios{% endblock %}
+{% block tagline %}Conecta otro dispositivo sin contraseña{% endblock %}
+
+{% block content %}
+{% if mode == "primary" %}
+{# ===== Vista del PRINCIPAL: genera QR + código numérico para que otro
+   dispositivo se vincule a SU cuenta. La página llama a /api/link/code por
+   JS al cargar y cada 50 s (el código caduca a los 60 s). #}
+<a href="/dashboard" class="page-back" title="Volver a Ajustes"><span class="page-back-arrow">←</span> Volver a Ajustes</a>
+
+<div class="dashboard-card link-card">
+    <div class="profile-header">
+        <img src="{{ avatar }}" alt="avatar" class="profile-avatar">
+        <div class="profile-info">
+            <h2>🔗 Vincular otro dispositivo</h2>
+            <p class="muted">Conecta tu teléfono, tablet u otro PC a <strong>@{{ username }}</strong> sin meter la contraseña.</p>
+        </div>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+
+    <div class="link-primary-grid">
+        <div class="link-qr-wrap" id="link-qr-wrap" aria-live="polite">
+            <div class="link-qr-spinner" id="link-qr-spinner">
+                <div class="spinner"></div>
+                <p class="muted small">Generando código…</p>
+            </div>
+            <div id="link-qr-svg" class="link-qr-svg" hidden></div>
+            <p class="link-qr-hint muted small" id="link-qr-hint" hidden>Escanea con la cámara del otro dispositivo</p>
+        </div>
+
+        <div class="link-code-panel">
+            <div class="link-code-label">¿Sin cámara? Teclea este código:</div>
+            <div class="link-numeric-code" id="link-numeric-code" aria-label="Código numérico de vinculación">------</div>
+            <div class="link-countdown-row">
+                <span class="muted small">Caduca en</span>
+                <span class="link-countdown" id="link-countdown">--</span>
+                <span class="muted small">s</span>
+            </div>
+            <button type="button" id="link-refresh-btn" class="btn btn-secondary btn-sm" title="Generar código nuevo ya">
+                🔄 Generar nuevo
+            </button>
+        </div>
+    </div>
+
+    <div class="link-explainer">
+        <h3>¿Cómo funciona?</h3>
+        <ol>
+            <li>En el <strong>otro dispositivo</strong>, abre esta misma web y entra a <code>/vincular</code> (o pulsa "Vincular dispositivo" en el login).</li>
+            <li>Teclea el código de 6 dígitos que ves aquí, o escanea el QR con su cámara.</li>
+            <li>Confirma en ese dispositivo y listo: queda vinculado a tu cuenta durante <strong>3 días</strong> (se renueva solo mientras lo uses).</li>
+        </ol>
+        <p class="muted small">
+            Si <em>te logueas</em> con tu usuario+contraseña desde otro dispositivo, esta sesión (la principal) se cierra —
+            para tener varios activos a la vez, <strong>vincula</strong>, no re-loguees.
+            Puedes revocar cualquier vinculado desde <a href="/dashboard">Ajustes → Dispositivos vinculados</a>.
+        </p>
+    </div>
+</div>
+
+<script>
+// ===== Generación de código de vinculación (modo primary) =====
+// Pide /api/link/code al cargar y cada 50 s. El código caduca a los 60 s,
+// así refrescamos 10 s antes para que el QR nunca esté "caducado" cuando
+// alguien lo escanee.
+(function() {
+    'use strict';
+    const wrap = document.getElementById('link-qr-wrap');
+    const spinner = document.getElementById('link-qr-spinner');
+    const svgBox = document.getElementById('link-qr-svg');
+    const hint = document.getElementById('link-qr-hint');
+    const numericEl = document.getElementById('link-numeric-code');
+    const countdownEl = document.getElementById('link-countdown');
+    const refreshBtn = document.getElementById('link-refresh-btn');
+
+    let expiresAt = null;   // epoch ms
+    let refreshTimer = null;
+    let countdownTimer = null;
+
+    async function fetchCode() {
+        try {
+            const r = await fetch('/api/link/code', { credentials: 'same-origin' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            renderCode(d);
+        } catch (e) {
+            console.error('link/code:', e);
+            spinner.querySelector('p').textContent = 'No se pudo generar. Pulsa "Generar nuevo".';
+        }
+    }
+
+    function renderCode(d) {
+        if (d.qr_svg && d.qr_svg.length > 0) {
+            svgBox.innerHTML = d.qr_svg;
+            svgBox.hidden = false;
+            hint.hidden = false;
+            spinner.hidden = true;
+        } else {
+            // Sin QR (qrcode crate falló) — seguimos mostrando el numeric.
+            svgBox.hidden = true;
+            hint.hidden = true;
+            spinner.querySelector('p').textContent = 'Solo código numérico disponible.';
+            spinner.hidden = false;
+        }
+        // Formatear el numeric en grupos de 3+3 para legibilidad.
+        const n = d.numeric_code || '';
+        const grouped = n.length === 6 ? n.slice(0, 3) + ' ' + n.slice(3) : n;
+        numericEl.textContent = grouped || '------';
+
+        expiresAt = d.expires_at ? Date.parse(d.expires_at) : (Date.now() + 60_000);
+        scheduleRefresh();
+        startCountdown();
+    }
+
+    function scheduleRefresh() {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        // Refrescar 10 s antes de caducar (o ahora si ya caducó).
+        const msLeft = expiresAt - Date.now();
+        const delay = Math.max(msLeft - 10_000, 0);
+        refreshTimer = setTimeout(fetchCode, delay);
+    }
+
+    function startCountdown() {
+        if (countdownTimer) clearInterval(countdownTimer);
+        const tick = () => {
+            const msLeft = expiresAt - Date.now();
+            if (msLeft <= 0) {
+                countdownEl.textContent = '0';
+                numericEl.textContent = '------';
+                svgBox.hidden = true;
+                hint.hidden = true;
+                spinner.hidden = false;
+                spinner.querySelector('p').textContent = 'Código caducado. Generando uno nuevo…';
+                return;
+            }
+            countdownEl.textContent = Math.ceil(msLeft / 1000);
+        };
+        tick();
+        countdownTimer = setInterval(tick, 1000);
+    }
+
+    refreshBtn.addEventListener('click', () => {
+        refreshBtn.disabled = true;
+        setTimeout(() => { refreshBtn.disabled = false; }, 1500);
+        fetchCode();
+    });
+
+    fetchCode();
+})();
+</script>
+
+{% else %}
+{# ===== Vista del SECUNDARIO: formulario para teclear el código que le
+   muestra el principal (o escanear el QR con la cámara nativa del nave-
+   gador, que aterrizará en /vincular?c=<token>). #}
+<a href="/login" class="page-back" title="Volver a Iniciar sesión"><span class="page-back-arrow">←</span> Volver a Iniciar sesión</a>
+
+<div class="dashboard-card link-card link-card-secondary">
+    <div class="profile-header">
+        <div class="profile-info">
+            <h2>🔗 Vincular dispositivo</h2>
+            <p class="muted">Teclea el código de 6 dígitos que ves en el dispositivo <strong>donde ya tienes tu cuenta abierta</strong>.</p>
+        </div>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+
+    <form method="POST" action="/vincular/confirm" class="auth-form link-form">
+        <div class="input-group">
+            <label for="link-code-input">Código de 6 dígitos</label>
+            <input
+                type="text"
+                id="link-code-input"
+                name="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="7"
+                required
+                placeholder="123 456"
+                pattern="[0-9A-Za-z ]{6,7}"
+                title="Los 6 dígitos del código (o el token del QR si lo tecleaste a mano)"
+                style="font-size:1.6rem; letter-spacing:0.3em; text-align:center; font-family:monospace;"
+            >
+        </div>
+
+        <div class="input-group">
+            <label for="link-device-name">Nombre para este dispositivo (opcional)</label>
+            <input
+                type="text"
+                id="link-device-name"
+                name="device_name"
+                maxlength="80"
+                placeholder="Ej: iPhone de María"
+            >
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">🔗 Vincular dispositivo</button>
+    </form>
+
+    <div class="link-explainer">
+        <h3>¿De dónde saco el código?</h3>
+        <p>En el dispositivo donde ya tienes tu cuenta abierta, entra a <strong>Ajustes → Vincular otro dispositivo</strong>. Verás un QR y un código de 6 dígitos que rota cada minuto.</p>
+        <p class="muted small">
+            La vinculación dura <strong>3 días</strong> y se renueva mientras uses el dispositivo. Si dejas de entrar 3 días, se cierra sola.
+            No necesitas contraseña — solo el código de un solo uso.
+        </p>
+        <p class="muted small">
+            ¿Prefieres entrar con tu usuario y contraseña? <a href="/login">Iniciar sesión</a>.
+            (Si lo haces, la sesión anterior del dispositivo principal se cerrará.)
+        </p>
+    </div>
+</div>
+
+<script>
+// Formatear el input del código: solo dígitos/letras, agrupados 3+3.
+(function() {
+    const inp = document.getElementById('link-code-input');
+    if (!inp) return;
+    inp.addEventListener('input', () => {
+        // Mantener cursor al final tras reformat.
+        const raw = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        let formatted = raw;
+        if (raw.length > 3) formatted = raw.slice(0, 3) + ' ' + raw.slice(0, 6).slice(3);
+        inp.value = formatted;
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

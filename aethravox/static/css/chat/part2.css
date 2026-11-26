@@ -1,0 +1,435 @@
+/* ===== Lista de miembros para grupo ===== */
+.group-members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.group-member-pick {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--negro-suave);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.group-member-pick:hover { background: rgba(255,255,255,0.04); }
+.group-member-pick input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--dorado);
+    cursor: pointer;
+}
+.group-member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+.group-member-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    max-width: 32px !important;
+    max-height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    border-radius: 50%;
+    border: 1px solid var(--fondo);
+    object-fit: cover;
+    flex-shrink: 0;
+    display: block;
+}
+
+/* ===== Responsive: móvil (<= 768px) ======
+   En móvil, mostramos SOLO el sidebar primero.
+   Al seleccionar una conversación, añadimos .chat-open al .chat-app
+   que oculta el sidebar y muestra el main.
+   Botón "←" en chat-header vuelve al sidebar. */
+@media (max-width: 768px) {
+    .chat-app {
+        grid-template-columns: 1fr;
+        /* La altura la da el flex:1 1 auto + min-height:0 del .chat-app base,
+           rellenando el .container (que a su vez rellena el body, ya arreglado
+           a 100dvh vía body.app-fullscreen { min-height:100dvh }). Antes había
+           aquí un height:calc(100dvh - 160px) que restaba 160px para un
+           header/footer que app-fullscreen ya oculta — era código muerto que
+           además no resolvía el textbox tapado (la causa estaba en el body). */
+        /* Sin margin-bottom en móvil: el .chat-app llena hasta el borde
+           inferior del viewport, y la barra de escribir (.chat-input-bar)
+           queda pegada abajo (con su propio padding-bottom de safe-area).
+           Antes había margin-bottom:14px, que dejaba un hueco vacío DEBAJO
+           del input y lo levantaba del fondo, dando sensación de "estar muy
+           arriba". El FAB de cuenta flota por encima del input, así que no
+           necesita hueco extra. */
+        margin-bottom: 0;
+    }
+    .chat-sidebar { display: flex; }
+    .chat-main { display: none; }
+    .chat-app.chat-open .chat-sidebar { display: none; }
+    .chat-app.chat-open .chat-main { display: flex; }
+    .chat-back-mobile { display: inline-flex !important; }
+
+    /* FIX: en móvil las burbujas van a 80% (no 85%) para dejar más aire a los
+       lados y que el botón ⋯ (que ahora va en el flujo, al lado del content)
+       no quede pegado al borde del viewport. El contenedor tiene más padding. */
+    .chat-messages { padding: 14px 12px; }
+    .chat-msg { max-width: 80%; }
+    .modal-dialog { max-width: 95vw; }
+    .chat-sidebar-header h2 { font-size: 0.95rem; }
+}
+
+/* ===== Tag editor en admin webs ===== */
+.tag-editor summary {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-block;
+}
+.tag-editor summary:hover { background: rgba(255,255,255,0.04); }
+.tag-summary {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+.tag-summary-activo         { background: rgba(0,255,136,0.12); color: var(--verde); }
+.tag-summary-nuevo         { background: rgba(0,212,255,0.12); color: var(--cian); }
+.tag-summary-beta          { background: rgba(255,62,62,0.12); color: var(--rojo); }
+.tag-summary-mantenimiento { background: rgba(255,140,66,0.12); color: #ff8c42; }
+.tag-summary-próximamente,
+.tag-summary-proximamente  { background: rgba(224,163,8,0.12); color: var(--dorado); }
+.tag-form { padding: 12px 0; }
+.tag-form .input-group { margin-bottom: 12px; }
+
+/* ============================================================
+   APP-FULLSCREEN — Modo "app" para /chat y /playground
+   Oculta header y footer para que el contenido ocupe toda la pantalla.
+   Las páginas informativas (hub, dashboard, admin) usan body.default
+   y muestran el branding completo.
+   ============================================================ */
+body.app-fullscreen {
+    /* flex column: el header (visible en móvil/app-fullscreen) se queda arriba
+       sticky, y .container rellena el resto. En PC no-app-fullscreen esto no
+       aplica (el body no es flex, el header es sticky normal). */
+    height: 100vh;
+    height: 100dvh;  /* dynamic viewport height — se ajusta cuando la barra del navegador aparece/desaparece. Soportado en Chrome 108+, Safari 15.4+, Firefox 101+. Fallback a 100vh arriba. */
+    /* FIX textbox tapado: base.css pone body { min-height: 100vh }, y en móvil
+       100vh > 100dvh (100vh incluye la zona que tapa la barra de URL/dirección).
+       Sin este override, min-height ganaba sobre height:100dvh → el body medía
+       100vh, y como body.app-fullscreen tiene overflow:hidden, el trozo final
+       (100vh − 100dvh) se cortaba. La barra de escribir del chat vive justo en
+       ese trozo, por eso no se veía y solo "subía un poco" al abrir el teclado
+       (el navegador ocultaba la barra de URL y 100vh bajaba). Ahora forzamos
+       min-height:100dvh para que el body ocupe exactamente el viewport visible. */
+    min-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+/* En app-fullscreen ocultamos el footer (no aporta en una "app" a pantalla
+   completa) PERO mantenemos el header visible: es donde vive la hamburguesa
+   (.aethravox-header-toggle) que abre el drawer de cuenta con logout. Sin
+   header, en /chat no habría forma de cerrar sesión. */
+body.app-fullscreen .aethravox-footer {
+    display: none;
+}
+body.app-fullscreen .container {
+    width: 100%;
+    max-width: 100%;
+    padding: 4px;
+    padding-bottom: 4px;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+@media (max-width: 768px) {
+    body.app-fullscreen .container {
+        padding: 2px;
+        padding-bottom: 2px;
+    }
+}
+
+/* ============================================================
+   SCROLL LOCK — bloquea scroll del body cuando hay modal abierto
+   Usa :has() (moderno) + fallback JS para browsers viejos.
+   ============================================================ */
+/* Método 1 (moderno): :has() — soportado en Chrome 105+, Firefox 121+, Safari 15.4+ */
+body:has(.modal-overlay.modal-visible) {
+    overflow: hidden;
+}
+
+/* ============================================================
+   CHAT IMAGES — Imágenes en mensajes de chat + modal fullscreen
+   ============================================================ */
+.chat-msg-image {
+    max-width: 200px;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    cursor: pointer;
+    display: block;
+    transition: opacity 0.15s;
+    object-fit: cover;
+}
+.chat-msg-image:hover { opacity: 0.85; }
+.chat-msg.sent .chat-msg-image {
+    border: 2px solid rgba(0,0,0,0.15);
+}
+.chat-msg.received .chat-msg-image {
+    border: 1px solid var(--fondo);
+}
+
+#chat-attach {
+    background: transparent;
+    border: none;
+    color: var(--gris);
+    font-size: 1.3rem;
+    cursor: pointer;
+    padding: 0 8px;
+    flex-shrink: 0;
+    align-self: center;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+}
+#chat-attach:hover {
+    color: var(--dorado);
+    background: rgba(224, 163, 8, 0.1);
+    border-radius: 50%;
+}
+
+/* Modal fullscreen para ver imagen completa — visor con toolbar, menú ⋯ y zoombar */
+.image-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.94);
+    display: flex;
+    flex-direction: column;
+    z-index: 10000;
+    animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ===== Toolbar superior: ← salir | título | ⋯ menú ===== */
+.ivf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0));
+    position: relative;
+    z-index: 2;
+}
+.ivf-title {
+    flex: 1;
+    color: var(--blanco, #fff);
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    opacity: 0.92;
+}
+.ivf-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--blanco, #fff);
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: background .15s, transform .1s;
+    padding: 0;
+}
+.ivf-btn:hover { background: rgba(255,255,255,0.18); }
+.ivf-btn:active { transform: scale(0.92); }
+.ivf-menu { font-size: 1.3rem; font-weight: 700; }
+
+/* ===== Dropdown del menú ⋯ ===== */
+.ivf-menu-dropdown {
+    position: absolute;
+    top: 52px;
+    right: 14px;
+    min-width: 220px;
+    background: var(--fondo-card, #1a1a1a);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 5;
+}
+.ivf-menu-dropdown[hidden] { display: none; }
+.ivf-menu-dropdown button {
+    background: transparent;
+    border: 0;
+    color: var(--blanco, #fff);
+    text-align: left;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+.ivf-menu-dropdown button:hover { background: rgba(255,255,255,0.10); }
+
+/* ===== Stage: contiene la imagen y recorta el overflow al panear ===== */
+.ivf-stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    cursor: zoom-in;
+    min-height: 0;
+}
+
+/* ===== Zoombar inferior ===== */
+.ivf-zoombar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.55), rgba(0,0,0,0));
+    z-index: 2;
+}
+.ivf-zoom-pct {
+    color: var(--blanco, #fff);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    min-width: 48px;
+    text-align: center;
+    opacity: 0.85;
+}
+
+/* ===== Imagen: max-fit al stage; el zoom/pan/rotate va por transform ===== */
+.image-fullscreen-img {
+    max-width: 92vw;
+    max-height: 84vh;
+    border-radius: 6px;
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
+    user-select: none;
+    -webkit-user-drag: none;
+    transform-origin: center center;
+    transition: none;
+    will-change: transform;
+}
+
+@media (max-width: 768px) {
+    .chat-msg-image {
+        max-width: 150px;
+        max-height: 150px;
+    }
+}
+
+/* ============================================================
+   CHAT: Avatares en mensajes + check marks + typing indicator
+   ============================================================ */
+.chat-msg-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--fondo);
+}
+.chat-msg-content {
+    flex: 1;
+    min-width: 0;
+}
+.check-text {
+    font-size: 0.65rem;
+    margin-left: 4px;
+    vertical-align: top;
+    font-weight: 600;
+}
+.check-sent { color: #888; }
+.check-delivered { color: #888; }
+.check-read { color: var(--cian); }
+.chat-typing-indicator {
+    color: var(--gris);
+    font-size: 0.75rem;
+    font-style: italic;
+    margin-left: 8px;
+}
+@media (max-width: 768px) {
+    .chat-msg-avatar {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+/* Chat header con descripción de grupo */
+.chat-header-info-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    overflow: hidden;
+}
+.chat-header-desc {
+    font-size: 0.75rem !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 300px;
+}
+
+/* ============================================================
+   EMBED — URLs externas dentro de Aethravox (iframe)
+   ============================================================ */
+.embed-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 0;
+}
+.embed-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: var(--negro-oscuro);
+    border-bottom: 1px solid var(--fondo);
+    flex-shrink: 0;
+}
+.embed-title {
+    flex: 1;
+    color: var(--dorado);
+    font-weight: 600;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.embed-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    border: none;
+    background: white;
+    min-height: 0;
+}
+

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Editar documento — Aethravox{% endblock %}
+{% block tagline %}Owner · Editar documento{% endblock %}
+
+{% block back_url %}/admin/docs{% endblock %}
+{% block content %}
+<div class="auth-card" style="max-width:600px">
+    <div class="auth-tabs">
+        <a href="/admin/docs" class="tab">← Lista</a>
+        <a href="/admin/docs/{{ id }}/edit" class="tab active">Editar #{{ id }}</a>
+    </div>
+
+    <h2 class="card-title">✏️ Editar documento</h2>
+    <p class="card-subtitle">
+        <span style="font-size:1.6rem">{{ icon }}</span>
+        {{ file_name }} · {{ size }}
+    </p>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">⚠️ {{ e }}</div>
+    {% endif %}
+
+    <form method="POST" action="/admin/docs/{{ id }}/edit" class="auth-form">
+        <div class="input-group">
+            <label>Título *</label>
+            <input type="text" name="title" value="{{ title }}" required>
+        </div>
+        <div class="input-group">
+            <label>Descripción</label>
+            <textarea name="description" rows="3">{{ description }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">💾 Guardar cambios</button>
+    </form>
+
+    <div class="admin-nav" style="margin-top:25px">
+        <a href="/docs/{{ id }}" class="btn btn-secondary">👁️ Ver</a>
+        <a href="/docs/{{ id }}/download" class="btn btn-secondary" download>⬇️ Descargar</a>
+    </div>
+</div>
+{% endblock %}

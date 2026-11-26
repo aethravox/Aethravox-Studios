@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Aethravox{% endblock %}
+{% block tagline %}Visor de documentos{% endblock %}
+
+{% block back_url %}/docs{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+{% block content %}
+<div class="docs-view-header">
+    <div class="docs-view-title">
+        <span class="doc-icon doc-icon-{{ file_type }}">{{ icon }}</span>
+        <div>
+            <h2>{{ title }}</h2>
+            <p class="muted">
+                {{ file_name }} · {{ size }} · 📅 {{ created_at }} · ⬇️ {{ downloaded }} descargas
+            </p>
+        </div>
+    </div>
+    <div class="docs-view-actions">
+        {% if !is_guest %}<a href="/docs/{{ id }}/download" class="btn btn-primary" download>⬇️ Descargar</a>{% else %}<span class="muted">Inicia sesión para descargar</span>{% endif %}
+    </div>
+</div>
+
+{% if !description.is_empty() %}
+<div class="doc-desc-full">{{ description }}</div>
+{% endif %}
+
+<div class="docs-viewer-container">
+    {% if has_preview && !preview_url.is_empty() %}
+    <iframe id="pdf-viewer" src="/pdf-viewer/viewer.html?file={{ preview_url }}" title="Visor de PDF"></iframe>
+    {% else if preview_status == "converting" %}
+    <div class="docs-viewer-loading">
+        <div class="spinner"></div>
+        <h3>Convirtiendo a PDF...</h3>
+        <p class="muted">Esto puede tardar unos segundos. La página se actualizará sola.</p>
+        <script>
+            setTimeout(() => location.reload(), 5000);
+        </script>
+    </div>
+    {% else if preview_status == "pending" %}
+    <div class="docs-viewer-loading">
+        <div class="spinner"></div>
+        <h3>Preparando preview...</h3>
+        <p class="muted">La conversión empezará en breve. La página se actualizará sola.</p>
+        <script>
+            setTimeout(() => location.reload(), 5000);
+        </script>
+    </div>
+    {% else if preview_status == "failed" %}
+    <div class="docs-viewer-error">
+        <div style="font-size:3rem;margin-bottom:15px">⚠️</div>
+        <h3>No se pudo generar el preview</h3>
+        {% if !is_guest %}<p class="muted">Puedes descargar el archivo original para verlo en tu PC.</p>
+        <a href="/docs/{{ id }}/download" class="btn btn-primary" download>⬇️ Descargar original</a>{% else %}<p class="muted">Inicia sesión para descargar el archivo original.</p>{% endif %}
+    </div>
+    {% else %}
+    <div class="docs-viewer-loading">
+        <p class="muted">Cargando...</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

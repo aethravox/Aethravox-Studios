@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Subir documento — Aethravox{% endblock %}
+{% block tagline %}Owner · Subir documento{% endblock %}
+
+{% block back_url %}/admin/docs{% endblock %}
+{% block content %}
+<div class="auth-card" style="max-width:600px">
+    <div class="auth-tabs">
+        <a href="/admin/docs" class="tab">← Lista</a>
+        <a href="/admin/docs/new" class="tab active">Subir nuevo</a>
+    </div>
+
+    <h2 class="card-title">➕ Subir nuevo documento</h2>
+    <p class="card-subtitle">Formatos soportados: <strong>PDF, DOCX, PPTX</strong> · Máximo: <strong>{{ max_mb }} MB</strong></p>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">⚠️ {{ e }}</div>
+    {% endif %}
+
+    <form method="POST" action="/admin/docs/new" class="auth-form" enctype="multipart/form-data">
+        <div class="input-group">
+            <label>Título *</label>
+            <input type="text" name="title" required placeholder="Ej: Presentación Q1 2026">
+        </div>
+        <div class="input-group">
+            <label>Descripción (opcional)</label>
+            <textarea name="description" rows="3" placeholder="De qué trata este documento"></textarea>
+        </div>
+        <div class="input-group">
+            <label>Archivo *</label>
+            <input type="file" name="file" required accept=".pdf,.docx,.pptx">
+            <small class="muted">El archivo se guardará en el servidor y, si es DOCX/PPTX, se convertirá a PDF automáticamente para previsualización.</small>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">📤 Subir documento</button>
+    </form>
+</div>
+{% endblock %}

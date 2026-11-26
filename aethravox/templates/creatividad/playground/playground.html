@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}Playground — Aethravox Studios{% endblock %}
+{% block body_class %}app-fullscreen{% endblock %}
+{% block tagline %}Editor de HTML · CSS · JS{% endblock %}
+
+{% block content %}
+<div class="playground-wrap">
+    <div class="playground-toolbar">
+        <a href="/hub" class="page-back" title="Volver al panel"><span class="page-back-arrow">←</span> Volver</a>
+        <h2>Playground</h2>
+        <span class="muted small">Sesión de <strong>{{ username }}</strong></span>
+
+        <div class="playground-actions">
+            <button type="button" id="btn-run" class="btn btn-primary btn-sm" title="Re-ejecutar (Ctrl+S)">
+                Ejecutar
+            </button>
+            <button type="button" id="btn-save" class="btn btn-secondary btn-sm" title="Guardar en este navegador">
+                Guardar
+            </button>
+            <button type="button" id="btn-load" class="btn btn-secondary btn-sm" title="Cargar último guardado">
+                Cargar
+            </button>
+            <button type="button" id="btn-download" class="btn btn-secondary btn-sm" title="Descargar .html completo">
+                Descargar
+            </button>
+            <button type="button" id="btn-clear" class="btn btn-secondary btn-sm" title="Vaciar todo">
+                Limpiar
+            </button>
+        </div>
+    </div>
+
+    {% if can_use_aris_playground %}
+    <div class="playground-aris-bar">
+        <div class="playground-aris-head">
+            <strong>Aris · Copiloto</strong>
+            <div class="playground-aris-chips">
+                <button type="button" class="btn btn-secondary btn-sm aris-tpl-btn" data-prompt="Calculadora interactiva estilo neón con historial">Calculadora</button>
+                <button type="button" class="btn btn-secondary btn-sm aris-tpl-btn" data-prompt="Mini tablero Kanban interactivo para tareas">Kanban</button>
+                <button type="button" class="btn btn-secondary btn-sm aris-tpl-btn" data-prompt="Reloj digital y cronómetro minimalista con tema oscuro">Cronómetro</button>
+            </div>
+        </div>
+        <div class="playground-aris-row">
+            <input type="text" id="aris-pg-prompt" class="form-input" style="margin:0;flex:1;"
+                placeholder="Pídele a Aris HTML, CSS y JS (ej: Crea una landing de estudio musical con botones)...">
+            <button type="button" id="aris-pg-generate" class="btn btn-primary btn-sm">Generar código</button>
+        </div>
+        <div id="aris-pg-note" class="muted small" hidden style="margin-top:6px;"></div>
+    </div>
+    {% else %}
+    <div class="playground-aris-bar playground-aris-locked">
+        <span class="muted small">Aris en Playground deshabilitado para tu rol (<strong>{{ role_display }}</strong>). El Owner puede activar <code>aris.lane.playground</code> en Roles.</span>
+    </div>
+    {% endif %}
+
+    <div class="playground-status" id="playground-status" hidden></div>
+
+    <div class="playground-grid">
+        <div class="playground-editor-pane">
+            <div class="editor-tabs">
+                <button type="button" class="editor-tab active" data-tab="html">HTML</button>
+                <button type="button" class="editor-tab" data-tab="css">CSS</button>
+                <button type="button" class="editor-tab" data-tab="js">JS</button>
+            </div>
+
+            <div class="editor-panels">
+                <textarea id="editor-html" class="editor-panel active"
+                    spellcheck="false" autocomplete="off" autocapitalize="off"
+                    placeholder="<!-- Escribe tu HTML aquí -->&#10;<h1>Hola, {{ username }}!</h1>&#10;<button id=&quot;b&quot;>Click</button>"></textarea>
+                <textarea id="editor-css" class="editor-panel" hidden
+                    spellcheck="false" autocomplete="off" autocapitalize="off"
+                    placeholder="/* Estilos en CSS puro */&#10;body { font-family: system-ui; padding: 20px; }&#10;h1 { color: #e0a308; }"></textarea>
+                <textarea id="editor-js" class="editor-panel" hidden
+                    spellcheck="false" autocomplete="off" autocapitalize="off"
+                    placeholder="// JavaScript puro (sin imports, sin fetch externo)&#10;document.getElementById('b').addEventListener('click', () => {&#10;  alert('¡Hola desde JS!');&#10;});"></textarea>
+            </div>
+        </div>
+
+        <div class="playground-preview-pane">
+            <div class="preview-header">
+                <span class="preview-title">Vista previa</span>
+                <div class="preview-controls">
+                    <label class="preview-autorun">
+                        <input type="checkbox" id="auto-run" checked>
+                        <span>Auto-ejecutar</span>
+                    </label>
+                    <button type="button" id="btn-refresh" class="btn-icon" title="Refrescar preview">⟳</button>
+                    <button type="button" id="btn-new-window" class="btn-icon" title="Abrir en nueva pestaña">⧉</button>
+                </div>
+            </div>
+            <iframe id="preview-frame" class="preview-frame"
+                sandbox="allow-scripts allow-forms allow-modals allow-popups"
+                title="Vista previa del playground"></iframe>
+        </div>
+    </div>
+
+    <div class="playground-foot">
+        <span class="muted small">
+            Tu código se guarda en este navegador (localStorage) — no se envía al servidor.
+            Descarga cuando termines y tendrás un .html autocontenido.
+        </span>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    const STORAGE_KEY = 'aethravox_playground_v1';
+    const RUN_DEBOUNCE_MS = 500;
+
+    const editors = {
+        html: document.getElementById('editor-html'),
+        css:  document.getElementById('editor-css'),
+        js:   document.getElementById('editor-js'),
+    };
+    const previewFrame = document.getElementById('preview-frame');
+    const statusEl = document.getElementById('playground-status');
+    const autoRun = document.getElementById('auto-run');
+
+    let debounceTimer = null;
+
+    // ====== Tabs ======
+    document.querySelectorAll('.editor-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tab;
+            document.querySelectorAll('.editor-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            Object.entries(editors).forEach(([key, el]) => {
+                if (key === target) { el.hidden = false; el.classList.add('active'); }
+                else { el.hidden = true; el.classList.remove('active'); }
+            });
+            if (editors[target]) editors[target].focus();
+        });
+    });
+
+    // ====== Construir HTML combinado para el iframe ======
+    function buildPreviewHtml() {
+        const html = editors.html.value;
+        const css  = editors.css.value;
+        const js   = editors.js.value;
+        // Si no hay <html> ni <body>, envolver automáticamente.
+        const hasStructure = /<(html|body|head)[\s>]/i.test(html);
+        let combined;
+        if (hasStructure) {
+            // Insertar <style> y <script> justo antes de </body> (o al final del doc).
+            combined = html.replace(/<\/body>/i, `<style>\n${css}\n</style>\n<script>\n${js}\n<\/script>\n</body>`);
+            if (!/<\/body>/i.test(html)) {
+                combined = html + `<style>\n${css}\n</style>\n<script>\n${js}\n<\/script>`;
+            }
+        } else {
+            combined = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+${css}
+</style>
+</head>
+<body>
+${html}
+<script>
+${js}
+<\/script>
+</body>
+</html>`;
+        }
+        return combined;
+    }
+
+    // ====== Ejecutar preview ======
+    function run() {
+        const doc = buildPreviewHtml();
+        previewFrame.srcdoc = doc;
+        flashStatus('Ejecutado', 'info', 800);
+    }
+
+    function scheduleAutoRun() {
+        if (!autoRun.checked) return;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(run, RUN_DEBOUNCE_MS);
+    }
+
+    // ====== Status flash ======
+    function flashStatus(message, type, duration) {
+        if (!statusEl) return;
+        statusEl.textContent = message;
+        statusEl.className = 'playground-status playground-status-' + (type || 'info');
+        statusEl.hidden = false;
+        clearTimeout(statusEl._timer);
+        statusEl._timer = setTimeout(() => { statusEl.hidden = true; }, duration || 2000);
+    }
+
+    // ====== Listeners de input ======
+    Object.values(editors).forEach(el => {
+        el.addEventListener('input', scheduleAutoRun);
+    });
+
+    // ====== Botones ======
+    document.getElementById('btn-run').addEventListener('click', run);
+    document.getElementById('btn-refresh').addEventListener('click', run);
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+        const data = { html: editors.html.value, css: editors.css.value, js: editors.js.value, ts: Date.now() };
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            flashStatus('Guardado en este navegador', 'success', 1500);
+        } catch (e) {
+            flashStatus('Error al guardar: ' + e.message, 'error', 3000);
+        }
+    });
+
+    document.getElementById('btn-load').addEventListener('click', () => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) { flashStatus('No hay nada guardado todavía', 'warning', 1500); return; }
+            const data = JSON.parse(raw);
+            if (typeof data.html === 'string') editors.html.value = data.html;
+            if (typeof data.css  === 'string') editors.css.value  = data.css;
+            if (typeof data.js   === 'string') editors.js.value   = data.js;
+            run();
+            flashStatus('Cargado', 'success', 1500);
+        } catch (e) {
+            flashStatus('Error al cargar: ' + e.message, 'error', 3000);
+        }
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        if (!confirm('¿Vaciar los tres editores? Esto NO borra lo guardado en localStorage.')) return;
+        Object.values(editors).forEach(el => { el.value = ''; });
+        run();
+        flashStatus('Limpiado', 'info', 1000);
+    });
+
+    document.getElementById('btn-download').addEventListener('click', () => {
+        const doc = buildPreviewHtml();
+        const blob = new Blob([doc], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+        a.href = url;
+        a.download = `aethravox-snippet-${ts}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        flashStatus('Descargado', 'success', 1500);
+    });
+
+    document.getElementById('btn-new-window').addEventListener('click', () => {
+        const doc = buildPreviewHtml();
+        const blob = new Blob([doc], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+    });
+
+    // ====== Atajos de teclado ======
+    document.addEventListener('keydown', (e) => {
+        // Ctrl+S / Cmd+S = ejecutar (no deja guardar la página)
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            run();
+            return;
+        }
+        // Ctrl+1/2/3 = cambiar de pestaña
+        if ((e.ctrlKey || e.metaKey) && (e.key === '1' || e.key === '2' || e.key === '3')) {
+            e.preventDefault();
+            const tabMap = { '1': 'html', '2': 'css', '3': 'js' };
+            const tab = document.querySelector(`.editor-tab[data-tab="${tabMap[e.key]}"]`);
+            if (tab) tab.click();
+        }
+    });
+
+    // ====== Cargar al inicio ======
+    // Si hay algo guardado, cargarlo. Si no, dejar los placeholders (vacío = se muestra el placeholder).
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            const data = JSON.parse(raw);
+            if (typeof data.html === 'string' && data.html) editors.html.value = data.html;
+            if (typeof data.css  === 'string' && data.css)  editors.css.value  = data.css;
+            if (typeof data.js   === 'string' && data.js)   editors.js.value   = data.js;
+        }
+    } catch (e) { /* ignore */ }
+
+    // ====== Aris Copiloto en Playground ======
+    const pgPrompt = document.getElementById('aris-pg-prompt');
+    const pgBtn = document.getElementById('aris-pg-generate');
+    const pgNote = document.getElementById('aris-pg-note');
+
+    async function generateWithAris(promptText) {
+        const clean = (promptText || '').trim();
+        if (!clean || !pgBtn) return;
+        pgBtn.disabled = true;
+        pgBtn.textContent = 'Generando...';
+        if (pgNote) {
+            pgNote.hidden = false;
+            pgNote.textContent = 'Aris está escribiendo HTML, CSS y JS...';
+        }
+        try {
+            const res = await fetch('/api/aris/playground/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: clean, current_html: editors.html.value })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+                flashStatus(data.message || data.error || 'Carril bloqueado para tu rol', 'error', 3500);
+                if (pgNote) pgNote.textContent = data.message || data.error || 'No se pudo generar.';
+            } else {
+                if (typeof data.html === 'string') editors.html.value = data.html;
+                if (typeof data.css === 'string') editors.css.value = data.css;
+                if (typeof data.js === 'string') editors.js.value = data.js;
+                run();
+                flashStatus('Código generado por Aris (' + (data.provider || 'core') + ')', 'success', 2500);
+                if (pgNote) pgNote.textContent = (data.note || 'Código inyectado') + ' · ' + (data.provider || '') + (data.model ? ' · ' + data.model : '');
+            }
+        } catch (err) {
+            flashStatus('Error conectando con Aris', 'error', 3000);
+        }
+        pgBtn.disabled = false;
+        pgBtn.textContent = 'Generar código';
+    }
+
+    if (pgBtn && pgPrompt) {
+        pgBtn.addEventListener('click', () => generateWithAris(pgPrompt.value));
+        pgPrompt.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                generateWithAris(pgPrompt.value);
+            }
+        });
+        document.querySelectorAll('.aris-tpl-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                pgPrompt.value = btn.dataset.prompt || '';
+                generateWithAris(pgPrompt.value);
+            });
+        });
+    }
+
+    // Primera ejecución
+    setTimeout(run, 200);
+})();
+</script>
+<style>
+.playground-aris-bar {
+    background: var(--obsidiana-claro, #0D0818);
+    border: 1px solid var(--obsidiana-borde, #1E1830);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+}
+.playground-aris-locked {
+    padding: 8px 14px;
+}
+.playground-aris-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: .88rem;
+}
+.playground-aris-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.playground-aris-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+</style>
+{% endblock %}

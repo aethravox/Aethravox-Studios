@@ -1,0 +1,45 @@
+.playground-preview-pane {
+    display: flex;
+    flex-direction: column;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    min-height: 0;
+    overflow: hidden;
+}
+.editor-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-bottom: 1px solid var(--fondo);
+    background: var(--negro-oscuro);
+    padding: 4px 8px 0;
+    flex-shrink: 0;
+}
+.editor-tab {
+    background: transparent;
+    border: none;
+    color: var(--gris);
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.editor-tab:hover { color: var(--blanco); background: rgba(255,255,255,0.04); }
+.editor-tab.active {
+    color: var(--dorado);
+    border-bottom-color: var(--dorado);
+    background: var(--negro-suave);
+}
+.editor-panels { flex: 1 1 auto; display: flex; min-height: 0; }
+.editor-panel {
+    flex: 1 1 auto;
+    background: var(--negro);
+    color: var(--gris-claro);
+    border: none;
+    padding: 12px;
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.85rem;

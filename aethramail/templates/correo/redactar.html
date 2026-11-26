@@ -1,0 +1,33 @@
+{% extends "correo/base_correo.html" %}
+
+{% block title %}Redactar{% endblock %}
+
+{% block content %}
+<div class="am-compose">
+    <h2 class="am-page-title">Redactar correo</h2>
+
+    {% if let Some(e) = error %}<div class="am-alert am-alert-err">{{ e }}</div>{% endif %}
+
+    <form method="post" action="/enviar" class="am-form am-compose-form">
+        <label class="am-field">
+            <span>Para</span>
+            <input type="text" name="to" value="{{ to }}" placeholder="usuario@dominio"
+                   autocapitalize="none" autocorrect="off" required>
+        </label>
+        <label class="am-field">
+            <span>Asunto</span>
+            <input type="text" name="subject" required>
+        </label>
+        <label class="am-field">
+            <span>Mensaje</span>
+            <textarea name="body" rows="12" required></textarea>
+        </label>
+        <div class="am-form-actions">
+            <button type="submit" class="am-btn am-btn-primary">Enviar</button>
+            <a href="/bandeja?folder=inbox" class="am-btn am-btn-ghost">Cancelar</a>
+        </div>
+    </form>
+    <p class="am-compose-hint">Solo se puede enviar a direcciones internas existentes
+       (@shadow.sac, @aethra.sac, @cents.sac).</p>
+</div>
+{% endblock %}

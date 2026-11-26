@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Confirmar vinculación — Aethravox Studios{% endblock %}
+{% block tagline %}Confirma antes de vincular{% endblock %}
+
+{% block content %}
+<a href="/vincular" class="page-back" title="Volver"><span class="page-back-arrow">←</span> Volver</a>
+
+<div class="dashboard-card link-card link-card-confirm">
+    <div class="profile-header">
+        {% if !target_avatar.is_empty() && error.is_none() %}
+        <img src="{{ target_avatar }}" alt="avatar" class="profile-avatar">
+        {% endif %}
+        <div class="profile-info">
+            <h2>🔗 Confirmar vinculación</h2>
+            {% if error.is_none() %}
+            <p class="muted">Vas a vincular este dispositivo a la cuenta:</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    <div class="link-actions">
+        <a href="/vincular" class="btn btn-secondary">Probar con otro código</a>
+        <a href="/login" class="btn btn-ghost">Iniciar sesión con contraseña</a>
+    </div>
+    {% else %}
+    <div class="link-confirm-target">
+        <div class="link-confirm-username">@{{ target_username }}</div>
+        <p class="muted small">
+            Al confirmar, este dispositivo quedará vinculado a esa cuenta durante <strong>3 días</strong>
+            (renovados mientras lo uses). No se pedirá contraseña.
+            El propietario de la cuenta podrá revocar este acceso cuando quiera.
+        </p>
+    </div>
+
+    <form method="POST" action="/vincular/confirm" class="auth-form">
+        <input type="hidden" name="code" value="{{ code }}">
+        <div class="input-group">
+            <label for="link-device-name">Nombre para este dispositivo (opcional)</label>
+            <input
+                type="text"
+                id="link-device-name"
+                name="device_name"
+                maxlength="80"
+                placeholder="Ej: Chrome del portátil"
+            >
+        </div>
+        <div class="link-actions">
+            <button type="submit" class="btn btn-primary">✅ Confirmar y vincular</button>
+            <a href="/vincular" class="btn btn-ghost">Cancelar</a>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

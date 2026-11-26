@@ -1,0 +1,118 @@
+/* AethraMail — base (layout, header, nav, botones, alertas). */
+:root {
+    --am-bg: #14171c;
+    --am-bg-2: #1c2128;
+    --am-bg-3: #232a33;
+    --am-border: #2d3640;
+    --am-fg: #e6edf3;
+    --am-fg-dim: #9aa7b3;
+    --am-accent: #d9a441;
+    --am-accent-2: #b07d2b;
+    --am-danger: #e5534b;
+    --am-ok: #57ab5a;
+    --am-radius: 6px;
+    --am-font: -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    background: var(--am-bg);
+    color: var(--am-fg);
+    font-family: var(--am-font);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+a { color: var(--am-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Header */
+.am-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.6rem 1.2rem;
+    background: var(--am-bg-2);
+    border-bottom: 1px solid var(--am-border);
+    flex-wrap: wrap;
+}
+.am-brand a {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--am-fg);
+}
+.am-brand a:hover { text-decoration: none; color: var(--am-accent); }
+
+.am-nav {
+    display: flex;
+    gap: 0.4rem;
+    flex: 1;
+    flex-wrap: wrap;
+}
+.am-nav-link {
+    padding: 0.35rem 0.7rem;
+    border-radius: var(--am-radius);
+    color: var(--am-fg-dim);
+    font-weight: 500;
+}
+.am-nav-link:hover { background: var(--am-bg-3); color: var(--am-fg); text-decoration: none; }
+.am-nav-logout:hover { color: var(--am-danger); }
+
+.am-account {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    color: var(--am-fg-dim);
+    background: var(--am-bg-3);
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--am-radius);
+}
+
+.am-badge {
+    display: inline-block;
+    min-width: 1.1rem;
+    padding: 0 0.35rem;
+    background: var(--am-accent);
+    color: var(--am-bg);
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.am-main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 1.5rem 1.2rem 4rem;
+}
+
+/* Botones */
+.am-btn {
+    display: inline-block;
+    padding: 0.45rem 0.9rem;
+    border-radius: var(--am-radius);
+    border: 1px solid var(--am-border);
+    background: var(--am-bg-3);
+    color: var(--am-fg);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+}
+.am-btn:hover { text-decoration: none; background: var(--am-border); }
+.am-btn-primary { background: var(--am-accent); border-color: var(--am-accent); color: var(--am-bg); }
+.am-btn-primary:hover { background: var(--am-accent-2); border-color: var(--am-accent-2); }
+.am-btn-ghost { background: transparent; }
+
+/* Alertas */
+.am-alert {
+    padding: 0.6rem 0.9rem;
+    border-radius: var(--am-radius);
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+.am-alert-err { background: rgba(229,83,75,0.15); border: 1px solid var(--am-danger); color: #ffb3ad; }
+.am-alert-ok  { background: rgba(87,171,90,0.15); border: 1px solid var(--am-ok);   color: #b6e6b8; }
+
+.am-page-title { margin-bottom: 1rem; font-size: 1.25rem; }

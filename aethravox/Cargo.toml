@@ -1,0 +1,72 @@
+[package]
+name = "aethravox"
+version = "0.1.0"
+edition = "2021"
+description = "Aethravox Studios — Web 1: Login/Register (puerta al hub)"
+authors = ["Aethravox Studios"]
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros", "form", "multipart", "ws"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "limit"] }
+
+# Database
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio", "sqlite", "chrono", "macros", "migrate"
+] }
+
+# Templates
+askama = "0.12"
+askama_axum = "0.4"
+
+# Auth
+argon2 = "0.5"
+rand = "0.8"
+hex = "0.4"
+
+# Cookies
+tower-cookies = "0.10"
+
+# Time (para tower_cookies::time::Duration — pero lo usamos directo)
+time = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+
+# Utils
+chrono = "0.4"
+dotenvy = "0.15"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+web-push = { version = "0.11.0", default-features = false, features = ["isahc", "isahc-client"] }
+p256 = { version = "0.14.0", features = ["pkcs8", "pem", "ecdsa"] }
+base64 = "0.23.1"
+getrandom = "0.4.3"
+# Generación de QR para la vinculación de dispositivos (lo renderizamos como
+# SVG inline en la página, sin pasar por image/png y sin assets externos).
+qrcode = "0.14"
+
+# Cliente mTLS para llamar a la API interna de AethraMail (Sección 6).
+# ring como crypto provider (sin aws-lc-rs → no necesita cmake).
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "http1", "tokio"] }
+http-body-util = "0.1"
+
+# Cliente HTTP + streams SSE para Aris (Ollama y failover a APIs externas)
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+async-stream = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

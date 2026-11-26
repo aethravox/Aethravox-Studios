@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}Recibir pantalla — Aethravox Studios{% endblock %}
+{% block body_class %}app-fullscreen{% endblock %}
+{% block tagline %}Ver una transmisión{% endblock %}
+
+{% block content %}
+<div class="transmit-app transmit-receive-app" id="transmit-app">
+    <header class="transmit-header">
+        <a href="/transmitir" class="chat-back" title="Volver">←</a>
+        <h1>📥 Recibir pantalla</h1>
+        <div id="receiver-status" class="transmit-status-pill">
+            <span class="transmit-status-dot"></span>
+            <span class="transmit-status-text">Configurando</span>
+        </div>
+    </header>
+
+    {# ===== Fase 1: Form de join ===== #}
+    <section class="transmit-form-card" id="receiver-form-card">
+        <h2>Conectarse a una transmisión</h2>
+        <p class="muted small">Pide al emisor el nombre de la sala y la contraseña que configuró.</p>
+        <form id="receiver-form" class="auth-form" onsubmit="return false;">
+            <div class="input-group">
+                <label for="room-name">Nombre de la sala</label>
+                <input type="text" id="room-name" required maxlength="64"
+                       placeholder="Ej: Clase-matematica-3A"
+                       autocomplete="off">
+            </div>
+            <div class="input-group">
+                <label for="room-password">Contraseña de la sala</label>
+                <input type="text" id="room-password" required maxlength="128"
+                       placeholder="La contraseña que te pasó el emisor"
+                       autocomplete="off">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="connect-btn">
+                📡 Conectarse
+            </button>
+        </form>
+    </section>
+
+    {# ===== Fase 2: Viendo ===== #}
+    <section class="transmit-view-card" id="receiver-view-card" hidden>
+        <div class="transmit-view-video-wrap">
+            <video id="remote-video" autoplay playsinline></video>
+            <div class="transmit-view-placeholder" id="view-placeholder">
+                <div style="font-size:3rem">⏳</div>
+                <p>Esperando que el emisor comience la transmisión…</p>
+                <p class="muted small">Si ves este mensaje por más de 10 segundos, el emisor puede haber cerrado la pestaña.</p>
+            </div>
+        </div>
+        <div class="transmit-view-controls">
+            <div class="transmit-info-row">
+                <span>Sala:</span>
+                <strong id="live-room-name">—</strong>
+            </div>
+            <div class="transmit-info-row">
+                <span>Emisor:</span>
+                <strong id="sender-display">—</strong>
+            </div>
+            <div class="transmit-info-row">
+                <span>Estado:</span>
+                <strong id="conn-state">conectando…</strong>
+            </div>
+            <div class="transmit-view-buttons">
+                <button type="button" class="btn btn-primary" id="fullscreen-btn">⛶ Pantalla completa</button>
+                <button type="button" class="btn btn-secondary" id="request-control-btn" disabled>✋ Pedir control</button>
+                <button type="button" class="btn btn-danger" id="leave-btn">⏏ Salir</button>
+            </div>
+            {# Indicador visual cuando el receptor tiene control #}
+            <div class="transmit-control-status" id="control-status" hidden>
+                <span class="transmit-control-status-badge">🎮 Controlando</span>
+                <span class="muted small">Mové el mouse sobre el video o tocá donde quieras apuntar.</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="release-control-btn">Soltar control</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ICE_SERVERS = JSON.parse('{{ ice_servers_json|safe }}');
+</script>
+<script>
+(function() {
+    'use strict';
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function showToast(msg, type, dur) {
+        type = type || 'info'; dur = dur || 3500;
+        const c = document.getElementById('toast-container');
+        if (!c) return;
+        const t = document.createElement('div');
+        t.className = 'toast toast-' + type;
+        t.innerHTML = '<span class="toast-icon">' + ({
+            success: '✅', info: 'ℹ️', warning: '⚠️', error: '❌'
+        }[type] || 'ℹ️') + '</span><span class="toast-text">' + escapeHtml(msg) + '</span>';
+        c.appendChild(t);
+        requestAnimationFrame(() => t.classList.add('toast-visible'));
+        setTimeout(() => { t.classList.remove('toast-visible'); setTimeout(() => t.remove(), 300); }, dur);
+    }
+
+    // ====== Estado ======
+    let ws = null;
+    let peerConnection = null;
+    let remoteStream = null;
+    let senderConnId = null;
+
+    // ====== Conectar ======
+    async function connectToRoom() {
+        const name = document.getElementById('room-name').value.trim();
+        const password = document.getElementById('room-password').value.trim();
+        if (!name || !password) {
+            showToast('Pon nombre y contraseña', 'warning');
+            return;
+        }
+        // Cambiar UI a "viendo"
+        document.getElementById('receiver-form-card').hidden = true;
+        document.getElementById('receiver-view-card').hidden = false;
+        document.getElementById('live-room-name').textContent = name;
+        updateStatus('conectando…', '#f59e0b');
+
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(proto + '//' + location.host + '/transmitir/ws');
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                type: 'join_room',
+                name: name,
+                password: password,
+            }));
+        };
+        ws.onmessage = (e) => {
+            try { handleWs(JSON.parse(e.data)); }
+            catch (err) { console.error('WS parse:', err); }
+        };
+        ws.onclose = () => {
+            console.log('WS cerrado');
+            if (peerConnection) {
+                // Si la sala cerró abruptamente
+                showToast('Conexión perdida', 'warning');
+                leaveRoom();
+            }
+        };
+        ws.onerror = (e) => console.error('WS error:', e);
+    }
+    window.connectToRoom = connectToRoom;
+    document.getElementById('connect-btn').addEventListener('click', connectToRoom);
+
+    // ====== WS handler ======
+    async function handleWs(d) {
+        if (d.type === 'room_joined') {
+            senderConnId = d.sender_conn_id;
+            document.getElementById('sender-display').textContent = d.sender_display || 'Emisor';
+            updateStatus('esperando oferta…', '#f59e0b');
+            showToast('Conectado a la sala. Esperando transmisión…', 'success');
+            // Habilitar botón de pedir control ahora que estamos en la sala.
+            document.getElementById('request-control-btn').disabled = false;
+            // Crear PeerConnection vacío. Cuando llegue el offer, lo seteamos.
+            peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+            // Recibir track remoto
+            peerConnection.ontrack = (e) => {
+                console.log('Track remoto recibido', e.streams);
+                remoteStream = e.streams[0];
+                const v = document.getElementById('remote-video');
+                v.srcObject = remoteStream;
+                document.getElementById('view-placeholder').hidden = true;
+                v.hidden = false;
+                updateStatus('viendo transmisión', '#10b981');
+                // Auto-play si el navegador lo bloquea
+                v.play().catch(err => console.warn('autoplay:', err));
+            };
+
+            // Enviar ICE candidates al emisor
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate && ws && ws.readyState === 1) {
+                    ws.send(JSON.stringify({
+                        type: 'ice_candidate',
+                        to: senderConnId,
+                        candidate: e.candidate.toJSON(),
+                    }));
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                const state = peerConnection.connectionState;
+                console.log('[PC] ' + state);
+                document.getElementById('conn-state').textContent = state;
+                const stateEl = document.getElementById('conn-state');
+                stateEl.style.color = state === 'connected' ? '#10b981' :
+                    state === 'failed' ? '#ef4444' : '#f59e0b';
+            };
+
+        } else if (d.type === 'offer') {
+            // El emisor nos envió su offer → responder con answer.
+            if (!peerConnection) {
+                peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+                peerConnection.ontrack = (e) => {
+                    remoteStream = e.streams[0];
+                    const v = document.getElementById('remote-video');
+                    v.srcObject = remoteStream;
+                    document.getElementById('view-placeholder').hidden = true;
+                    v.hidden = false;
+                    updateStatus('viendo transmisión', '#10b981');
+                    v.play().catch(err => console.warn('autoplay:', err));
+                };
+                peerConnection.onicecandidate = (e) => {
+                    if (e.candidate && ws && ws.readyState === 1) {
+                        ws.send(JSON.stringify({
+                            type: 'ice_candidate',
+                            to: senderConnId,
+                            candidate: e.candidate.toJSON(),
+                        }));
+                    }
+                };
+            }
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: d.sdp }));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                ws.send(JSON.stringify({
+                    type: 'answer',
+                    to: d.from,
+                    sdp: answer.sdp,
+                }));
+                updateStatus('negociando…', '#f59e0b');
+            } catch (e) {
+                console.error('offer/answer:', e);
+                showToast('Error al negociar', 'error');
+            }
+        } else if (d.type === 'ice_candidate') {
+            if (peerConnection) {
+                try { await peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)); }
+                catch (e) { console.error('addIce:', e); }
+            }
+        } else if (d.type === 'room_closed') {
+            showToast('El emisor cerró la transmisión', 'info', 5000);
+            leaveRoom();
+        } else if (d.type === 'error') {
+            showToast(d.message || 'Error', 'error');
+            // Volver al form
+            leaveRoom(true);
+        } else if (d.type === 'control_pending') {
+            // Mi solicitud está en cola esperando aprobación.
+            const btn = document.getElementById('request-control-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Esperando aprobación…';
+            showToast('Tu solicitud de control fue enviada. Esperando aprobación…', 'info', 4000);
+        } else if (d.type === 'control_granted') {
+            // ¡El emisor me dio control! Activar tracking de mouse.
+            activateControl();
+            showToast('🎮 ¡Te dieron control! Mové el mouse sobre el video.', 'success', 4000);
+        } else if (d.type === 'control_denied') {
+            showToast('El emisor rechazó tu solicitud de control', 'warning');
+            resetControlButton();
+        } else if (d.type === 'control_revoked') {
+            showToast('El emisor te retiró el control', 'info');
+            deactivateControl();
+        } else if (d.type === 'controller_changed') {
+            // Alguien más (o nadie) tiene control ahora.
+            // Si tengo control y el nuevo controller NO soy yo → perdí control.
+            // d.controller_id puede ser null (nadie) o un peer_id distinto.
+            if (d.controller_id === null || d.controller_id === undefined) {
+                deactivateControl();
+            } else if (d.controller_id !== myConnId) {
+                // Otro receptor tiene control — deshabilitar mi botón si estaba esperando.
+                deactivateControl();
+            }
+        }
+    }
+
+    // ====== Estado de control ======
+    let hasControl = false;
+    let myConnId = null;  // lo seteo desde room_joined? Realmente no, server no lo envía.
+                          // Para el receiver esto no es crítico — si otro tiene control,
+                          // simplemente desactivo el mío (no necesitamos saber mi ID).
+    let lastMoveTime = 0;
+    let mouseTrackingActive = false;
+
+    function activateControl() {
+        hasControl = true;
+        // Cambiar UI: mostrar badge "Controlando" + habilitar soltar.
+        document.getElementById('control-status').hidden = false;
+        const btn = document.getElementById('request-control-btn');
+        btn.disabled = true;
+        btn.textContent = '🎮 Controlando';
+        // Cursor crosshair sobre el video para indicar modo control.
+        const v = document.getElementById('remote-video');
+        if (v) v.style.cursor = 'crosshair';
+        // Bindear listeners de mouse/touch sobre el video.
+        bindControlListeners();
+    }
+
+    function deactivateControl() {
+        hasControl = false;
+        document.getElementById('control-status').hidden = true;
+        resetControlButton();
+        const v = document.getElementById('remote-video');
+        if (v) v.style.cursor = '';
+        unbindControlListeners();
+    }
+
+    function resetControlButton() {
+        const btn = document.getElementById('request-control-btn');
+        btn.disabled = false;
+        btn.textContent = '✋ Pedir control';
+    }
+
+    // ====== Listeners de mouse/touch sobre el video cuando se tiene control ======
+    function bindControlListeners() {
+        if (mouseTrackingActive) return;
+        mouseTrackingActive = true;
+        const v = document.getElementById('remote-video');
+        if (!v) return;
+        v.addEventListener('mousemove', onControlMouseMove, { passive: true });
+        v.addEventListener('click', onControlClick);
+        v.addEventListener('touchstart', onControlTouch, { passive: true });
+        v.addEventListener('touchmove', onControlTouchMove, { passive: true });
+        v.addEventListener('touchend', onControlTouchEnd, { passive: true });
+    }
+
+    function unbindControlListeners() {
+        if (!mouseTrackingActive) return;
+        mouseTrackingActive = false;
+        const v = document.getElementById('remote-video');
+        if (!v) return;
+        v.removeEventListener('mousemove', onControlMouseMove);
+        v.removeEventListener('click', onControlClick);
+        v.removeEventListener('touchstart', onControlTouch);
+        v.removeEventListener('touchmove', onControlTouchMove);
+        v.removeEventListener('touchend', onControlTouchEnd);
+    }
+
+    function sendControlInput(inputType, x, y) {
+        if (!hasControl || !ws || ws.readyState !== 1) return;
+        ws.send(JSON.stringify({
+            type: 'control_input',
+            input_type: inputType,
+            x: x,
+            y: y,
+            // 'to' no es necesario: el server valida que soy controller y reenvía al sender.
+        }));
+    }
+
+    // Throttle para no mandar 60 mensajes por segundo de "move".
+    function onControlMouseMove(e) {
+        if (!hasControl) return;
+        const now = Date.now();
+        if (now - lastMoveTime < 50) return;  // máx 20 msg/seg
+        lastMoveTime = now;
+        const { x, y } = getNormalizedCoords(e);
+        sendControlInput('move', x, y);
+    }
+
+    function onControlClick(e) {
+        if (!hasControl) return;
+        const { x, y } = getNormalizedCoords(e);
+        sendControlInput('click', x, y);
+    }
+
+    // Touch: en mobile no hay "move", solo "tap" → tratamos cada tap como click + move.
+    function onControlTouch(e) {
+        if (!hasControl) return;
+        const t = e.touches[0];
+        if (!t) return;
+        const { x, y } = getNormalizedCoords(t);
+        sendControlInput('move', x, y);
+    }
+    function onControlTouchMove(e) {
+        if (!hasControl) return;
+        const t = e.touches[0];
+        if (!t) return;
+        const now = Date.now();
+        if (now - lastMoveTime < 50) return;
+        lastMoveTime = now;
+        const { x, y } = getNormalizedCoords(t);
+        sendControlInput('move', x, y);
+    }
+    function onControlTouchEnd(e) {
+        if (!hasControl) return;
+        const t = e.changedTouches[0];
+        if (!t) return;
+        const { x, y } = getNormalizedCoords(t);
+        sendControlInput('click', x, y);
+    }
+
+    function getNormalizedCoords(evt) {
+        const v = document.getElementById('remote-video');
+        const rect = v.getBoundingClientRect();
+        // Enviar coords normalizadas (0-1) para que el sender mapee a su preview.
+        // Considera aspect ratio: el video tiene object-fit:contain → hay barras negras.
+        // Para simplificar, mandamos coords relativas al elemento completo; el sender
+        // hace lo mismo. Pequeña imprecisión si hay barras, pero suficiente.
+        const x = (evt.clientX - rect.left) / rect.width;
+        const y = (evt.clientY - rect.top) / rect.height;
+        // Clamp 0-1
+        return {
+            x: Math.max(0, Math.min(1, x)),
+            y: Math.max(0, Math.min(1, y)),
+        };
+    }
+
+    // ====== Salir / Pantalla completa ======
+    function leaveRoom(silent) {
+        // Si tenía control, soltarlo antes de salir (avisa al server).
+        if (hasControl && ws && ws.readyState === 1) {
+            try { ws.send(JSON.stringify({ type: 'control_release' })); } catch(_) {}
+        }
+        deactivateControl();
+        if (peerConnection) { peerConnection.close(); peerConnection = null; }
+        if (ws) { try { ws.close(); } catch(_) {} ws = null; }
+        const v = document.getElementById('remote-video');
+        if (v) { v.srcObject = null; v.hidden = true; }
+        document.getElementById('view-placeholder').hidden = false;
+        document.getElementById('receiver-form-card').hidden = false;
+        document.getElementById('receiver-view-card').hidden = true;
+        document.getElementById('conn-state').textContent = 'conectando…';
+        document.getElementById('request-control-btn').disabled = true;
+        resetControlButton();
+        updateStatus('configurando', '#888');
+        if (!silent) showToast('Saliste de la sala', 'info');
+    }
+    window.leaveRoom = leaveRoom;
+    document.getElementById('leave-btn').addEventListener('click', () => leaveRoom(false));
+
+    // Botón "Pedir control"
+    document.getElementById('request-control-btn').addEventListener('click', () => {
+        if (!ws || ws.readyState !== 1 || hasControl) return;
+        ws.send(JSON.stringify({ type: 'control_request' }));
+        const btn = document.getElementById('request-control-btn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Enviando…';
+    });
+
+    // Botón "Soltar control"
+    document.getElementById('release-control-btn').addEventListener('click', () => {
+        if (!hasControl || !ws || ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ type: 'control_release' }));
+        deactivateControl();
+        showToast('Soltaste el control', 'info', 2000);
+    });
+
+    document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        const v = document.getElementById('remote-video');
+        if (!v || !v.srcObject) {
+            showToast('No hay transmisión todavía', 'info');
+            return;
+        }
+        const req = v.requestFullscreen || v.webkitRequestFullscreen || v.msRequestFullscreen;
+        if (req) req.call(v).catch(e => console.warn('fullscreen:', e));
+    });
+
+    function updateStatus(text, color) {
+        const pill = document.getElementById('receiver-status');
+        const dot = pill.querySelector('.transmit-status-dot');
+        const t = pill.querySelector('.transmit-status-text');
+        if (dot) dot.style.background = color;
+        if (t) t.textContent = text;
+    }
+
+    // ====== Cleanup al cerrar pestaña ======
+    window.addEventListener('beforeunload', () => {
+        if (peerConnection) peerConnection.close();
+        if (ws && ws.readyState === 1) ws.close();
+    });
+})();
+</script>
+{% endblock %}

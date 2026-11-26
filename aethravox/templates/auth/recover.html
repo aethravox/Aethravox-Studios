@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Recuperar — Aethravox Studios{% endblock %}
+{% block tagline %}Recuperar Contraseña{% endblock %}
+
+{% block header_icons %}{% endblock %}
+{% block profile_fab %}{% endblock %}
+{% block global_nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a href="/" class="tab active">Iniciar Sesión</a>
+        <a href="/register" class="tab">Registrarse</a>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+    {% if let Some(i) = info %}
+    <div class="alert alert-info">{{ i }}</div>
+    {% endif %}
+
+    <form method="POST" action="/recover" class="auth-form" id="recover-form">
+        <div class="input-group">
+            <label for="email">Correo interno de tu cuenta (AethraMail)</label>
+            <input type="email" id="email" name="email" autocomplete="email" required
+                   value="{{ email }}" placeholder="tu_usuario@aethra.sac">
+            <div class="auth-domain-row">
+                <span class="muted small">Dominios válidos:</span>
+                <button type="button" class="auth-domain-btn" data-domain="aethra.sac">@aethra.sac</button>
+                <button type="button" class="auth-domain-btn" data-domain="shadow.sac">@shadow.sac</button>
+                <button type="button" class="auth-domain-btn" data-domain="cents.sac">@cents.sac</button>
+            </div>
+            <div class="auth-inline-error" id="recover-domain-err" hidden></div>
+            <p class="muted small" style="margin-top:4px;">
+                Solo se envían enlaces a buzones internos de AethraMail. No se acepta Gmail.
+            </p>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Enviar Enlace de Recuperación
+        </button>
+    </form>
+
+    <div class="auth-foot">
+        <a href="/">Volver a iniciar sesión</a>
+    </div>
+</div>
+
+<script>
+(function() {
+    var ALLOWED = ['aethra.sac', 'shadow.sac', 'cents.sac'];
+    var emailEl = document.getElementById('email');
+    var errEl = document.getElementById('recover-domain-err');
+    var form = document.getElementById('recover-form');
+    function validate() {
+        var v = (emailEl.value || '').trim().toLowerCase();
+        var at = v.indexOf('@');
+        if (at <= 0) { errEl.hidden = true; return true; }
+        var dom = v.slice(at + 1);
+        if (dom === 'gmail.com' || dom === 'googlemail.com') {
+            errEl.textContent = 'No se admite Gmail. Usa tu buzón interno (@aethra.sac, @shadow.sac o @cents.sac).';
+            errEl.hidden = false;
+            return false;
+        }
+        if (ALLOWED.indexOf(dom) === -1) {
+            errEl.textContent = 'Dominio no admitido. Solo se permiten @aethra.sac, @shadow.sac o @cents.sac.';
+            errEl.hidden = false;
+            return false;
+        }
+        errEl.hidden = true;
+        return true;
+    }
+    document.querySelectorAll('.auth-domain-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var dom = btn.getAttribute('data-domain');
+            var cur = (emailEl.value || '').trim();
+            var local = cur.indexOf('@') !== -1 ? cur.split('@')[0] : (cur || 'usuario');
+            emailEl.value = local + '@' + dom;
+            validate();
+        });
+    });
+    if (emailEl) emailEl.addEventListener('input', validate);
+    if (form) form.addEventListener('submit', function(e) { if (!validate()) e.preventDefault(); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{# Banner reutilizable "recomendado usar la app nativa".
+   Muéstralo en páginas donde el modo nativo es mejor que el web (juegos 3D,
+   Transmitir en móvil) incluyéndolo con:
+
+       {% include "_native_rec.html" %}
+
+   El div queda oculto por defecto; el script lo revela SOLO si
+   window.AETHRAVOX_CLIENT !== 'native' (es decir, en el navegador web). En el
+   Tauri (native) no se muestra. AETHRAVOX_CLIENT lo setea el inline <script>
+   de base.html leyendo la cookie que planta client_mw::detect_client. #}
+<div class="native-rec-banner" id="native-rec-banner" hidden>
+    💡 Para mejor rendimiento (GPU nativa, compartir pantalla en móvil) usa la
+    <strong>app nativa</strong>. <a href="/descargas">Descárgala →</a>
+</div>
+<style>
+.native-rec-banner {
+    background: rgba(0, 212, 255, 0.08);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    color: var(--cian, #00d4ff);
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin: 12px 0;
+    font-size: 0.9rem;
+}
+.native-rec-banner a { color: var(--cian, #00d4ff); font-weight: 700; }
+</style>
+<script>
+(function () {
+    var c = (typeof window !== 'undefined' && window.AETHRAVOX_CLIENT) ? window.AETHRAVOX_CLIENT : 'web';
+    if (c !== 'native') {
+        var el = document.getElementById('native-rec-banner');
+        if (el) el.hidden = false;
+    }
+})();
+</script>

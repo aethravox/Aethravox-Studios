@@ -1,0 +1,15 @@
+/* AethraMail — configuración. */
+.am-config { display: flex; flex-direction: column; gap: 1.5rem; }
+.am-config-section {
+    background: var(--am-bg-2);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    padding: 1.2rem 1.4rem;
+}
+.am-config-section h3 {
+    font-size: 1.05rem;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--am-border);
+}
+.am-config-section .am-form { max-width: 420px; }

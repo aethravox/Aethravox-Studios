@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Tickets — Aethravox{% endblock %}
+{% block tagline %}Admin · Asistencia{% endblock %}
+
+{% block back_url %}/admin{% endblock %}{% block content %}
+<div class="admin-header">
+    <h2>🛟 Tickets de asistencia</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong></p>
+</div>
+<div class="table-container">
+    <table class="admin-table">
+        <thead><tr><th>ID</th><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+        <tbody>
+        {% for t in tickets %}
+            <tr>
+                <td>#{{ t.id }}</td>
+                <td>{{ t.ticket_type }}</td>
+                <td>{{ t.subject }}</td>
+                <td>
+                    {%- if t.status == "open" -%}
+                        <span class="status-active">Abierto</span>
+                    {%- else if t.status == "answered" -%}
+                        <span style="color:var(--cian)">Respondido</span>
+                    {%- else if t.status == "closed" -%}
+                        {%- if t.resolucion == "terminado" -%}
+                            <span style="color:var(--verde)">Terminado</span>
+                        {%- else if t.resolucion == "rechazado" -%}
+                            <span style="color:var(--rojo)">Rechazado</span>
+                        {%- else -%}
+                            <span class="muted">Cerrado</span>
+                        {%- endif -%}
+                    {%- endif -%}
+                </td>
+                <td class="muted">{{ t.created_at }}</td>
+                <td><a href="/support/ticket/{{ t.id }}" class="btn btn-secondary btn-sm">Ver →</a></td>
+            </tr>
+        {% endfor %}
+        {% if tickets.is_empty() %}
+            <tr><td colspan="6" class="muted" style="text-align:center;padding:20px">No hay tickets.</td></tr>
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

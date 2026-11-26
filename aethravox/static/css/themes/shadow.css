@@ -1,0 +1,62 @@
+/* ============================================================
+   Tema: Shadow Studios
+   Paleta: Obsidiana + Morado Neón + Plata
+   Estilo: Cyberpunk / Gaming
+   ============================================================ */
+
+[data-theme="shadow"] {
+    /* Base obsidiana */
+    --obsidiana: #06030C;
+    --obsidiana-claro: #0D0818;
+    --obsidiana-suave: #16101F;
+    --obsidiana-borde: #2E1065;
+
+    /* Acentos Shadow */
+    --morado-neon: #7E22CE;
+    --morado-brillante: #9333EA;
+    --lila: #D8B4FE;
+    --lila-claro: #F3E8FF;
+    --indigo: #2E1065;
+    --indigo-oscuro: #3B0764;
+
+    /* Metálicos */
+    --plata: #9CA3AF;
+    --plata-oscuro: #4B5563;
+    --cromo: linear-gradient(135deg, #9CA3AF, #4B5563, #9CA3AF);
+
+    /* Neutros */
+    --blanco: #FFFFFF;
+    --gris: #6B7280;
+    --gris-claro: #9CA3AF;
+
+    /* Estados */
+    --rojo: #ff3e3e;
+    --verde: #00ff88;
+
+    /* Gradientes marca */
+    --gradiente-primario: linear-gradient(135deg, var(--morado-neon), var(--lila));
+    --gradiente-hover: linear-gradient(135deg, var(--morado-brillante), var(--lila-claro));
+    --gradiente-metal: linear-gradient(135deg, var(--plata), var(--plata-oscuro));
+
+    /* Sombras neón */
+    --sombra-morada: 0 0 20px rgba(126, 34, 206, 0.5);
+    --sombra-lila: 0 0 20px rgba(216, 180, 254, 0.4);
+    --sombra-neon: 0 0 30px rgba(147, 51, 234, 0.6);
+
+    /* Mapeo a variables globales de core/base.css */
+    --negro: var(--obsidiana);
+    --negro-oscuro: var(--obsidiana-claro);
+    --negro-suave: var(--obsidiana-suave);
+    --fondo: var(--obsidiana-borde);
+    --dorado: var(--morado-neon);
+    --dorado-claro: var(--lila);
+    --dorado-brillante: rgba(126, 34, 206, 0.45);
+    --cian: var(--lila);
+    --cian-claro: var(--lila-claro);
+    --cian-brillante: rgba(216, 180, 254, 0.4);
+}
+
+/* Logo del tema */
+.theme-logo-shadow {
+    content: url('/static/img/logo-shadow.png');
+}

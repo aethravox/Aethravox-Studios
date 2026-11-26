@@ -1,0 +1,41 @@
+{% extends "correo/base_correo.html" %}
+
+{% block title %}Configuración{% endblock %}
+
+{% block extra_css %}<link rel="stylesheet" href="/static/css/correo/config.css">{% endblock %}
+
+{% block content %}
+<div class="am-config">
+    <h2 class="am-page-title">Configuración</h2>
+
+    {% if let Some(i) = info  %}<div class="am-alert am-alert-ok">{{ i }}</div>{% endif %}
+    {% if let Some(e) = error %}<div class="am-alert am-alert-err">{{ e }}</div>{% endif %}
+
+    <section class="am-config-section">
+        <h3>Cuenta</h3>
+        <dl class="am-read-meta">
+            <dt>Dirección</dt><dd>{{ address }}@{{ domain }}</dd>
+            <dt>Creada</dt><dd>{{ created_at }}</dd>
+        </dl>
+    </section>
+
+    <section class="am-config-section">
+        <h3>Cambiar contraseña</h3>
+        <form method="post" action="/configuracion/password" class="am-form">
+            <label class="am-field">
+                <span>Contraseña actual</span>
+                <input type="password" name="current" required>
+            </label>
+            <label class="am-field">
+                <span>Nueva (mín. 8)</span>
+                <input type="password" name="new" required>
+            </label>
+            <label class="am-field">
+                <span>Repetir nueva</span>
+                <input type="password" name="confirm" required>
+            </label>
+            <button type="submit" class="am-btn am-btn-primary">Guardar</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

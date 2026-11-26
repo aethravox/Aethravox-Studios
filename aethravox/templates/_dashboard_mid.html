@@ -1,0 +1,115 @@
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </section>
+
+    {# ===== Notificaciones ===== #}
+    <section class="settings-section" data-section="notificaciones" hidden>
+        <div class="account-section privacy-section">
+            <h3 class="stat-label" style="margin-bottom:10px;">Notificaciones de escritorio</h3>
+            <p class="muted small" style="margin-bottom:14px;">
+                Activa las notificaciones del navegador para recibir un aviso cuando te
+                llegue un mensaje o una llamada, aunque estés en otra pestaña o app.
+                La primera vez que entras en el sitio te pedimos permiso automáticamente;
+                aquí puedes revisar el estado o volver a pedirlo si lo bloqueaste.
+            </p>
+
+            <div class="notif-settings-row">
+                <div class="notif-status" id="notif-status-box">
+                    <span class="notif-status-label">Estado actual:</span>
+                    <span class="notif-status-value" id="notif-status-value">Cargando…</span>
+                </div>
+                <button type="button" class="btn btn-primary" id="notif-enable-btn" disabled>
+                    Activar notificaciones
+                </button>
+            </div>
+
+            <details class="account-details" style="margin-top:14px;">
+                <summary class="stat-label">¿Por qué hace falta esto?</summary>
+                <p class="privacy-p">
+                    Sin notificaciones, si tienes la pestaña del chat en segundo plano
+                    podrías no ver que llegó un mensaje o una llamada hasta que vuelvas
+                    a la pestaña. Con ellas activadas, el navegador te avisa igual que
+                    hace WhatsApp o Telegram. <strong>Ojo:</strong> esto solo avisa mientras
+                    la pestaña del sitio esté abierta (aunque minimizada). Si cierras la
+                    pestaña del todo, la conexión se corta y quien te llame verá "no
+                    conectado"; arreglar ese caso requiere un servidor Push aparte
+                    (pendiente).
+                </p>
+                <p class="privacy-p">
+                    Si el botón de arriba está deshabilitado y dice "Bloqueado", es que
+                    rechazaste el permiso antes. Para reactivarlo tienes que ir a los
+                    ajustes del navegador (icono del candado en la barra de direcciones →
+                    Notificaciones → Permitir) y luego recargar esta página.
+                </p>
+            </details>
+        </div>
+    </section>
+
+    {# ===== Privacidad ===== #}
+    <section class="settings-section" data-section="privacidad" hidden>
+        <div class="account-section privacy-section">
+            <h3 class="stat-label" style="margin-bottom:10px;">Política de privacidad</h3>
+            <p class="muted small" style="margin-bottom:14px;">
+                Última actualización: 1 de noviembre de 2026 · Esta política se aplica a tu cuenta
+                y a todas las funciones del sitio (chat, documentos, transmisión, comunidades, etc.).
+            </p>
+
+            <h4 class="privacy-h4">1. Responsable del tratamiento</h4>
+            <p class="privacy-p">
+                El responsable del tratamiento de tus datos personales es
+                <strong>Aethravox Studios</strong>, responsable también del dominio
+                <code>aethravoxstudios.duckdns.org</code>. Puedes contactar con el responsable
+                desde la sección <a href="/support"><strong>Soporte</strong></a> abriendo un ticket
+                marcado como "Privacidad / RGPD"; esa vía se usa también para ejercer tus derechos.
+            </p>
+
+            <h4 class="privacy-h4">2. Datos que tratamos</h4>
+            <ul class="privacy-list">
+                <li><strong>Cuenta:</strong> nombre de usuario, correo electrónico, hash de contraseña (Argon2), rol y fecha de alta.</li>
+                <li><strong>Perfil:</strong> nombre público (display name), biografía y foto de avatar (redimensionada a 400 px y convertida a WebP).</li>
+                <li><strong>Sesiones:</strong> token de sesión firmado, fecha de creación, última actividad y "recordar sesión" (1 h o 30 días). La cookie es <code>HttpOnly</code>, <code>SameSite=Lax</code> y <code>Secure</code> en producción.</li>
+                <li><strong>Contenido que generas:</strong> mensajes de chat, archivos, imágenes y notas de voz que envíes; documentos que subas; tickets de soporte.</li>
+                <li><strong>Transmitir:</strong> las salas de transmisión viven <strong>solo en memoria del servidor</strong> mientras dura la sesión y <strong>no se guarda ningún vídeo ni audio</strong>. El servidor solo intercambia los "saludos" iniciales (señalización WebRTC); el media viaja P2P cifrado con DTLS-SRTP entre los dispositivos.</li>
+                <li><strong>Llamadas y videollamadas:</strong> igual que Transmitir, son P2P; el servidor no graba ni reenvía el audio/vídeo, solo lleva la señalización.</li>
+                <li><strong>Trazas técnicas:</strong> dirección IP y <code>User-Agent</code> se registran en el log de auditoría al iniciar sesión, registrarse o cambiar contraseña, para prevenir abusos. Si un admin aplica un bloqueo de IP, esta se guarda en una tabla de bloqueos.</li>
+            </ul>
+
+            <h4 class="privacy-h4">3. Finalidad y base legal</h4>
+            <p class="privacy-p">
+                Tratamos tus datos para: (a) darte acceso y mantener tu cuenta operativa
+                —base: ejecución del contrato/consentimiento al registrarte—; (b) prestar las
+                funciones que activas (chat, documentos, transmisión, llamadas) —base: consentimiento
+                y relación contractual—; (c) seguridad, control de fraude y cumplimiento de la
+                política de uso aceptable —base: interés legítimo—; (d) responder a tus solicitudes
+                de soporte —base: consentimiento y/o cumplimiento de obligaciones—.
+            </p>
+
+            <h4 class="privacy-h4">4. Conservación</h4>
+            <p class="privacy-p">
+                Los datos de cuenta y perfil se conservan mientras tu cuenta esté activa. Si pides
+                borrarla, se eliminan perfil, avatar, mensajes de chat, documentos y tickets en un
+                plazo máximo de 30 días; los logs de auditoría esenciales pueden conservarse
+                anonimizados durante el plazo legal aplicable. Las salas de Transmitir y llamadas no
+                dejan ningún dato al cerrarse (memoria efímera). Los tokens de sesión caducan a la
+                hora o a los 30 días según la opción elegida, y se borran al cerrar sesión.
+            </p>
+
+            <h4 class="privacy-h4">5. Destinatarios</h4>
+            <p class="privacy-p">
+                No vendemos ni cedemos tus datos a terceros. Los <strong>servidores STUN públicos
+                de Google</strong> (<code>stun.l.google.com</code>) solo reciben tu IP para permitir
+                la conexión WebRTC; no reciben contenido del chat ni de las transmisiones. Si
+                configuras un servidor TURN propio, tu IP se envía también a ese servidor durante
+                la señalización. Los miembros de una conversación o sala reciben los mensajes y
+                media que tú envíes a esa conversación/sala.
+            </p>
+
+            <h4 class="privacy-h4">6. Medidas de seguridad</h4>
+            <ul class="privacy-list">
+                <li>Contraseñas con <strong>Argon2</strong> (anti-rainbow, anti-fuerza bruta) — nunca se guardan en claro ni se envían en claro tras el login.</li>
+                <li>Sesiones con cookies <code>HttpOnly</code> + <code>SameSite=Lax</code> + <code>Secure</code> (en HTTPS) y token aleatorio almacenado solo en servidor.</li>
+                <li>Subida de archivos con límite de tamaño (200 MB por petición) y validación de tipo MIME.</li>
+                <li>Panel admin con doble candado: requiere sesión + desbloqueo reciente por re-autenticación.</li>
+                <li>WebRTC P2P cifrado de extremo a extremo con DTLS-SRTP para Transmitir, llamadas y videollamadas.</li>

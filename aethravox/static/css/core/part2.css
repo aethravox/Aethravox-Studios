@@ -1,0 +1,443 @@
+/* ============================================================
+   NAVEGACIÓN RESEÑADA: sidebar vertical (PC) + bottom-nav (móvil)
+   Reemplaza el header horizontal en páginas logueadas.
+   Orden de los items: E (Explorar) · B (Buscar) · I (Inicio) ·
+                       A (Ajustes) · P (Perfil).
+   PC (>=721px): sidebar fijo a la izquierda, logo arriba, 5 links.
+   Móvil (<=720px): bottom-nav fija abajo con icono + etiqueta.
+   Las páginas de auth vacían {% block global_nav %}, así que ni
+   sidebar ni bottom-nav aparecen allí (siguen con el header clásico).
+   ============================================================ */
+
+/* --- Sidebar (PC, >=721px) ----------------------------------- */
+.aethravox-sidebar {
+    display: none; /* oculto por defecto; se muestra en PC autenticada */
+}
+/* Páginas fullscreen (chat, transmit, playground) tienen su propio layout
+   100vh y NO pueden llevar el sidebar ni la bottom-nav: les rompería el grid.
+   Pero el FAB de cuenta (#aethravox-fab-menu) SÍ debe verse: es el único
+   acceso a perfil/logout en estas páginas. */
+body.app-fullscreen .aethravox-sidebar,
+body.app-fullscreen .aethravox-bottomnav { display: none !important; }
+
+/* Altura del header superior (sticky). El sidebar fijo empieza debajo de
+   él para no taparlo, y su contenido lleva este padding-top. Calculada del
+   padding (14+14) + logo (44) + border (1) del .aethravox-header. */
+:root { --header-h: 73px; }
+
+@media (min-width: 721px) {
+    /* IMPORTANTE: NO ocultamos el header superior en PC. El sidebar vive
+       DEBAJO del header (fixed con padding-top = --header-h) y el header
+       sigue visible arriba con el logo + tagline, como antes del rediseño.
+       Antes había un `display:none` aquí que eliminaba el header y rompía
+       el tagline; se quitó a petición del usuario. */
+    body:has(.aethravox-sidebar):not(.app-fullscreen) .aethravox-footer {
+        margin-left: var(--sidebar-w, 220px);
+        transition: margin-left 0.18s ease;
+    }
+    body:has(.aethravox-sidebar):not(.app-fullscreen) .container {
+        margin-left: var(--sidebar-w, 220px);
+        max-width: calc(100% - var(--sidebar-w, 220px) - 40px);
+        transition: margin-left 0.18s ease, max-width 0.18s ease;
+    }
+
+    /* --- Estados del sidebar: expandido (220px) vs colapsado (64px) ---
+       Por defecto expandido. body.sidebar-collapsed lo estrecha a 64px
+       (solo iconos). El contenido se ajusta vía --sidebar-w (empuja, no
+       superpone). El estado se persiste en localStorage (ver JS en base.html). */
+    body { --sidebar-w: 220px; }
+    body.sidebar-collapsed { --sidebar-w: 64px; }
+
+    .aethravox-sidebar {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: var(--sidebar-w);
+        background: linear-gradient(180deg, #111113 0%, #08080a 100%);
+        border-right: 1px solid var(--fondo);
+        box-shadow: 1px 0 0 rgba(224, 163, 8, 0.06);
+        z-index: 60;
+        padding: var(--header-h) 0 14px;   /* deja sitio al header arriba */
+        overflow-x: hidden;
+        overflow-y: auto;
+        transition: width 0.18s ease;
+    }
+    /* Botón toggle dedicado (abrir/cerrar). Vive arriba del sidebar, debajo
+       del header. No es el logo: el logo está en el header superior y va a
+       /hub. Este botón solo colapsa/expande el sidebar. */
+    .aethravox-sidebar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 12px 14px;
+        margin-bottom: 6px;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--fondo);
+        color: var(--dorado);
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .aethravox-sidebar-toggle:hover { background: rgba(224, 163, 8, 0.07); }
+    .aethravox-sidebar-toggle .sbt-icon {
+        font-size: 1.05rem;
+        flex: 0 0 auto;
+        transition: transform 0.18s ease;
+    }
+    body.sidebar-collapsed .aethravox-sidebar-toggle .sbt-icon { transform: rotate(180deg); }
+    .aethravox-sidebar-toggle .sbt-label { transition: opacity 0.12s; }
+
+    .aethravox-sidebar-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 12px;
+        flex: 1 1 auto;   /* empuja el logout al fondo del sidebar */
+    }
+    .aethravox-side-link {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 14px;
+        color: var(--gris-claro);
+        text-decoration: none;
+        font-size: 0.95rem;
+        font-weight: 500;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        transition: color 0.15s, background 0.15s, border-color 0.15s;
+        white-space: nowrap;
+        overflow: hidden;
+        width: 100%;
+        cursor: pointer;
+        font-family: inherit;
+        background: transparent;
+    }
+    .aethravox-side-link:hover {
+        color: var(--dorado-claro);
+        background: rgba(224, 163, 8, 0.07);
+        border-color: rgba(224, 163, 8, 0.25);
+    }
+    .aethravox-side-link.is-active {
+        color: var(--dorado);
+        background: rgba(224, 163, 8, 0.12);
+        border-color: rgba(224, 163, 8, 0.35);
+        font-weight: 700;
+    }
+    /* El emoji-icono del link: ancho fijo para que al colapsar quede centrado. */
+    .aethravox-side-link .side-ico {
+        flex: 0 0 auto;
+        width: 24px;
+        text-align: center;
+        font-size: 1.1rem;
+    }
+    /* Avatar del usuario en el botón de Perfil: redondo, con foto real.
+       El JS lo pinta (background-image) desde /api/me. Mientras carga o
+       si falla, se ve el emoji 👤. */
+    .side-profile-avatar.has-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 2px solid var(--dorado);
+        box-shadow: 0 0 8px rgba(224, 163, 8, 0.4);
+        display: inline-block;
+        background-color: var(--negro);
+    }
+
+    /* Botón de cerrar sesión: va al fondo del sidebar, separado por borde. */
+    .aethravox-sidebar-logout {
+        margin: 0;
+        padding: 8px 12px;
+        border-top: 1px solid var(--fondo);
+    }
+    .aethravox-side-logout {
+        color: var(--rojo, #ff4d4d);
+    }
+    .aethravox-side-logout:hover {
+        color: #ff6b6b;
+        background: rgba(255, 77, 77, 0.08);
+        border-color: rgba(255, 77, 77, 0.3);
+    }
+
+    /* --- Estado colapsado: solo iconos, etiquetas ocultas --- */
+    body.sidebar-collapsed .aethravox-sidebar-toggle .sbt-label,
+    body.sidebar-collapsed .aethravox-side-link .side-label {
+        opacity: 0;
+        width: 0;
+        overflow: hidden;
+        pointer-events: none;
+    }
+    body.sidebar-collapsed .aethravox-side-link {
+        justify-content: center;
+        padding: 11px 0;
+        gap: 0;
+    }
+    body.sidebar-collapsed .aethravox-sidebar-toggle {
+        padding: 12px 0;
+        gap: 0;
+    }
+    /* En colapsado, el avatar sigue visible y centrado. */
+    body.sidebar-collapsed .side-profile-avatar.has-avatar {
+        margin: 0 auto;
+    }
+}
+
+/* --- Bottom-nav (móvil, <=720px) ------------------------------ */
+   En móvil el sidebar está oculto (display:none por defecto, fuera de la
+   media query de PC) y la navegación es una barra fija abajo con 5 items:
+   Explorar, Buscar, Inicio, Ajustes, Perfil (con foto real). "Cerrar sesión"
+   vive en el drawer del FAB (#aethravox-account-drawer), no aquí. */
+.aethravox-bottomnav { display: none; }
+.aethravox-bottomnav,
+.aethravox-bottomnav * { box-sizing: border-box; }
+@media (max-width: 720px) {
+    /* El header superior SE MANTIENE en móvil: lleva el logo + la hamburguesa
+       (.aethravox-header-toggle) que abre el drawer de cuenta. Antes se ocultaba
+       aquí porque la navegación vivía solo en la bottom-nav, pero eso dejaba al
+       usuario sin acceso visible al menú de cuenta. Ahora el header queda arriba
+       (sticky) y la bottom-nav abajo, patrón clásico. */
+    /* Deja espacio abajo para que el contenido no quede bajo la bottom-nav. */
+    body:has(.aethravox-bottomnav) main.container { padding-bottom: 84px; }
+
+    .aethravox-bottomnav {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 64px;
+        background: linear-gradient(0deg, #111113 0%, #08080a 100%);
+        border-top: 1px solid var(--fondo);
+        box-shadow: 0 -1px 0 rgba(224, 163, 8, 0.08);
+        z-index: 60;
+        /* safe-area para iPhones con notch/home indicator. */
+        padding: 0 env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+    }
+    .aethravox-bottom-link {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        color: var(--gris-claro);
+        text-decoration: none;
+        font-size: 0.62rem;
+        font-weight: 500;
+        padding: 6px 2px;
+        transition: color 0.15s;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        min-width: 0;
+        overflow: hidden;
+    }
+    .aethravox-bottom-link .bn-ico {
+        font-size: 1.25rem;
+        line-height: 1;
+    }
+    .aethravox-bottom-link.is-active {
+        color: var(--dorado);
+        font-weight: 700;
+    }
+    .aethravox-bottom-link.is-active .bn-ico {
+        filter: drop-shadow(0 0 6px var(--dorado-brillante));
+    }
+    /* Avatar del usuario en el botón Perfil: redondo con foto real. */
+    .bn-profile-avatar.has-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid var(--dorado);
+        display: inline-block;
+        background-color: var(--negro);
+        font-size: 0;  /* oculta el emoji residual si lo hubiera */
+    }
+}
+
+/* ============================================================
+   DRAWER DE CUENTA (móvil + app-fullscreen + PC-fullscreen)
+   Panel fijo a la izquierda con avatar, nombre, rol, links rápidos y logout.
+   Lo abre la hamburguesa del header (.aethravox-header-toggle, id
+   "aethravox-fab-menu" — id conservado para que el JS de base.html lo
+   encuentre sin tocarlo). Es el ÚNICO acceso a "Cerrar sesión" en móvil
+   (sin sidebar) y en app-fullscreen (/chat, /transmitir, /playground, donde
+   sidebar y bottom-nav están ocultos).
+   ============================================================ */
+
+/* Backdrop del drawer: capa fija translúcida sobre el contenido. */
+.aethravox-account-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 90;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.aethravox-account-backdrop.is-visible { opacity: 1; }
+.aethravox-account-backdrop[hidden] { display: none; }
+
+/* Drawer: panel fijo a la izquierda, se desliza desde fuera (translateX(-100%)). */
+.aethravox-account-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 86vw);
+    background: linear-gradient(180deg, #111113 0%, #08080a 100%);
+    border-right: 1px solid var(--fondo);
+    box-shadow: 8px 0 24px rgba(0,0,0,0.5);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.aethravox-account-drawer.is-open { transform: translateX(0); }
+.aethravox-account-drawer[hidden] { display: none; }
+
+/* Cabecera del drawer: avatar grande + nombre + rol, y botón × para cerrar. */
+.aethravox-account-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--fondo);
+    background: rgba(224, 163, 8, 0.04);
+}
+.aethravox-account-avatar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    text-decoration: none;
+}
+.aethravox-account-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--dorado);
+    box-shadow: 0 0 10px rgba(224, 163, 8, 0.35);
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    background: var(--negro);
+    overflow: hidden;
+}
+.aethravox-account-avatar.has-avatar {
+    font-size: 0;
+    border: 2px solid var(--dorado);
+}
+.aethravox-account-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.aethravox-account-name {
+    color: var(--blanco);
+    font-weight: 700;
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.aethravox-account-role {
+    align-self: flex-start;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.aethravox-account-close {
+    background: transparent;
+    border: none;
+    color: var(--gris-claro);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    flex: 0 0 auto;
+}
+.aethravox-account-close:hover { color: var(--blanco); background: rgba(255,255,255,0.06); }
+
+/* Links rápidos del drawer (Inicio, Ajustes, Perfil). */
+.aethravox-account-links {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 10px;
+    flex: 1 1 auto;
+}
+.aethravox-account-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    color: var(--gris-claro);
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.aethravox-account-link span { font-size: 1.1rem; flex: 0 0 auto; width: 22px; text-align: center; }
+.aethravox-account-link:hover {
+    color: var(--dorado-claro);
+    background: rgba(224, 163, 8, 0.07);
+    border-color: rgba(224, 163, 8, 0.25);
+}
+.aethravox-account-link.is-active {
+    color: var(--dorado);
+    background: rgba(224, 163, 8, 0.12);
+    border-color: rgba(224, 163, 8, 0.35);
+    font-weight: 700;
+}
+
+/* Logout: al fondo del drawer, ancho completo, en rojo. */
+.aethravox-account-logout-form { margin: 0; padding: 12px 10px; border-top: 1px solid var(--fondo); }
+.aethravox-account-logout {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 10px;
+    color: var(--rojo, #ff4d4d);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s;
+}
+.aethravox-account-logout:hover {
+    background: rgba(255, 77, 77, 0.08);
+    border-color: rgba(255, 77, 77, 0.4);
+}
+.aethravox-account-logout span { font-size: 1.1rem; flex: 0 0 auto; width: 22px; text-align: center; }
+
+/* Marca link activo en el drawer según la URL (lo hace el JS de data-nav). */

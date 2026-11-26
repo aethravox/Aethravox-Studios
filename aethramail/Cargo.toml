@@ -1,0 +1,55 @@
+[package]
+name = "aethramail"
+version = "0.1.0"
+edition = "2021"
+description = "AethraMail — webmail interno con dominios propios (binario separado del hub Aethravox)"
+authors = ["Aethravox Studios"]
+
+[dependencies]
+# Web framework (mismo stack que el hub)
+axum = { version = "0.7", features = ["macros", "form"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "limit", "trace"] }
+tower-cookies = "0.10"
+
+# Database
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio", "sqlite", "chrono", "macros", "migrate"
+] }
+
+# Templates
+askama = "0.12"
+askama_axum = "0.4"
+
+# Auth
+argon2 = "0.5"
+rand = "0.8"
+hex = "0.4"
+
+# Cookies / tiempo
+time = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utils
+chrono = { version = "0.4", features = ["serde"] }
+dotenvy = "0.15"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# mTLS para la API interna (5.7–5.8).
+# ring como crypto provider (sin aws-lc-rs → no necesita cmake).
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+# hyper/hyper-util: para servir axum sobre un stream TLS custom
+# (axum 0.7::serve solo acepta TcpListener; replicamos su loop interno).
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+
+[profile.release]
+opt-level = 3

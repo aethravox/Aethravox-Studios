@@ -1,0 +1,123 @@
+/* ============================================================
+   CHAT — Modo selección múltiple de mensajes
+   Se activa con el botón ☑ del header. Cada mensaje muestra un
+   checkbox y aparece una barra flotante con el contador + "Borrar".
+   ============================================================ */
+
+/* Botón ☑ en el header del chat (visible solo cuando hay conversación abierta) */
+.chat-select-toggle {
+    background: transparent;
+    border: 1px solid #333;
+    color: var(--gris-claro);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+    flex-shrink: 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.chat-select-toggle:hover {
+    color: var(--dorado);
+    border-color: var(--dorado);
+}
+.chat-select-toggle.is-active {
+    color: var(--dorado);
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.1);
+}
+
+/* Barra flotante de selección (debajo del header, encima de los mensajes) */
+.chat-select-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 14px;
+    background: linear-gradient(180deg, #1a1a1c 0%, #111113 100%);
+    border-bottom: 1px solid var(--fondo);
+    flex-shrink: 0;
+    z-index: 5;
+}
+/* FIX: el atributo HTML [hidden] por defecto pone display:none, pero como aquí
+   forzamos display:flex, el navegador ignora el hidden y la barra se ve
+   siempre. Hay que reinstaurar display:none cuando esté hidden. */
+.chat-select-bar[hidden],
+.chat-select-toggle[hidden] { display: none !important; }
+.chat-select-count {
+    color: var(--dorado);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.chat-select-bar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* En modo selección, cada mensaje es clicable para (de)seleccionarlo.
+   Añadimos padding izquierdo para hacer sitio al checkbox. */
+.chat-messages.chat-select-mode .chat-msg {
+    cursor: pointer;
+    position: relative;
+    padding-left: 38px;
+    transition: background 0.1s, outline 0.1s;
+}
+.chat-messages.chat-select-mode .chat-msg.sent {
+    /* En modo selección alineamos todo a la izquierda para que el checkbox
+       quede en el mismo sitio en sent y received (más fácil de clicar). */
+    align-self: stretch;
+    border-radius: 10px;
+}
+/* En modo selección, ocultamos el botón ⋯ de cada mensaje (las acciones
+   se hacen desde la barra flotante). */
+.chat-messages.chat-select-mode .chat-msg-menu-btn {
+    display: none;
+}
+
+/* Checkbox que aparece a la izquierda de cada mensaje en modo selección. */
+.chat-messages.chat-select-mode .chat-msg::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 8px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #444;
+    border-radius: 4px;
+    background: transparent;
+    transition: background 0.1s, border-color 0.1s;
+}
+/* Mensaje seleccionado: checkbox marcado (dorado) + fondo sutil. */
+.chat-messages.chat-select-mode .chat-msg.is-selected::before {
+    background: var(--dorado);
+    border-color: var(--dorado);
+}
+.chat-messages.chat-select-mode .chat-msg.is-selected::after {
+    content: '✓';
+    position: absolute;
+    left: 13px;
+    top: 5px;
+    color: #000;
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1;
+}
+.chat-messages.chat-select-mode .chat-msg.is-selected {
+    background: rgba(224, 163, 8, 0.08);
+    outline: 1px solid rgba(224, 163, 8, 0.3);
+}
+/* Hover en modo selección (feedback antes de clicar). */
+.chat-messages.chat-select-mode .chat-msg:hover:not(.is-selected) {
+    background: rgba(255, 255, 255, 0.03);
+}
+/* Mensajes ya borrados no se pueden seleccionar. */
+.chat-messages.chat-select-mode .chat-msg[data-deleted="1"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+.chat-messages.chat-select-mode .chat-msg[data-deleted="1"]::before {
+    border-color: #222;
+    background: transparent;
+}

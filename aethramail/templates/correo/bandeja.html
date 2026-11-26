@@ -1,0 +1,36 @@
+{% extends "correo/base_correo.html" %}
+
+{% block title %}Bandeja{% endblock %}
+
+{% block content %}
+<div class="am-bandeja">
+    <div class="am-folders">
+        <a href="/bandeja?folder=inbox"  class="am-folder {% if folder == "inbox"  %}am-folder-active{% endif %}>Entrada</a>
+        <a href="/bandeja?folder=sent"   class="am-folder {% if folder == "sent"   %}am-folder-active{% endif %}>Enviados</a>
+        <a href="/bandeja?folder=drafts" class="am-folder {% if folder == "drafts" %}am-folder-active{% endif %}>Borradores</a>
+        <a href="/bandeja?folder=trash"  class="am-folder {% if folder == "trash"  %}am-folder-active{% endif %}>Papelera</a>
+    </div>
+
+    <a href="/redactar" class="am-btn am-btn-primary am-compose-btn">✏️ Redactar</a>
+
+    {% if emails.is_empty() %}
+    <div class="am-empty">
+        <p>No hay correos en esta carpeta.</p>
+    </div>
+    {% else %}
+    <ul class="am-mail-list">
+        {% for e in emails %}
+        <li class="am-mail-item {% if folder == "inbox" && e.read_at.is_none() %}am-mail-unread{% endif %}">
+            <a href="/leer/{{ e.id }}" class="am-mail-link">
+                <span class="am-mail-from">
+                    {% if folder == "sent" %}Para: {{ e.to_address }}{% else %}{{ e.from_address }}{% endif %}
+                </span>
+                <span class="am-mail-subject">{{ e.subject }}</span>
+                <span class="am-mail-date">{{ e.created_at }}</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% endblock %}

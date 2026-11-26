@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de APIs — Admin{% endblock %}
+{% block tagline %}Proveedores ilimitados, rotación y failover automático para Aris{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+
+{% block content %}
+<div class="admin-apis">
+    <div class="admin-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+            <h2>Gestión de APIs y Rotación de Aris</h2>
+            <p class="muted">Ollama local corre primero en tu servidor. Si no responde, Aris rota sin límites entre todos los proveedores y claves configurados.</p>
+        </div>
+        <div class="apis-actions">
+            <a href="/admin" class="btn btn-sm btn-secondary">← Volver al panel</a>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="resetCooldowns()">Liberar cooldowns (429)</button>
+        </div>
+    </div>
+
+    <!-- 1. Estrategia de rotación y parámetros de Aris -->
+    <div class="card">
+        <h3>Motor de rotación y parámetros de Aris</h3>
+        <form onsubmit="return saveArisConfig(event)">
+            <div class="apis-grid-4">
+                <div class="apis-field">
+                    <label>Rotación automática</label>
+                    <select id="cfg-rotation-enabled" class="form-input">
+                        <option value="1" {% if rotation_enabled %}selected{% endif %}>Activada</option>
+                        <option value="0" {% if !rotation_enabled %}selected{% endif %}>Desactivada (fija)</option>
+                    </select>
+                </div>
+                <div class="apis-field">
+                    <label>Estrategia</label>
+                    <select id="cfg-rotation-strategy" class="form-input">
+                        <option value="round_robin" {% if rotation_strategy == "round_robin" %}selected{% endif %}>Round-Robin global</option>
+                        <option value="least_used" {% if rotation_strategy == "least_used" %}selected{% endif %}>Menor uso diario</option>
+                        <option value="provider_order" {% if rotation_strategy == "provider_order" %}selected{% endif %}>Prioridad de proveedor</option>
+                    </select>
+                </div>
+                <div class="apis-field">
+                    <label>Cooldown 429 (min)</label>
+                    <input type="number" id="cfg-cooldown" class="form-input" min="1" max="1440" value="{{ cooldown_minutes }}">
+                </div>
+                <div class="apis-field">
+                    <label>Auto-failover en error</label>
+                    <select id="cfg-failover" class="form-input">
+                        <option value="1" {% if auto_failover %}selected{% endif %}>Sí, saltar a siguiente key</option>
+                        <option value="0" {% if !auto_failover %}selected{% endif %}>No, detener al fallar</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="apis-grid-4" style="margin-top:10px">
+                <div class="apis-field" style="grid-column: span 2">
+                    <label>Endpoint Ollama local / Aris</label>
+                    <input type="text" id="cfg-ollama-url" class="form-input" value="{{ ollama_url }}">
+                    <div class="apis-presets" style="margin-top:6px;margin-bottom:0">
+                        <button type="button" class="apis-preset-btn" onclick="document.getElementById('cfg-ollama-url').value='http://127.0.0.1:11434'">Local (127.0.0.1:11434)</button>
+                        <button type="button" class="apis-preset-btn" onclick="document.getElementById('cfg-ollama-url').value='http://158.101.120.14:11434/api/chat'">IP Directa (158.101.120.14)</button>
+                        <button type="button" class="apis-preset-btn" onclick="document.getElementById('cfg-ollama-url').value='https://ai.aethravoxstudios.duckdns.org/api/chat'">DuckDNS HTTPS</button>
+                    </div>
+                </div>
+                <div class="apis-field">
+                    <label>Límite por hora / usuario</label>
+                    <input type="number" id="cfg-hourly-limit" class="form-input" min="1" value="{{ hourly_limit }}">
+                </div>
+                <div class="apis-field">
+                    <label>Límite diario msgs / usuario</label>
+                    <input type="number" id="cfg-daily-limit" class="form-input" min="1" value="{{ daily_limit }}">
+                </div>
+            </div>
+
+            <div class="apis-grid-4" style="margin-top:10px">
+                <div class="apis-field">
+                    <label>Créditos diarios IA / usuario (Aris)</label>
+                    <input type="number" id="cfg-credits-limit" class="form-input" min="10" value="{{ daily_credits_limit }}">
+                </div>
+                <div class="apis-field" style="grid-column: span 3">
+                    <label>URL web externa de AethraMail (redirección directa desde el menú)</label>
+                    <input type="url" id="cfg-aethramail-url" class="form-input" value="{{ aethramail_url }}" placeholder="https://mail.aethravoxstudios.duckdns.org (vacío = vinculación interna)">
+                </div>
+            </div>
+
+            <div class="apis-field" style="margin-top:10px">
+                <label>System Prompt de Aris</label>
+                <textarea id="cfg-system-prompt" class="form-input" rows="2">{{ system_prompt }}</textarea>
+            </div>
+
+            <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:10px;align-items:center">
+                <span id="cfg-save-status" class="muted" style="font-size:.82rem"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Guardar configuración</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 2. Proveedores ilimitados (predeterminados + personalizados) -->
+    <div class="card">
+        <h3>Proveedores ({{ providers.len() }})</h3>
+        <p class="muted" style="font-size:.85rem">Sin límites por tipo: podés editar los predeterminados o agregar múltiples cuentas/endpoints (Gemini, Groq, OpenRouter, OpenAI, Anthropic, Mistral, DeepSeek, Custom).</p>
+
+        <div class="apis-presets">
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('Gemini','gemini','https://generativelanguage.googleapis.com/v1beta','gemini-2.5-flash')">+ Plantilla Gemini</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('Groq','groq','https://api.groq.com/openai/v1','llama-3.1-8b-instant')">+ Plantilla Groq</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('OpenAI','openai_compat','https://api.openai.com/v1','gpt-4o-mini')">+ Plantilla OpenAI</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('Anthropic','anthropic','https://api.anthropic.com/v1','claude-3-5-sonnet-latest')">+ Plantilla Anthropic</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('OpenRouter','openai_compat','https://openrouter.ai/api/v1','google/gemma-2-9b-it:free')">+ Plantilla OpenRouter</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('DeepSeek','openai_compat','https://api.deepseek.com/v1','deepseek-chat')">+ Plantilla DeepSeek</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('Mistral','openai_compat','https://api.mistral.ai/v1','mistral-small-latest')">+ Plantilla Mistral</button>
+            <button type="button" class="apis-preset-btn" onclick="fillProviderPreset('Custom Endpoint','custom','https://tu-endpoint.local/v1','default')">+ Endpoint Custom</button>
+        </div>
+
+        <form onsubmit="return addProvider(event)" class="apis-grid-4">
+            <input type="text" id="prov-name" class="form-input" placeholder="Nombre (ej: Groq Cuenta 2)" required>
+            <select id="prov-type" class="form-input" required>
+                <option value="openai_compat">openai_compat</option>
+                <option value="gemini">gemini</option>
+                <option value="groq">groq</option>
+                <option value="anthropic">anthropic</option>
+                <option value="custom">custom</option>
+            </select>
+            <input type="text" id="prov-url" class="form-input" placeholder="Base URL (https://...)" required>
+            <div style="display:flex;gap:8px">
+                <input type="text" id="prov-model" class="form-input" placeholder="Modelo por defecto" value="default">
+                <button type="submit" class="btn btn-primary">Agregar</button>
+            </div>
+        </form>
+
+        <div class="table-container" style="margin-top:14px">
+            <table class="apis-table">
+                <thead>
+                    <tr>
+                        <th>Orden</th>
+                        <th>Proveedor</th>
+                        <th>Tipo</th>
+                        <th>Modelo</th>
+                        <th>Base URL</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in providers %}
+                    <tr>
+                        <td>
+                            <div class="apis-actions">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="moveProvider({{ p.id }}, -1)" title="Subir prioridad">▲</button>
+                                <span>#{{ p.priority }}</span>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="moveProvider({{ p.id }}, 1)" title="Bajar prioridad">▼</button>
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ p.name }}</strong>
+                            {% if p.is_preset == 1 %}
+                            <span class="badge badge-info" style="margin-left:4px">Preset</span>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ p.provider_type }}</code></td>
+                        <td><code>{{ p.default_model }}</code></td>
+                        <td class="muted" style="font-size:.8rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.base_url }}</td>
+                        <td>
+                            {% if p.is_active == 1 %}
+                            <span class="badge badge-ok">Activo</span>
+                            {% else %}
+                            <span class="badge badge-off">Pausado</span>
+                            {% endif %}
+                        </td>
+                        <td class="apis-actions">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditProvider({{ p.id }})">Editar</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleProvider({{ p.id }}, {{ p.is_active }})">
+                                {% if p.is_active == 1 %}Pausar{% else %}Activar{% endif %}
+                            </button>
+                            {% if p.is_preset == 0 %}
+                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteProvider({{ p.id }})">Eliminar</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr id="edit-prov-{{ p.id }}" style="display:none">
+                        <td colspan="7" class="apis-inline-edit">
+                            <div class="apis-grid-4">
+                                <input type="text" id="ep-name-{{ p.id }}" class="form-input" value="{{ p.name }}" placeholder="Nombre">
+                                <select id="ep-type-{{ p.id }}" class="form-input">
+                                    <option value="gemini" {% if p.provider_type == "gemini" %}selected{% endif %}>gemini</option>
+                                    <option value="groq" {% if p.provider_type == "groq" %}selected{% endif %}>groq</option>
+                                    <option value="anthropic" {% if p.provider_type == "anthropic" %}selected{% endif %}>anthropic</option>
+                                    <option value="openai_compat" {% if p.provider_type == "openai_compat" %}selected{% endif %}>openai_compat</option>
+                                    <option value="custom" {% if p.provider_type == "custom" %}selected{% endif %}>custom</option>
+                                </select>
+                                <input type="text" id="ep-url-{{ p.id }}" class="form-input" value="{{ p.base_url }}" placeholder="Base URL">
+                                <div style="display:flex;gap:6px">
+                                    <input type="text" id="ep-model-{{ p.id }}" class="form-input" value="{{ p.default_model }}" placeholder="Modelo">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="saveProviderEdit({{ p.id }})">Guardar</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditProvider({{ p.id }})">Cancelar</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. Formulario agregar keys (individual o por lote) -->
+    <div class="card apis-add-card">
+        <h3>Agregar API keys (ilimitadas por proveedor)</h3>
+        <p class="muted" style="font-size:.84rem">Podés pegar una sola key o varias líneas (una key por línea) para importación en lote.</p>
+        <form onsubmit="return addKey(event)" class="apis-grid-4" style="align-items:start">
+            <select id="new-provider" class="form-input" required>
+                {% for p in providers %}
+                <option value="{{ p.id }}">{{ p.name }} ({{ p.provider_type }})</option>
+                {% endfor %}
+            </select>
+            <textarea id="new-key" class="form-input" rows="2" placeholder="API key (o una key por línea)" required></textarea>
+            <input type="text" id="new-label" class="form-input" placeholder="Etiqueta (ej: cuenta personal)">
+            <div style="display:flex;gap:8px">
+                <input type="number" id="new-daily-cap" class="form-input" min="1" placeholder="Tope diario (opcional)">
+                <button type="submit" class="btn btn-primary">Agregar</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 4. Lista de keys -->
+    <div class="card">
+        <h3>Keys configuradas ({{ keys.len() }})</h3>
+        {% if keys.is_empty() %}
+        <p class="muted">No hay keys todavía. Sin keys externas, Aris depende 100% de Ollama local.</p>
+        {% else %}
+        <div class="table-container">
+            <table class="apis-table">
+                <thead>
+                    <tr>
+                        <th>Proveedor</th>
+                        <th>Etiqueta</th>
+                        <th>Key</th>
+                        <th>Usos (total / hoy)</th>
+                        <th>Tope diario</th>
+                        <th>Estado</th>
+                        <th>Último error</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for k in keys %}
+                    <tr class="{% if k.rate_limited_until.is_some() || k.is_daily_capped() %}key-limited{% endif %}">
+                        <td><strong>{{ k.provider_name }}</strong><br><span class="muted" style="font-size:.75rem">{{ k.default_model }}</span></td>
+                        <td>{{ k.label }}</td>
+                        <td><code>{{ k.api_key_masked() }}</code></td>
+                        <td>{{ k.total_uses }} / {{ k.daily_uses }}</td>
+                        <td>
+                            <div class="apis-actions">
+                                <input type="number" min="1" id="cap-{{ k.id }}" class="form-input" style="width:88px;padding:4px 8px;font-size:.82rem"
+                                       value="{{ k.daily_cap_input() }}" placeholder="∞">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="saveKeyCap({{ k.id }})" title="Guardar tope diario">OK</button>
+                            </div>
+                        </td>
+                        <td>
+                            {% if k.is_active == 0 %}
+                                <span class="badge badge-off">Desactivada</span>
+                            {% else if k.rate_limited_until.is_some() %}
+                                <span class="badge badge-limited">Cooldown</span>
+                            {% else if k.is_daily_capped() %}
+                                <span class="badge badge-warn">Tope diario</span>
+                            {% else %}
+                                <span class="badge badge-ok">Activa</span>
+                            {% endif %}
+                        </td>
+                        <td class="muted" style="font-size:.8rem" id="err-{{ k.id }}">{{ k.last_error.as_deref().unwrap_or("—") }}</td>
+                        <td class="apis-actions">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="testKey({{ k.id }}, this)">Probar</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleKey({{ k.id }}, {{ k.is_active }})">
+                                {% if k.is_active == 1 %}Desactivar{% else %}Activar{% endif %}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteKey({{ k.id }})">Eliminar</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 5. Bitácora de rotación y fallbacks -->
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <h3>Bitácora de peticiones, fallbacks y health checks</h3>
+            <div class="apis-actions">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="location.reload()">Actualizar</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="clearLogs()">Limpiar</button>
+            </div>
+        </div>
+        {% if logs.is_empty() %}
+        <p class="muted" style="margin-top:10px">Todavía no hay eventos registrados.</p>
+        {% else %}
+        <div class="table-container" style="margin-top:12px">
+            <table class="apis-table">
+                <thead>
+                    <tr>
+                        <th>Origen</th>
+                        <th>Proveedor / Key</th>
+                        <th>Modelo</th>
+                        <th>Resultado</th>
+                        <th>Latencia</th>
+                        <th>Detalle</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td><strong>{{ log.channel_label }}</strong><br><span class="muted" style="font-size:.75rem">{{ log.created_at }}</span></td>
+                        <td>{{ log.provider_name }}<br><span class="muted" style="font-size:.75rem">{{ log.key_label }}</span></td>
+                        <td><code>{{ log.model }}</code></td>
+                        <td>
+                            {% if log.status == "ok" %}
+                                <span class="badge badge-ok">200 OK</span>
+                            {% else if log.status == "429" %}
+                                <span class="badge badge-limited">429 Cooldown</span>
+                            {% else if log.status == "daily_cap" %}
+                                <span class="badge badge-warn">Tope diario</span>
+                            {% else %}
+                                <span class="badge badge-off">{{ log.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.latency_ms }} ms</td>
+                        <td class="muted" style="font-size:.8rem">{{ log.detail }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+async function postForm(url, params) {
+    const body = new URLSearchParams(params);
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: body.toString(),
+    });
+    return res.json();
+}
+
+async function saveArisConfig(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById('cfg-save-status');
+    statusEl.textContent = 'Guardando...';
+    const data = await postForm('/admin/apis/config', {
+        rotation_enabled: document.getElementById('cfg-rotation-enabled').value,
+        rotation_strategy: document.getElementById('cfg-rotation-strategy').value,
+        cooldown_minutes: document.getElementById('cfg-cooldown').value,
+        auto_failover: document.getElementById('cfg-failover').value,
+        ollama_url: document.getElementById('cfg-ollama-url').value,
+        hourly_limit: document.getElementById('cfg-hourly-limit').value,
+        daily_limit: document.getElementById('cfg-daily-limit').value,
+        daily_credits_limit: document.getElementById('cfg-credits-limit').value,
+        aethramail_url: document.getElementById('cfg-aethramail-url').value,
+        system_prompt: document.getElementById('cfg-system-prompt').value,
+    });
+    statusEl.textContent = data.ok ? 'Guardado' : ('Error: ' + (data.error || 'desconocido'));
+    return false;
+}
+
+function fillProviderPreset(name, type, url, model) {
+    document.getElementById('prov-name').value = name;
+    document.getElementById('prov-type').value = type;
+    document.getElementById('prov-url').value = url;
+    document.getElementById('prov-model').value = model;
+}
+
+async function addProvider(e) {
+    e.preventDefault();
+    const data = await postForm('/admin/apis/providers', {
+        name: document.getElementById('prov-name').value,
+        provider_type: document.getElementById('prov-type').value,
+        base_url: document.getElementById('prov-url').value,
+        default_model: document.getElementById('prov-model').value,
+    });
+    if (data.ok) location.reload();
+    else alert('Error: ' + (data.error || 'desconocido'));
+    return false;
+}
+
+function toggleEditProvider(id) {
+    const row = document.getElementById('edit-prov-' + id);
+    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+async function saveProviderEdit(id) {
+    const data = await postForm(`/admin/apis/providers/${id}/update`, {
+        name: document.getElementById('ep-name-' + id).value,
+        provider_type: document.getElementById('ep-type-' + id).value,
+        base_url: document.getElementById('ep-url-' + id).value,
+        default_model: document.getElementById('ep-model-' + id).value,
+    });
+    if (data.ok) location.reload();
+    else alert('Error: ' + (data.error || 'desconocido'));
+}
+
+async function toggleProvider(id, current) {
+    await postForm(`/admin/apis/providers/${id}/toggle`, { active: current == 1 ? '0' : '1' });
+    location.reload();
+}
+
+async function moveProvider(id, delta) {
+    await postForm(`/admin/apis/providers/${id}/priority`, { delta: String(delta) });
+    location.reload();
+}
+
+async function deleteProvider(id) {
+    if (!confirm('¿Eliminar este proveedor y todas sus keys?')) return;
+    const data = await (await fetch(`/admin/apis/providers/${id}`, { method: 'DELETE' })).json();
+    if (data.ok) location.reload();
+    else alert('Error: ' + (data.error || 'no permitido'));
+}
+
+async function addKey(e) {
+    e.preventDefault();
+    const data = await postForm('/admin/apis/keys', {
+        provider_id: document.getElementById('new-provider').value,
+        api_key: document.getElementById('new-key').value,
+        label: document.getElementById('new-label').value,
+        daily_cap: document.getElementById('new-daily-cap').value,
+    });
+    if (data.ok) location.reload();
+    else alert('Error: ' + (data.error || 'desconocido'));
+    return false;
+}
+
+async function saveKeyCap(id) {
+    const val = document.getElementById('cap-' + id).value;
+    const data = await postForm(`/admin/apis/keys/${id}/cap`, { daily_cap: val });
+    if (data.ok) location.reload();
+}
+
+async function testKey(id, btn) {
+    const prev = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        const res = await fetch(`/admin/apis/keys/${id}/test`, { method: 'POST' });
+        const data = await res.json();
+        const errCell = document.getElementById('err-' + id);
+        if (errCell) errCell.textContent = data.detail || data.error || '—';
+        if (data.ok && data.healthy) {
+            btn.textContent = 'OK';
+            setTimeout(() => location.reload(), 600);
+        } else {
+            btn.textContent = prev;
+            btn.disabled = false;
+            setTimeout(() => location.reload(), 900);
+        }
+    } catch (err) {
+        btn.textContent = prev;
+        btn.disabled = false;
+    }
+}
+
+async function toggleKey(id, current) {
+    await postForm(`/admin/apis/keys/${id}/toggle`, { active: current == 1 ? '0' : '1' });
+    location.reload();
+}
+
+async function deleteKey(id) {
+    if (!confirm('¿Borrar esta key?')) return;
+    await fetch(`/admin/apis/keys/${id}`, { method: 'DELETE' });
+    location.reload();
+}
+
+async function resetCooldowns() {
+    await fetch('/admin/apis/keys/reset-cooldowns', { method: 'POST' });
+    location.reload();
+}
+
+async function clearLogs() {
+    await fetch('/admin/apis/logs', { method: 'DELETE' });
+    location.reload();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,586 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustes — Aethravox Studios{% endblock %}
+{% block tagline %}Ajustes de cuenta{% endblock %}
+{% block header_nav %}{# nav global ahora en sidebar/bottom-nav (base.html) #}{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+
+{% block content %}
+<div class="dashboard-card settings-page">
+    <div class="profile-header">
+        <img src="{{ avatar }}" alt="avatar" class="profile-avatar">
+        <div class="profile-info">
+            <h2>Ajustes</h2>
+            <span class="role-badge role-{{ role_css_key }}">{{ username }} · {{ role }}</span>
+        </div>
+    </div>
+
+    {% if let Some(i) = info %}
+    <div class="alert alert-info">{{ i }}</div>
+    {% endif %}
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+
+    {# ===== Tabs de ajustes ===== #}
+    <nav class="settings-tabs" id="settings-tabs" aria-label="Secciones de ajustes">
+        <button type="button" class="settings-tab is-active" data-tab="perfil">Perfil</button>
+        <button type="button" class="settings-tab" data-tab="tema">Tema</button>
+        <button type="button" class="settings-tab" data-tab="cuenta">Cuenta</button>
+        <button type="button" class="settings-tab" data-tab="idioma">Idioma</button>
+        <button type="button" class="settings-tab" data-tab="seguridad">Seguridad</button>
+        <button type="button" class="settings-tab" data-tab="notificaciones">Notificaciones</button>
+        <button type="button" class="settings-tab" data-tab="privacidad">Privacidad</button>
+        <button type="button" class="settings-tab" data-tab="terminos">Términos</button>
+    </nav>
+
+    {# ===== Perfil ===== #}
+    <section class="settings-section is-active" data-section="perfil">
+        <div class="profile-stats">
+            <div class="stat">
+                <div class="stat-label">Email</div>
+                <div class="stat-value">{{ email }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Nombre público</div>
+                <div class="stat-value">{% if !display_name.is_empty() %}{{ display_name }}{% else %}—{% endif %}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Miembro desde</div>
+                <div class="stat-value">{{ created_at }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Último acceso</div>
+                <div class="stat-value">{{ last_login }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Tiempo total de uso</div>
+                <div class="stat-value gold">{{ usage }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Sesiones activas</div>
+                <div class="stat-value">{{ active_session_count }}</div>
+            </div>
+        </div>
+
+        {% if !bio.is_empty() %}
+        <div class="bio-block">
+            <div class="stat-label">Bio</div>
+            <div class="bio-content">{{ bio }}</div>
+        </div>
+        {% endif %}
+
+        <details class="collapse">
+            <summary>Editar perfil</summary>
+            <form method="POST" action="/dashboard/profile" class="auth-form">
+                <div class="input-group">
+                    <label>Nombre público (display name)</label>
+                    <input type="text" name="display_name" value="{{ display_name }}" maxlength="64" placeholder="Vacío = tu username">
+                </div>
+                <div class="input-group">
+                    <label>Bio (máx. 500)</label>
+                    <textarea name="bio" rows="3" maxlength="500" placeholder="Cuéntale al estudio quién eres">{{ bio }}</textarea>
+                </div>
+                <div class="input-group">
+                    <label class="remember">
+                        <input type="checkbox" name="remove_avatar" value="1">
+                        <span>Quitar avatar personalizado (volver al SVG con inicial)</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Guardar perfil</button>
+            </form>
+        </details>
+
+        <details class="collapse">
+            <summary>Foto de perfil</summary>
+            <form id="avatar-crop-form" method="POST" action="/dashboard/avatar" enctype="multipart/form-data" class="auth-form">
+                <div class="input-group">
+                    <label>Subir imagen (JPG, PNG, GIF, WebP — máx 5MB)</label>
+                    <input type="file" id="avatar-file-input" accept="image/*" required
+                           style="padding:10px; background:var(--negro-suave); border:1px solid var(--fondo); border-radius:8px; color:var(--blanco);">
+                </div>
+                <p class="muted small" style="margin-bottom:10px;">
+                    Tras elegir la imagen podrás moverla y hacer zoom dentro de un
+                    círculo, como en WhatsApp, para elegir qué parte se ve. Se
+                    convierte a WebP (más liviano) y se redimensiona a 400px.
+                </p>
+                <button type="submit" class="btn btn-primary btn-block" id="avatar-submit-btn">Subir foto</button>
+            </form>
+        </details>
+
+        {# ===== Modal cropper circular (tipo WhatsApp) =====
+           Aparece al elegir una imagen en el input de arriba. El usuario arrastra
+           la imagen dentro del círculo y usa el slider para hacer zoom; al pulsar
+           "Recortar y subir" se dibuja el recorte cuadrado en un canvas oculto y
+           se POSTea como Blob PNG al endpoint /dashboard/avatar. #}
+        <style>
+        .avatar-crop-dialog { max-width: 360px; width: calc(100vw - 32px); padding: 18px; }
+        .avatar-crop-stage {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            max-width: 100%;
+            margin: 0 auto 14px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            /* touch-action: none para que el drag no dispare scroll del navegador */
+            touch-action: none;
+        }
+        .avatar-crop-stage canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        .avatar-crop-stage canvas:active { cursor: grabbing; }
+        /* Máscara circular: capa encima del canvas que oscurece todo salvo el
+           círculo central, dando la impresión de "agujero" por donde se ve el
+           recorte. Usa un radial-gradient con el centro transparente. */
+        .avatar-crop-mask {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle at center,
+                transparent 0%,
+                transparent calc(50% - 1.5px),
+                rgba(0,0,0,0.65) calc(50% + 1.5px),
+                rgba(0,0,0,0.65) 100%);
+            /* Borde dorado del círculo, encima de la máscara. */
+            box-shadow: inset 0 0 0 2px var(--dorado);
+            border-radius: 12px;
+        }
+        .avatar-crop-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .avatar-crop-zoom-label {
+            font-size: 0.85rem;
+            color: var(--gris-claro);
+            flex-shrink: 0;
+        }
+        .avatar-crop-controls input[type="range"] { flex: 1; }
+        .avatar-crop-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .avatar-crop-actions .btn { min-width: 120px; }
+        @media (max-width: 380px) {
+            .avatar-crop-stage { width: 260px; height: 260px; }
+            .avatar-crop-dialog { padding: 14px; }
+        }
+        </style>
+        <div class="modal-overlay" id="avatar-crop-modal" hidden>
+            <div class="modal-dialog avatar-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="avatar-crop-title">
+                <h3 id="avatar-crop-title" style="margin:0 0 12px;">Recorta tu foto de perfil</h3>
+                <p class="muted small" style="margin:0 0 14px;">
+                    Arrastra para mover y usa el deslizador para acercar. Lo que
+                    veas dentro del círculo es lo que se mostrará.
+                </p>
+                <div class="avatar-crop-stage" id="avatar-crop-stage">
+                    <canvas id="avatar-crop-canvas" width="320" height="320"></canvas>
+                    {# Overlay con el agujero circular: todo oscuro salvo el
+                       círculo central, que deja ver el canvas de debajo. #}
+                    <div class="avatar-crop-mask" aria-hidden="true"></div>
+                </div>
+                <div class="avatar-crop-controls">
+                    <label class="avatar-crop-zoom-label" for="avatar-crop-zoom">Zoom</label>
+                    <input type="range" id="avatar-crop-zoom" min="100" max="300" value="100" step="1">
+                </div>
+                <div class="avatar-crop-actions">
+                    <button type="button" class="btn btn-secondary" id="avatar-crop-cancel">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="avatar-crop-confirm">Recortar y subir</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-actions">
+            <a href="/u/{{ username }}" class="btn btn-secondary">Ver mi perfil público</a>
+        </div>
+    </section>
+
+    {# ===== Tema ===== #}
+    <section class="settings-section" data-section="tema" hidden>
+        <div class="theme-page">
+            <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:18px;">
+                <div>
+                    <h3 style="margin:0;font-size:18px;font-weight:700;">Sistema de Temas Visuales</h3>
+                    <p class="muted" style="margin:4px 0 0;">Elige el modo (oscuro o claro) y la paleta visual del estudio en tiempo real.</p>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+                    <div class="mode-toggle-row" role="group" aria-label="Modo de color" style="margin:0;">
+                        <button type="button" class="mode-choice-btn" id="dash-mode-dark" onclick="if(window.aethravoxSetColorMode)window.aethravoxSetColorMode('dark');">
+                            <span class="mc-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span>
+                            <strong>Oscuro</strong>
+                        </button>
+                        <button type="button" class="mode-choice-btn" id="dash-mode-light" onclick="if(window.aethravoxSetColorMode)window.aethravoxSetColorMode('light');">
+                            <span class="mc-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+                            <strong>Claro</strong>
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="var o=document.getElementById('theme-onboarding');if(o)o.hidden=false;">Probar bienvenida</button>
+                </div>
+            </div>
+
+            <div class="theme-grid">
+                <div class="theme-card" onclick="if(window.aethravoxApplyTheme)window.aethravoxApplyTheme('aethravox', true);" data-theme="aethravox">
+                    <div class="theme-preview theme-preview-aethravox">
+                        <div class="tp-header"></div>
+                        <div class="tp-body"><div class="tp-card"></div><div class="tp-card"></div><div class="tp-card"></div></div>
+                    </div>
+                    <div class="theme-info">
+                        <h3>Aethravox Studios</h3>
+                        <span class="badge badge-ok" hidden><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Activo</span>
+                    </div>
+                    <p class="theme-sub"></p>
+                    <p class="theme-desc"></p>
+                    <div class="theme-swatches"><span class="sw sw-1"></span><span class="sw sw-2"></span><span class="sw sw-3"></span></div>
+                </div>
+
+                <div class="theme-card" onclick="if(window.aethravoxApplyTheme)window.aethravoxApplyTheme('shadow', true);" data-theme="shadow">
+                    <div class="theme-preview theme-preview-shadow">
+                        <div class="tp-header"></div>
+                        <div class="tp-body"><div class="tp-card"></div><div class="tp-card"></div><div class="tp-card"></div></div>
+                    </div>
+                    <div class="theme-info">
+                        <h3>Shadow Studios</h3>
+                        <span class="badge badge-ok" hidden><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Activo</span>
+                    </div>
+                    <p class="theme-sub"></p>
+                    <p class="theme-desc"></p>
+                    <div class="theme-swatches"><span class="sw sw-1"></span><span class="sw sw-2"></span><span class="sw sw-3"></span></div>
+                </div>
+
+                <div class="theme-card" onclick="if(window.aethravoxApplyTheme)window.aethravoxApplyTheme('commoncents', true);" data-theme="commoncents">
+                    <div class="theme-preview theme-preview-commoncents">
+                        <div class="tp-header"></div>
+                        <div class="tp-body"><div class="tp-card"></div><div class="tp-card"></div><div class="tp-card"></div></div>
+                    </div>
+                    <div class="theme-info">
+                        <h3>CommonCents</h3>
+                        <span class="badge badge-ok" hidden><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Activo</span>
+                    </div>
+                    <p class="theme-sub"></p>
+                    <p class="theme-desc"></p>
+                    <div class="theme-swatches"><span class="sw sw-1"></span><span class="sw sw-2"></span><span class="sw sw-3"></span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ===== Cuenta ===== #}
+    <section class="settings-section" data-section="cuenta" hidden>
+        <div class="account-section">
+            <p class="muted small" style="margin-bottom:14px;">
+                Cierra tu sesión actual desde aquí o desde el menú de cuenta.
+            </p>
+            <form method="POST" action="/logout">
+                <button type="submit" class="btn-power btn-power--block" title="Cerrar sesión" aria-label="Cerrar sesión">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                        <line x1="12" y1="2" x2="12" y2="12"></line>
+                    </svg>
+                    <span class="btn-power-text">Cerrar sesión</span>
+                </button>
+            </form>
+
+            {# Sección 6.2 — vincular correo interno de AethraMail (servicio independiente) #}
+            <details class="collapse" style="margin-top:18px;">
+                <summary>AethraMail (Correo interno · servicio independiente)</summary>
+                <p class="muted small" style="margin:10px 0">
+                    Vincula un buzón de AethraMail (@aethra.sac, @shadow.sac o @cents.sac) a tu cuenta
+                    para recibir los enlaces de recuperación de contraseña y otras notificaciones.
+                    No se admite Gmail. La vinculación se confirma con un código de 8 dígitos.
+                </p>
+                <a href="/cuenta/correo" target="_top" class="btn btn-primary btn-sm">Abrir AethraMail</a>
+            </details>
+
+            <details class="collapse" style="margin-top:14px;">
+                <summary>Apariencia y tema</summary>
+                <p class="muted small" style="margin:10px 0">
+                    Elige entre Aethravox Studios, Shadow Studios o CommonCents.
+                </p>
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.querySelector('.settings-tab[data-tab=tema]')?.click()">Ir a Tema en Ajustes</button>
+            </details>
+        </div>
+    </section>
+
+    {# ===== Idioma ===== #}
+    <section class="settings-section" data-section="idioma" hidden>
+        <div class="input-group">
+            <label>Idioma de la interfaz</label>
+            <select name="language" disabled style="padding:10px; background:var(--negro-suave); border:1px solid var(--fondo); border-radius:8px; color:var(--blanco); width:100%;">
+                <option value="es" selected>Español</option>
+                <option value="en">English</option>
+            </select>
+            <p class="muted small" style="margin-top:10px;">
+                El selector de idioma estará disponible próximamente. Por ahora la interfaz está en español.
+            </p>
+        </div>
+    </section>
+
+    {# ===== Seguridad ===== #}
+    <section class="settings-section" data-section="seguridad" hidden>
+        <details class="collapse">
+            <summary>Cambiar contraseña</summary>
+            <form method="POST" action="/dashboard/password" class="auth-form">
+                <div class="input-group">
+                    <label>Contraseña actual</label>
+                    <input type="password" name="current" required>
+                </div>
+                <div class="input-group">
+                    <label>Nueva contraseña</label>
+                    <input type="password" name="new" required placeholder="Mínimo 8 caracteres">
+                </div>
+                <div class="input-group">
+                    <label>Repite la nueva contraseña</label>
+                    <input type="password" name="new_confirm" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Guardar nueva contraseña</button>
+            </form>
+        </details>
+
+        <details class="collapse">
+            <summary>Sesiones activas ({{ sessions.len() }})</summary>
+            <div class="table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Estado</th>
+                            <th>Mantener sesión</th>
+                            <th>Creada</th>
+                            <th>Última actividad</th>
+                            <th>Expira</th>
+                            <th style="text-align:right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in sessions %}
+                        <tr>
+                            <td>
+                                {% if s.is_current %}<span class="status-active">esta sesión</span>{% else %}<span class="muted">otra</span>{% endif %}
+                            </td>
+                            <td>{% if s.remember %}30 días{% else %}1h{% endif %}</td>
+                            <td class="muted">{{ s.created_at }}</td>
+                            <td class="muted">{{ s.last_seen }}</td>
+                            <td class="muted">{{ s.expires }}</td>
+                            <td style="text-align:right">
+                                {% if !s.is_current %}
+                                <form method="POST" action="/dashboard/sessions/{{ s.token }}/revoke" class="inline-form">
+                                    <button type="submit" class="btn-icon delete" title="Revocar sesión">Revocar</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if sessions.is_empty() %}
+                        <tr><td colspan="6" class="empty-state">No tienes sesiones activas.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            <form method="POST" action="/dashboard/logout_all" style="margin-top:15px">
+                <button type="button" class="btn btn-secondary"
+                        onclick="openLogoutAllModal()">Cerrar sesión en todos los dispositivos</button>
+            </form>
+        </details>
+
+        {# ===== Dispositivos vinculados (V4.5) =====
+           Sesiones is_primary=0: creadas vía /vincular (sin contraseña). Se
+           auto-cierran a los 3 días de inactividad. Aquí se listan con un
+           botón de revocación individual. La primary se gestiona arriba en
+           "Sesiones activas" (no se puede auto-revocar por aquí). #}
+        <details class="collapse" open>
+            <summary>Dispositivos vinculados ({{ linked_devices.len() }})</summary>
+            <p class="muted small" style="margin:10px 0">
+                Otros dispositivos conectados a tu cuenta sin contraseña (vía código QR/numérico).
+                Duran <strong>3 días</strong> y se renuevan mientras los uses; si pasan 3 días sin actividad, se cierran solos.
+                Puedes revocar cualquiera cuando quieras.
+            </p>
+            <a href="/vincular" class="btn btn-primary btn-sm" style="margin-bottom:12px">Vincular otro dispositivo</a>
+
+            <div class="table-container">
+                <table class="admin-table linked-devices-table">
+                    <thead>
+                        <tr>
+                            <th>Dispositivo</th>
+                            <th>Vinculado</th>
+                            <th>Última actividad</th>
+                            <th>Expira (3 días rolling)</th>
+                            <th style="text-align:right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in linked_devices %}
+                        <tr class="{% if !d.active %}device-row-expired{% endif %}">
+                            <td>{{ d.device_name }}</td>
+                            <td class="muted">{{ d.created_at }}</td>
+                            <td class="muted">{{ d.last_seen }}</td>
+                            <td class="muted">
+                                {% if d.active %}{{ d.expires }}{% else %}<span class="status-expired">caducada</span>{% endif %}
+                            </td>
+                            <td style="text-align:right">
+                                <form method="POST" action="/dashboard/devices/{{ d.token }}/revoke" class="inline-form"
+                                      onsubmit="return confirm('¿Revocar el dispositivo «{{ d.device_name }}»? Se cerrará su sesión inmediatamente.')">
+                                    <button type="submit" class="btn-icon delete" title="Revocar dispositivo">Revocar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if linked_devices.is_empty() %}
+                        <tr><td colspan="5" class="empty-state">No tienes dispositivos vinculados. Usa el botón de arriba para añadir el primero.</td></tr>
+                        {% endif %}
+{% include "_dashboard_mid.html" %}
+            </ul>
+
+            <h4 class="privacy-h4">7. Cookies</h4>
+            <p class="privacy-p">
+                Usamos <strong>una sola cookie de sesión esencial</strong> (no se usa ni analytics
+                ni publicidad). Es estrictamente necesaria para mantenerte identificado entre
+                peticiones, por lo que no requiere consentimiento previo según la normativa de
+                cookies. No hay cookies de terceros.
+            </p>
+
+            <h4 class="privacy-h4">8. Tus derechos (ARCO / RGPD)</h4>
+            <p class="privacy-p">
+                Puedes ejercer en cualquier momento tus derechos de <strong>acceso</strong>,
+                <strong>rectificación</strong>, <strong>supresión</strong> ("derecho al olvido"),
+                <strong>oposición</strong>, <strong>limitación del tratamiento</strong> y
+                <strong>portabilidad</strong> de tus datos, así como retirar el consentimiento
+                dado, abriendo un ticket desde <a href="/support">Soporte</a> con el asunto
+                "Privacidad / RGPD". La respuesta se dará en el plazo máximo de un mes. Si
+                consideras que no hemos atendido tu solicitud correctamente, puedes presentar una
+                reclamación ante tu autoridad de protección de datos (en España, la AEPD;
+                <a href="https://www.aepd.es" target="_blank" rel="noopener">www.aepd.es</a>).
+            </p>
+
+            <h4 class="privacy-h4">9. Menores</h4>
+            <p class="privacy-p">
+                El registro está reservado a personas mayores de 13 años. Si eres menor de esa edad
+                no puedes crear una cuenta. Si detectamos una cuenta abierta por un menor, la
+                cerraremos y borraremos sus datos.
+            </p>
+
+            <h4 class="privacy-h4">10. Transferencias internacionales</h4>
+            <p class="privacy-p">
+                El servidor donde se aloja Aethravox Studios está en la ubicación indicada por el
+                operador del dominio. Si usas Transmitir o llamadas, los datos de media viajan
+                directamente entre los dispositivos de los participantes (P2P), sin pasar por
+                un servidor intermedio distinto de la señalización inicial.
+            </p>
+
+            <h4 class="privacy-h4">11. Cambios en esta política</h4>
+            <p class="privacy-p">
+                Podemos actualizar esta política cuando añadamos o cambiemos funciones. Te avisaremos
+                en el panel con un aviso visible; la fecha de "última actualización" arriba siempre
+                reflejará la versión vigente. Continuar usando la cuenta tras los cambios equivale a
+                aceptar la nueva política.
+            </p>
+        </div>
+    </section>
+
+    {# ===== Términos ===== #}
+    <section class="settings-section" data-section="terminos" hidden>
+        <div class="account-section privacy-section">
+            <h3 class="stat-label" style="margin-bottom:10px;">Términos de uso</h3>
+            <p class="muted small" style="margin-bottom:14px;">
+                Última actualización: 1 de noviembre de 2026 · Al registrarte y usar Aethravox
+                Studios aceptas estos términos.
+            </p>
+
+            <h4 class="privacy-h4">1. Aceptación</h4>
+            <p class="privacy-p">
+                Al crear una cuenta o usar cualquier función del sitio aceptas los presentes
+                Términos y la Política de Privacidad. Si no estás de acuerdo, no uses el servicio.
+            </p>
+
+            <h4 class="privacy-h4">2. Uso aceptable</h4>
+            <ul class="privacy-list">
+                <li>No publiques contenido ilegal, abusivo, difamatorio, sexual explícito, o que infrinja derechos de terceros (copyright, marca, privacidad).</li>
+                <li>No uses el chat, Transmitir, llamadas ni comunidades para acosar, amenazar o spam.</li>
+                <li>No intentes acceder a cuentas ajenas, explotar vulnerabilidades, hacer ingeniería inversa ni realizar ataques de denegación de servicio.</li>
+                <li>No uses bots automatizados sin autorización expresa del operador del sitio.</li>
+            </ul>
+
+            <h4 class="privacy-h4">3. Contenido del usuario</h4>
+            <p class="privacy-p">
+                Mantienes la propiedad del contenido que subas (mensajes, imágenes, notas de voz,
+                documentos, transmisiones). Al publicarlo en una conversación o sala con otras
+                personas, concedes a los participantes de esa conversación/sala el derecho de
+                visualizarlo en el contexto del servicio.
+            </p>
+
+            <h4 class="privacy-h4">4. Moderación y suspenciones</h4>
+            <p class="privacy-p">
+                Los administradores pueden eliminar contenido que infrinja estos términos, suspender
+                o cerrar cuentas, bloquear direcciones IP y revocar salas de transmisión en curso,
+                sin previo aviso. Recibirás aviso por la vía disponible cuando sea posible.
+            </p>
+
+            <h4 class="privacy-h4">5. Disponibilidad del servicio</h4>
+            <p class="privacy-p">
+                El servicio se ofrece "tal cual" sin garantía de disponibilidad continua. Pueden
+                producirse paradas por mantenimiento, errores de red o limitaciones del equipo.
+                No nos responsabilizamos de pérdidas derivadas de la interrupción del servicio.
+            </p>
+
+            <h4 class="privacy-h4">6. Transmisiones y llamadas P2P</h4>
+            <p class="privacy-p">
+                Las funciones de Transmitir y de llamadas/videollamadas envían audio y vídeo
+                directamente entre los dispositivos de los participantes (P2P). El servidor solo
+                gestiona la señalización inicial y la autenticación de las salas. Eres responsable
+                del contenido que transmitas y de contar con el consentimiento de las personas
+                aparecidas antes de transmitir su imagen o voz.
+            </p>
+
+            <h4 class="privacy-h4">7. Limitación de responsabilidad</h4>
+            <p class="privacy-p">
+                En la máxima medida permitida por la ley, Aethravox Studios no se responsabiliza de
+                daños directos, indirectos o lucro cesante derivados del uso o imposibilidad de uso
+                del servicio. La responsabilidad se limita, en todo caso, a las cantidades que, en
+                su caso, hubieras abonado por el servicio (actualmente ninguna, salvo acuerdos
+                específicos).
+            </p>
+
+            <h4 class="privacy-h4">8. Modificación de los términos</h4>
+            <p class="privacy-p">
+                Podemos modificar estos términos. La fecha de "última actualización" reflejará el
+                cambio. Continuar usando el servicio tras la modificación implica aceptación. Si no
+                aceptas, debes dejar de usar la cuenta y solicitar su baja.
+            </p>
+        </div>
+    </section>
+
+    <div class="dashboard-actions">
+    </div>
+</div>
+
+{# ===== Modal: Logout all ===== #}
+<div class="modal-overlay" id="logout-all-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>Cerrar sesión en todos los dispositivos</span>
+            <button type="button" class="modal-close" onclick="closeLogoutAllModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-error" style="margin-bottom:14px;">
+                Vas a cerrar <strong>TODAS tus sesiones activas</strong> en todos los dispositivos.
+                <ul style="margin:6px 0 0 20px;">
+                    <li>Esta sesión actual también se cerrará</li>
+                    <li>Tendrás que volver a iniciar sesión en cada dispositivo</li>
+                </ul>
+            </div>
+            <form method="POST" action="/dashboard/logout_all">
+                <button type="submit" class="btn btn-primary btn-block">Sí, cerrar todas</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeLogoutAllModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/dashboard/dashboard_1.js" defer></script>{% endblock %}

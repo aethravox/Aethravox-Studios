@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor PDF — Aethravox</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #0a0e1a;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: #fff;
+            overflow: hidden;
+        }
+        #toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #111113;
+            border-bottom: 1px solid #222;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+        }
+        #toolbar button {
+            background: #1a1a1c;
+            color: #e0a308;
+            border: 1px solid #333;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        #toolbar button:hover {
+            background: #222;
+            border-color: #e0a308;
+            box-shadow: 0 0 8px rgba(224,163,8,0.4);
+        }
+        #toolbar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        #page-info {
+            color: #888;
+            font-size: 0.85rem;
+            font-family: monospace;
+            min-width: 100px;
+            text-align: center;
+        }
+        #zoom-info {
+            color: #00d4ff;
+            font-size: 0.85rem;
+            font-family: monospace;
+            min-width: 60px;
+            text-align: center;
+        }
+        #pdf-container {
+            margin-top: 50px;
+            text-align: center;
+            overflow: auto;
+            height: calc(100vh - 50px);
+            padding: 20px 0;
+        }
+        #pdf-container canvas {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            max-width: 100%;
+            display: block;
+            margin: 0 auto 15px;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #222;
+            border-top: 4px solid #e0a308;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .error-msg {
+            color: #ff3e3e;
+            text-align: center;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <button id="prev" title="Página anterior">← Anterior</button>
+        <span id="page-info">Página 0 / 0</span>
+        <button id="next" title="Página siguiente">Siguiente →</button>
+        <button id="zoom-out" title="Alejar">−</button>
+        <span id="zoom-info">100%</span>
+        <button id="zoom-in" title="Acercar">+</button>
+        <button id="fit" title="Ajustar a pantalla">Ajustar</button>
+    </div>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Cargando PDF...</p>
+    </div>
+
+    <div id="pdf-container" style="display:none"></div>
+
+    <script src="/static/pdf/pdf.js"></script>
+    <script>
+        // Configurar el worker de PDF.js
+        pdfjsLib.workerSrc = '/static/pdf/pdf.worker.js';
+
+        // Parse URL ?file=...
+        const params = new URLSearchParams(location.search);
+        const fileUrl = params.get('file');
+
+        if (!fileUrl) {
+            document.getElementById('loading').innerHTML =
+                '<p class="error-msg">No se especificó ningún PDF.</p>';
+        } else {
+            loadPdf(fileUrl);
+        }
+
+        let pdfDoc = null;
+        let currentPage = 1;
+        let scale = 1.2;
+
+        async function loadPdf(url) {
+            try {
+                const loadingTask = pdfjsLib.getDocument(url);
+                pdfDoc = await loadingTask.promise;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('pdf-container').style.display = 'block';
+                renderAll();
+                updatePageInfo();
+            } catch (err) {
+                console.error('Error cargando PDF:', err);
+                document.getElementById('loading').innerHTML =
+                    '<p class="error-msg">Error al cargar el PDF: ' + err.message + '</p>';
+            }
+        }
+
+        function renderAll() {
+            const container = document.getElementById('pdf-container');
+            container.innerHTML = '';
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                const canvas = document.createElement('canvas');
+                container.appendChild(canvas);
+                renderPage(i, canvas);
+            }
+        }
+
+        async function renderPage(num, canvas) {
+            const page = await pdfDoc.getPage(num);
+            const viewport = page.getViewport({ scale });
+            const ctx = canvas.getContext('2d');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+        }
+
+        function updatePageInfo() {
+            document.getElementById('page-info').textContent =
+                pdfDoc ? `${currentPage} / ${pdfDoc.numPages}` : '0 / 0';
+            document.getElementById('zoom-info').textContent = `${Math.round(scale * 100)}%`;
+        }
+
+        function scrollToPage(num) {
+            const container = document.getElementById('pdf-container');
+            const canvases = container.getElementsByTagName('canvas');
+            if (canvases[num - 1]) {
+                canvases[num - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                currentPage = num;
+                updatePageInfo();
+            }
+        }
+
+        document.getElementById('prev').addEventListener('click', () => {
+            if (currentPage > 1) scrollToPage(currentPage - 1);
+        });
+        document.getElementById('next').addEventListener('click', () => {
+            if (pdfDoc && currentPage < pdfDoc.numPages) scrollToPage(currentPage + 1);
+        });
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            scale = Math.min(scale + 0.2, 3);
+            renderAll();
+            updatePageInfo();
+        });
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            scale = Math.max(scale - 0.2, 0.4);
+            renderAll();
+            updatePageInfo();
+        });
+        document.getElementById('fit').addEventListener('click', () => {
+            scale = 1.2;
+            renderAll();
+            updatePageInfo();
+        });
+
+        // Atajos de teclado
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' && currentPage > 1) scrollToPage(currentPage - 1);
+            if (e.key === 'ArrowRight' && pdfDoc && currentPage < pdfDoc.numPages) scrollToPage(currentPage + 1);
+            if (e.key === '+' || e.key === '=') document.getElementById('zoom-in').click();
+            if (e.key === '-') document.getElementById('zoom-out').click();
+        });
+
+        // Scroll detection para actualizar currentPage
+        document.getElementById('pdf-container').addEventListener('scroll', (e) => {
+            if (!pdfDoc) return;
+            const container = e.target;
+            const canvases = container.getElementsByTagName('canvas');
+            const scrollTop = container.scrollTop;
+            let visiblePage = 1;
+            for (let i = 0; i < canvases.length; i++) {
+                if (canvases[i].offsetTop - container.offsetTop > scrollTop) {
+                    visiblePage = i + 1;
+                    break;
+                }
+                visiblePage = i + 1;
+            }
+            if (visiblePage !== currentPage) {
+                currentPage = visiblePage;
+                updatePageInfo();
+            }
+        });
+    </script>
+</body>
+</html>

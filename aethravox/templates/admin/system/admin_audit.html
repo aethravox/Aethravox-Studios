@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría — Aethravox{% endblock %}
+{% block tagline %}Administración · Registros del sistema{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>📋 Auditoría del sistema</h2>
+    <p>Página {{ page }} de {{ total_pages }} · Operando como <strong>{{ actor_username }}</strong></p>
+</div>
+
+<div class="table-container">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Usuario</th>
+                <th>Acción</th>
+                <th>Detalle</th>
+                <th>IP</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in entries %}
+            <tr>
+                <td class="muted">{{ e.id }}</td>
+                <td><strong>{{ e.user }}</strong></td>
+                <td><span class="action-{{ e.action }}">{{ e.action }}</span></td>
+                <td class="muted">{{ e.detail }}</td>
+                <td class="muted">{{ e.ip }}</td>
+                <td class="muted">{{ e.at }}</td>
+            </tr>
+            {% endfor %}
+            {% if entries.is_empty() %}
+            <tr><td colspan="6" class="empty-state">Sin registros todavía.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="pager">
+    {% if page > 1 %}<a href="/admin/audit?page={{ page - 1 }}" class="btn btn-secondary">← Anterior</a>{% endif %}
+    <span class="muted">Página {{ page }} de {{ total_pages }}</span>
+    {% if page < total_pages %}<a href="/admin/audit?page={{ page + 1 }}" class="btn btn-secondary">Siguiente →</a>{% endif %}
+</div>
+
+<div class="admin-nav">
+</div>
+{% endblock %}

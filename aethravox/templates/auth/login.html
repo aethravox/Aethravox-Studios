@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Login — Aethravox Studios{% endblock %}
+{% block tagline %}Acceso al Estudio{% endblock %}
+
+{% block header_icons %}{% endblock %}
+{% block profile_fab %}{% endblock %}
+{% block global_nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a href="/" class="tab active">Iniciar sesión</a>
+        <a href="/register" class="tab">Crear cuenta</a>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+    {% if let Some(i) = info %}
+    <div class="alert alert-info">{{ i }}</div>
+    {% endif %}
+
+    <form method="POST" action="/login" class="auth-form">
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="input-group">
+            <label for="username">Nombre de usuario</label>
+            <input type="text" id="username" name="username" autocomplete="username" required
+                   placeholder="Tu usuario">
+        </div>
+
+        <div class="input-group">
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required
+                   placeholder="••••••••">
+        </div>
+
+        <div class="form-row form-row-recover">
+            <a href="/recover" class="link-recover">¿Olvidaste tu contraseña?</a>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Iniciar sesión</button>
+    </form>
+
+    <div class="auth-foot">
+        ¿No tienes cuenta aún?
+        <a href="/register">Crear cuenta</a>
+    </div>
+
+    <div class="auth-link-vincular">
+        ¿Ya tienes tu cuenta abierta en otro dispositivo?
+        <a href="/vincular" style="display:inline-flex;align-items:center;gap:4px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Vincular este dispositivo
+        </a>
+    </div>
+</div>
+{% endblock %}

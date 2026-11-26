@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AethraMail{% endblock %} — AethraMail</title>
+    <link rel="stylesheet" href="/static/css/correo/base.css">
+    <link rel="stylesheet" href="/static/css/correo/correo.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+<header class="am-header">
+    <div class="am-brand">
+        <a href="/bandeja?folder=inbox">📨 AethraMail</a>
+    </div>
+    <nav class="am-nav">
+        <a href="/bandeja?folder=inbox" class="am-nav-link">
+            Bandeja {% if unread > 0 %}<span class="am-badge">{{ unread }}</span>{% endif %}
+        </a>
+        <a href="/redactar" class="am-nav-link">Redactar</a>
+        <a href="/configuracion" class="am-nav-link">Configuración</a>
+        <a href="/logout" class="am-nav-link am-nav-logout">Salir</a>
+    </nav>
+    <div class="am-account">{{ account_full }}</div>
+</header>
+
+<main class="am-main">
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

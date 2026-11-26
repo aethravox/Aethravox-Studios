@@ -1,0 +1,162 @@
+/* ===== Transmitir — Screen sharing P2P ===== */
+
+.transmit-app {
+    display: flex;
+    flex-direction: column;
+    /* FIX scroll: app-fullscreen pone overflow:hidden en el body, así que el
+       contenido que supera el viewport se corta sin barra de scroll.
+       Antes usábamos height:100vh, pero eso (1) choca con el padding:4px del
+       .container y (2) en móviles 100vh ≠ 100dvh → la parte de abajo quedaba
+       tapada por la barra del navegador. Ahora dejamos que el .container
+       (que ya es flex:1 con min-height:0) reparta la altura y el panel
+       interno haga scroll. */
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--negro);
+    color: var(--texto-claro);
+}
+.transmit-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: var(--negro-oscuro);
+    border-bottom: 1px solid var(--fondo);
+}
+.transmit-header h1 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--dorado);
+    margin: 0;
+    flex: 1;
+}
+.transmit-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--fondo);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+.transmit-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #888;
+    flex-shrink: 0;
+}
+.transmit-panel {
+    flex: 1;
+    padding: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    /* FIX scroll: el panel hace scroll interno (el body está oculto por
+       app-fullscreen). min-height:0 + overflow-y:auto dentro de un flex
+       column con height fijo. */
+    min-height: 0;
+    overflow-y: auto;
+}
+.transmit-intro {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+.transmit-intro p {
+    margin: 0 0 8px;
+}
+.transmit-intro p:last-child { margin-bottom: 0; }
+
+.transmit-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+@media (max-width: 768px) {
+    .transmit-cards {
+        grid-template-columns: 1fr;
+    }
+}
+.transmit-card {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.transmit-card:hover {
+    border-color: var(--dorado);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255, 215, 0, 0.12);
+}
+.transmit-card-icon {
+    font-size: 3rem;
+    line-height: 1;
+}
+.transmit-card h2 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--dorado);
+}
+.transmit-card p {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin: 0;
+    flex: 1;
+}
+.transmit-card-send {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), var(--negro-oscuro));
+}
+.transmit-card-receive {
+    background: linear-gradient(135deg, rgba(100, 200, 255, 0.05), var(--negro-oscuro));
+}
+
+.transmit-faq {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 16px 20px;
+}
+.transmit-faq summary {
+    cursor: pointer;
+    color: var(--dorado);
+    font-weight: 600;
+    list-style: none;
+}
+.transmit-faq summary::-webkit-details-marker { display: none; }
+.transmit-faq summary::before {
+    content: '▸ ';
+    color: var(--muted);
+    transition: transform 0.2s;
+    display: inline-block;
+}
+.transmit-faq[open] summary::before {
+    content: '▾ ';
+}
+.transmit-faq-body {
+    margin-top: 12px;
+    line-height: 1.6;
+    font-size: 0.88rem;
+    color: var(--muted);
+}
+.transmit-faq-body p {
+    margin: 0 0 10px;
+}
+.transmit-faq-body strong {
+    color: var(--texto-claro);
+}
+

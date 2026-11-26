@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustes del grupo — Aethravox{% endblock %}
+{% block tagline %}Gestión de grupo{% endblock %}
+
+{% block back_url %}/chat{% endblock %}
+{% block header_nav %}{# nav global ahora en sidebar/bottom-nav (base.html); el header solo lleva logo + tagline #}{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <div class="profile-header">
+        <div class="profile-info">
+            <h2>⚙️ {{ group_name }}</h2>
+            {% if !group_description.is_empty() %}
+            <p class="muted">{{ group_description }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <details class="collapse">
+        <summary>📷 Imagen del grupo</summary>
+        <form method="POST" action="/api/chat/group/{{ conv_id }}/image" enctype="multipart/form-data" class="auth-form">
+            <div class="input-group">
+                <label>Subir imagen (se convierte a WebP, máx 400px, 5MB)</label>
+                <input type="file" name="image" accept="image/*" required
+                       style="padding:10px;background:var(--negro-suave);border:1px solid var(--fondo);border-radius:8px;color:var(--blanco);">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">📷 Subir imagen</button>
+        </form>
+    </details>
+
+    <div class="dashboard-actions">
+        <span class="muted small">ID: {{ conv_id }}</span>
+    </div>
+
+    {# ===== Miembros ===== #}
+    <details class="collapse" open>
+        <summary>👥 Miembros (<span id="member-count">…</span>)</summary>
+        <div id="members-list" class="members-list">
+            <p class="muted">Cargando…</p>
+        </div>
+    </details>
+
+    {# ===== Rangos ===== #}
+    <details class="collapse" open>
+        <summary>🏅 Rangos (<span id="rank-count">…</span>)</summary>
+        <div id="ranks-list" class="ranks-list">
+            <p class="muted">Cargando…</p>
+        </div>
+    </details>
+
+    {# ===== Crear rango nuevo (solo visible si tienes permiso) ===== #}
+    <details class="collapse" id="create-rank-section" hidden>
+        <summary>➕ Crear rango nuevo</summary>
+        <form id="create-rank-form" class="auth-form">
+            <div class="input-group">
+                <label>Nombre del rango</label>
+                <input type="text" name="name" required maxlength="32" placeholder="Ej: Moderador">
+            </div>
+            <div class="input-group">
+                <label>Color del badge <span class="muted small">(hex)</span></label>
+                <input type="text" name="color" maxlength="7" placeholder="#ff8c42" value="#ff8c42">
+            </div>
+            <div class="input-group">
+                <label>Permisos</label>
+                <div class="perms-grid">
+                    <label class="perm-check"><input type="checkbox" name="can_send_messages" value="1" checked> <span>Enviar mensajes</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_add_members" value="1"> <span>Añadir miembros</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_edit_group_info" value="1"> <span>Editar info del grupo</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_delete_messages" value="1"> <span>Borrar mensajes</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_remove_members" value="1"> <span>Expulsar miembros</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_manage_ranks" value="1"> <span>Gestionar rangos</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_assign_ranks" value="1"> <span>Asignar rangos</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_pin_messages" value="1"> <span>Fijar mensajes</span></label>
+                    <label class="perm-check"><input type="checkbox" name="can_transfer_ownership" value="1"> <span>Transferir ownership</span></label>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">➕ Crear rango</button>
+        </form>
+    </details>
+</div>
+
+<style>
+.members-list, .ranks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+.member-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+}
+.member-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--fondo);
+    object-fit: cover;
+}
+.member-info {
+    flex: 1;
+    min-width: 0;
+}
+.member-name {
+    color: var(--blanco);
+    font-weight: 600;
+}
+.member-username {
+    color: var(--gris);
+    font-size: 0.8rem;
+}
+.rank-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-left: 8px;
+}
+.rank-select {
+    background: var(--negro);
+    border: 1px solid var(--fondo);
+    color: var(--blanco);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+.rank-card {
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    padding: 14px;
+}
+.rank-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.rank-card-name {
+    font-weight: 700;
+    font-size: 1rem;
+}
+.rank-perms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.rank-perm {
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.2);
+    color: var(--verde);
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+}
+.rank-perm.no {
+    background: rgba(255,62,62,0.06);
+    border-color: rgba(255,62,62,0.2);
+    color: var(--rojo);
+}
+.perms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 6px;
+}
+.perm-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--negro);
+    border: 1px solid var(--fondo);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.perm-check input { accent-color: var(--dorado); }
+.transfer-btn {
+    background: rgba(255, 62, 62, 0.1);
+    border: 1px solid rgba(255, 62, 62, 0.3);
+    color: var(--rojo);
+}
+</style>
+
+<script>
+(function() {
+    'use strict';
+    const convId = {{ conv_id }};
+    let myRank = null;
+    let allRanks = [];
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function loadRanks() {
+        try {
+            const resp = await fetch('/api/chat/group/' + convId + '/ranks');
+            if (!resp.ok) return;
+            allRanks = await resp.json();
+            document.getElementById('rank-count').textContent = allRanks.length;
+            const container = document.getElementById('ranks-list');
+            if (allRanks.length === 0) {
+                container.innerHTML = '<p class="muted">Sin rangos.</p>';
+                return;
+            }
+            const permNames = {
+                can_send_messages: 'Enviar mensajes',
+                can_add_members: 'Añadir miembros',
+                can_edit_group_info: 'Editar info',
+                can_delete_messages: 'Borrar mensajes',
+                can_remove_members: 'Expulsar',
+                can_manage_ranks: 'Gestionar rangos',
+                can_assign_ranks: 'Asignar rangos',
+                can_pin_messages: 'Fijar mensajes',
+                can_transfer_ownership: 'Transferir',
+            };
+            container.innerHTML = allRanks.map(r => {
+                const color = r.color || '#888';
+                const perms = Object.keys(permNames).map(k => {
+                    const has = r[k];
+                    return `<span class="rank-perm${has ? '' : ' no'}">${has ? '✓' : '✗'} ${permNames[k]}</span>`;
+                }).join('');
+                const delBtn = (r.is_owner_rank || !myRank || (myRank.can_manage_ranks === false && myRank.is_owner_rank === false))
+                    ? ''
+                    : `<button type="button" class="btn-icon delete" title="Eliminar rango" onclick="deleteRank(${r.id})">🗑️</button>`;
+                return `<div class="rank-card">
+                    <div class="rank-card-header">
+                        <span class="rank-card-name">
+                            <span class="rank-badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${escapeHtml(r.name)}</span>
+                            ${r.is_owner_rank ? '🔒' : ''}
+                        </span>
+                        ${delBtn}
+                    </div>
+                    <div class="rank-perms">${perms}</div>
+                </div>`;
+            }).join('');
+        } catch(e) { console.error('loadRanks:', e); }
+    }
+
+    async function loadMembers() {
+        try {
+            const resp = await fetch('/api/chat/group/' + convId + '/members');
+            if (!resp.ok) return;
+            const members = await resp.json();
+            document.getElementById('member-count').textContent = members.length;
+            const container = document.getElementById('members-list');
+            if (members.length === 0) {
+                container.innerHTML = '<p class="muted">Sin miembros.</p>';
+                return;
+            }
+            // Find my own rank
+            myRank = members.find(m => m.username === '{{ username }}');
+            // Show create-rank section if I have permission
+            if (myRank && (myRank.is_owner || (allRanks.length > 0))) {
+                document.getElementById('create-rank-section').hidden = false;
+            }
+            const canAssign = myRank && (myRank.is_owner || myRank.rank_id > 0);
+            container.innerHTML = members.map(m => {
+                const rankOpts = allRanks.map(r => {
+                    const sel = r.id === m.rank_id ? 'selected' : '';
+                    return `<option value="${r.id}" ${sel}>${escapeHtml(r.name)}</option>`;
+                }).join('');
+                const select = canAssign
+                    ? `<select class="rank-select" onchange="setRank(${m.user_id}, this.value)">${rankOpts}</select>`
+                    : `<span class="rank-badge" style="background:${(m.rank_color || '#888')}22;color:${m.rank_color || '#888'};border:1px solid ${(m.rank_color || '#888')}55">${escapeHtml(m.rank_name)}</span>`;
+                const transferBtn = (myRank && myRank.is_owner && !m.is_owner)
+                    ? `<button type="button" class="btn btn-secondary btn-sm transfer-btn" onclick="transferOwnership(${m.user_id}, '${escapeHtml(m.username)}')">👑 Transferir</button>`
+                    : '';
+                return `<div class="member-row">
+                    <img src="${escapeHtml(m.avatar)}" alt="" class="member-avatar">
+                    <div class="member-info">
+                        <div class="member-name">${escapeHtml(m.display)}${m.username === '{{ username }}' ? ' <span class="badge-you">tú</span>' : ''}</div>
+                        <div class="member-username">@${escapeHtml(m.username)}</div>
+                    </div>
+                    ${select}
+                    ${transferBtn}
+                </div>`;
+            }).join('');
+        } catch(e) { console.error('loadMembers:', e); }
+    }
+
+    window.setRank = async function(userId, rankId) {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        formData.append('rank_id', rankId);
+        try {
+            const resp = await fetch('/api/chat/group/' + convId + '/rank', { method:'POST', body: formData });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                alert(err.error || 'Error');
+                loadMembers();
+            }
+        } catch(e) { alert('Error de red'); }
+    };
+
+    window.deleteRank = async function(rankId) {
+        if (!confirm('¿Eliminar este rango? Solo se puede si nadie lo usa.')) return;
+        try {
+            const resp = await fetch('/api/chat/group/' + convId + '/ranks/' + rankId + '/delete', { method:'POST' });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                alert(err.error || 'Error');
+                return;
+            }
+            loadRanks();
+        } catch(e) { alert('Error de red'); }
+    };
+
+    window.transferOwnership = async function(userId, username) {
+        if (!confirm('¿Transferir ownership a @' + username + '? Ya no serás el owner del grupo.')) return;
+        const formData = new FormData();
+        formData.append('new_owner_id', userId);
+        try {
+            const resp = await fetch('/api/chat/group/' + convId + '/transfer', { method:'POST', body: formData });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                alert(err.error || 'Error');
+                return;
+            }
+            alert('Ownership transferido a @' + username);
+            location.reload();
+        } catch(e) { alert('Error de red'); }
+    };
+
+    document.getElementById('create-rank-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const fd = new FormData(this);
+        const params = new URLSearchParams();
+        for (const [k, v] of fd.entries()) {
+            if (k === 'color' && !v) continue;
+            params.append(k, v);
+        }
+        try {
+            const resp = await fetch('/api/chat/group/' + convId + '/ranks/create', {
+                method:'POST',
+                headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                body: params.toString()
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                alert(err.error || 'Error');
+                return;
+            }
+            this.reset();
+            loadRanks();
+        } catch(e) { alert('Error de red'); }
+    });
+
+    // Init
+    loadRanks().then(() => loadMembers());
+})();
+</script>
+{% endblock %}

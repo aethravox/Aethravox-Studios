@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Comunidades — Aethravox Studios{% endblock %}
+{% block tagline %}Espacios con grupos organizados{% endblock %}
+{% block header_nav %}{# nav global ahora en sidebar/bottom-nav (base.html); el header solo lleva logo + tagline #}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="hub-welcome">
+    <img src="{{ avatar }}" alt="avatar" class="hub-avatar">
+    <div class="hub-welcome-text">
+        <h2>🏘️ Comunidades</h2>
+        <p>{% if is_guest %}Estás viendo las comunidades como invitado (solo lectura). Inicia sesión para unirte.{% else %}Crea o únete a comunidades con múltiples grupos organizados.{% endif %}</p>
+    </div>
+</div>
+
+{% if !is_guest %}
+<div class="hub-actions" style="margin-bottom:20px">
+    <details class="collapse">
+        <summary>➕ Crear comunidad</summary>
+        <form method="POST" action="/api/communities/create" class="auth-form">
+            <div class="input-group">
+                <label>Nombre</label>
+                <input type="text" name="name" required maxlength="64" placeholder="Ej: Estudio de Diseño">
+            </div>
+            <div class="input-group">
+                <label>Descripción</label>
+                <input type="text" name="description" maxlength="280" placeholder="De qué trata">
+            </div>
+            <div class="input-group">
+                <label>Icono (emoji)</label>
+                <input type="text" name="icon" maxlength="4" placeholder="🏘️" value="🏘️">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">🏘️ Crear comunidad</button>
+        </form>
+    </details>
+</div>
+{% endif %}
+
+<h3 class="section-title">{% if is_guest %}Comunidades disponibles{% else %}Mis comunidades{% endif %}</h3>
+<div class="app-grid">
+    {% for c in communities %}
+    <div class="app-card">
+        <a href="/community/{{ c.id }}" class="app-card-link">
+            <div class="app-card-banner">
+                <div class="app-card-icon">{{ c.icon }}</div>
+                <span class="app-card-tag-badge">✅ Activo</span>
+            </div>
+            <div class="app-card-body">
+                <div class="app-card-name">{{ c.name }}</div>
+                <div class="app-card-desc">{{ c.description }}</div>
+            </div>
+            <div class="app-card-footer">
+                <span class="app-card-cta">Abrir →</span>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+    {% if communities.is_empty() %}
+    <div class="empty-state">
+        <div style="font-size:4rem;margin-bottom:15px">🏘️</div>
+        <h3>No estás en ninguna comunidad</h3>
+        <p class="muted">Crea una o pide que te inviten a una existente.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="hub-actions">
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Aethravox{% endblock %}
+{% block tagline %}{{ subtitle }}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/hub.css?v=1">{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <h2>{{ title }}</h2>
+    <p class="muted">{{ subtitle }}</p>
+    <p class="muted small" style="margin-bottom:16px">
+        <a href="/hub">← Volver al panel</a> · <a href="/categorias">Categorías</a> · <a href="/explorar">Explorar todo</a> · <a href="/buscar">Buscar</a>
+    </p>
+    {% include "categories/_app_grid.html" %}
+</div>
+{% endblock %}

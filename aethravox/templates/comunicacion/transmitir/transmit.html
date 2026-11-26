@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Transmitir — Aethravox Studios{% endblock %}
+{% block body_class %}app-fullscreen{% endblock %}
+{% block tagline %}Comparte pantalla o cámara en segundos{% endblock %}
+
+{% block content %}
+<div class="transmit-app">
+    <header class="transmit-header">
+        <a href="/hub" class="chat-back" title="Volver al panel">←</a>
+        <h1>📡 Transmitir</h1>
+    </header>
+
+    <div class="transmit-panel">
+        <div class="transmit-intro">
+            <p>Comparte tu <strong>pantalla</strong> o la <strong>cámara</strong> de tu dispositivo con cualquier persona — teléfono, laptop, webcam o la <strong>PDI</strong> del aula — sin cables ni USB. Solo necesitan un navegador.</p>
+            <p class="muted small">El video viaja <strong>P2P</strong> directo entre los dispositivos. Tu servidor Aethravox solo intermedió el saludo inicial.</p>
+        </div>
+
+        <div class="transmit-cards">
+            <a href="/transmitir/enviar" class="transmit-card transmit-card-send">
+                <div class="transmit-card-icon">📤</div>
+                <h2>Compartir pantalla o cámara</h2>
+                <p class="muted">Comparte tu pantalla, ventana o pestaña (en PC), o la cámara de tu móvil, tablet o webcam. Elegí nombre de sala y contraseña.</p>
+                <span class="btn btn-primary">Comenzar a transmitir</span>
+            </a>
+
+            <a href="/transmitir/recibir" class="transmit-card transmit-card-receive">
+                <div class="transmit-card-icon">📥</div>
+                <h2>Recibir transmisión</h2>
+                <p class="muted">Conectate a una transmisión existente con el nombre de sala y contraseña que te pasó el emisor.</p>
+                <span class="btn btn-secondary">Ver transmisión</span>
+            </a>
+        </div>
+
+        <details class="transmit-faq">
+            <summary>ℹ️ ¿Cómo funciona? ¿Es seguro?</summary>
+            <div class="transmit-faq-body">
+                <p><strong>Tecnología:</strong> WebRTC (peer-to-peer cifrado con DTLS-SRTP). El servidor Aethravox solo intercambia los "saludos" iniciales entre emisor y receptor; después el video viaja directamente entre los dos dispositivos, sin pasar por el servidor.</p>
+                <p><strong>Seguridad:</strong> Tanto emisor como receptor deben estar autenticados en Aethravox. Además, la sala tiene su propia contraseña, así que aunque alguien sepa el nombre de sala, no puede verla sin la contraseña.</p>
+                <p><strong>Funciona en red local o por internet:</strong> en la mayoría de las redes (escuela, casa, móvil) funciona directo. En redes con firewalls muy restrictivos puede necesitar configuración adicional.</p>
+                <p><strong>Privacidad:</strong> cuando el emisor cierra la pestaña o detiene la transmisión, la sala se elimina inmediatamente. No se guarda ningún video.</p>
+            </div>
+        </details>
+    </div>
+</div>
+{% endblock %}

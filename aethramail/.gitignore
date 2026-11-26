@@ -1,0 +1,10 @@
+# Build
+/target
+
+# DB runtime
+/data
+
+# Certs mTLS generados por scripts/gen_certs.sh (secrets — regenerar, no commitear)
+/certs/*.pem
+/certs/*.srl
+!/certs/.gitkeep

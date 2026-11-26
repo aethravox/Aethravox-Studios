@@ -1,0 +1,158 @@
+/* ============================================================
+   i18n — switcher de idioma (botón 🌐 + menú desplegable)
+   Visualmente coherente con .nav-icon-btn (engranaje de Ajustes).
+   ============================================================ */
+
+.lang-switcher {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+.lang-switcher-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 38px;
+    min-width: 38px;
+    padding: 0 9px;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: var(--gris-claro);
+    cursor: pointer;
+    text-decoration: none;
+    font: inherit;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.5px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.lang-switcher-btn:hover {
+    color: var(--blanco);
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.08);
+}
+.lang-switcher-btn.is-open,
+.lang-switcher-btn:focus-visible {
+    color: var(--dorado);
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.10);
+    outline: 2px solid var(--dorado);
+    outline-offset: 2px;
+}
+.lang-switcher-btn:focus-visible { outline-offset: 2px; }
+.lang-switcher-globe {
+    font-size: 1rem;
+    line-height: 1;
+}
+.lang-switcher-code {
+    line-height: 1;
+}
+
+/* Menú desplegable */
+.lang-switcher-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 60;
+    min-width: 150px;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+}
+.lang-switcher-menu.is-open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+.lang-switcher-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--gris-claro);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.9rem;
+    transition: background 0.12s, color 0.12s;
+}
+.lang-switcher-option:hover {
+    background: rgba(224, 163, 8, 0.08);
+    color: var(--blanco);
+}
+.lang-switcher-option.is-active {
+    color: var(--dorado);
+    background: rgba(224, 163, 8, 0.10);
+    font-weight: 700;
+}
+
+/* En móvil: el menú se abre anclado al botón; nada especial. */
+@media (max-width: 480px) {
+    .lang-switcher-btn {
+        padding: 0 8px;
+        font-size: 0.74rem;
+    }
+    .lang-switcher-menu { min-width: 140px; }
+}
+
+/* ============================================================
+   Selector de idioma del dashboard (pestaña Ajustes → Idioma)
+   Lista vertical de botones (igual que el switcher del header).
+   ============================================================ */
+.lang-picker-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 8px;
+    color: var(--gris-claro);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.95rem;
+    text-align: left;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.lang-picker-option:hover {
+    background: rgba(224, 163, 8, 0.08);
+    border-color: var(--dorado);
+    color: var(--blanco);
+}
+.lang-picker-option.is-active {
+    border-color: var(--dorado);
+    color: var(--dorado);
+    background: rgba(224, 163, 8, 0.10);
+    font-weight: 700;
+}
+.lang-picker-code {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 26px;
+    padding: 0 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 5px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+.lang-picker-option.is-active .lang-picker-code {
+    background: rgba(224, 163, 8, 0.18);
+}

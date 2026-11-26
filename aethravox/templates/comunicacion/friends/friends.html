@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+
+{% block title %}Amigos — Aethravox Studios{% endblock %}
+{% block tagline %}Lista de amigos{% endblock %}
+{% block header_nav %}{# nav global ahora en sidebar/bottom-nav (base.html); el header solo lleva logo + tagline #}{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <div class="profile-header">
+        <img src="{{ avatar }}" alt="avatar" class="profile-avatar">
+        <div class="profile-info">
+            <h2>👥 Amigos</h2>
+            <p class="muted">
+                <span class="gold" id="friends-count">{{ friends_count }}</span> amigos
+                · <span class="gold" id="pending-count">{{ pending_count }}</span> solicitudes pendientes
+            </p>
+        </div>
+    </div>
+
+    {# Banner que aparece cuando el polling detecta nuevas solicitudes #}
+    <div id="new-pending-banner" class="refresh-banner refresh-banner-info" hidden>
+        <span>📨 Tienes <span id="new-pending-count">0</span> nueva(s) solicitud(es) de amistad.</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="location.reload()">Refrescar</button>
+    </div>
+
+    {# Banner que aparece cuando el polling detecta que alguien aceptó tu solicitud #}
+    <div id="new-friend-banner" class="refresh-banner refresh-banner-success" hidden>
+        <span>🎉 <span id="new-friend-name">Alguien</span> aceptó tu solicitud de amistad.</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="location.reload()">Refrescar</button>
+    </div>
+
+    {% if pending_count > 0 %}
+    <details class="collapse" open>
+        <summary>📨 Solicitudes pendientes (<span id="pending-section-count">{{ pending_count }}</span>)</summary>
+        <div class="friends-grid">
+            {% for p in pending %}
+            <div class="friend-card friend-card-pending">
+                <div class="friend-card-top">
+                    <a href="/u/{{ p.username }}" class="friend-avatar-link">
+                        <img src="{{ p.avatar }}" alt="avatar" class="friend-avatar">
+                    </a>
+                    <div class="friend-info">
+                        <a href="/u/{{ p.username }}" class="friend-name">{{ p.display }}</a>
+                        <span class="friend-username muted">@{{ p.username }}</span>
+                    </div>
+                </div>
+                <div class="friend-actions">
+                    <form method="POST" action="/friends/accept/{{ p.id }}"
+                          data-confirm="¿Aceptar la solicitud de amistad de {{ p.display }} (@{{ p.username }})?"
+                          data-confirm-ok="✓ Aceptar"
+                          data-confirm-class="btn-primary">
+                        <button type="submit" class="btn btn-primary btn-sm">✓ Aceptar</button>
+                    </form>
+                    <form method="POST" action="/friends/reject/{{ p.id }}"
+                          data-confirm="¿Rechazar la solicitud de {{ p.display }} (@{{ p.username }})?"
+                          data-confirm-ok="✕ Rechazar"
+                          data-confirm-class="btn-secondary">
+                        <button type="submit" class="btn btn-secondary btn-sm">✕ Rechazar</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <details class="collapse" open>
+        <summary>👥 Mis amigos (<span id="friends-section-count">{{ friends_count }}</span>)</summary>
+        {% if !friends.is_empty() %}
+        <div class="friends-grid">
+            {% for f in friends %}
+            <div class="friend-card">
+                <div class="friend-card-top">
+                    <a href="/u/{{ f.username }}" class="friend-avatar-link">
+                        <img src="{{ f.avatar }}" alt="avatar" class="friend-avatar">
+                        {% if f.online %}<span class="friend-online-dot" title="En línea"></span>{% endif %}
+                    </a>
+                    <div class="friend-info">
+                        <a href="/u/{{ f.username }}" class="friend-name">{{ f.display }}</a>
+                        <span class="friend-username muted">
+                            @{{ f.username }}
+                            · <span class="role-badge role-{{ f.role_css_key }}">{{ f.role_display }}</span>
+                            {% if f.online %}<span class="status-active"> · en línea</span>{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <div class="friend-actions">
+                    <a href="/chat?to={{ f.username }}" class="btn btn-secondary btn-sm">💬 Mensaje</a>
+                    <form method="POST" action="/friends/remove/{{ f.id }}"
+                          data-confirm="¿Eliminar a {{ f.display }} (@{{ f.username }}) de tus amigos?"
+                          data-confirm-ok="🗑 Eliminar"
+                          data-confirm-class="btn-secondary">
+                        <button type="submit" class="btn-icon delete" title="Eliminar amigo">🗑</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div style="font-size:4rem;margin-bottom:15px">🫂</div>
+            <h3>Aún no tienes amigos</h3>
+            <p class="muted">Busca a otros usuarios del estudio abajo para enviarles una solicitud.</p>
+        </div>
+        {% endif %}
+    </details>
+
+    <details class="collapse">
+        <summary>🔍 Buscar usuarios</summary>
+        <div class="friend-search">
+            <form id="friend-search-form" class="auth-form" autocomplete="off"
+                  onsubmit="return false;">
+                <div class="input-group">
+                    <label>Buscar por nombre de usuario o display name</label>
+                    <input type="text" id="friend-search-input"
+                           placeholder="Escribe al menos 2 caracteres…"
+                           maxlength="64" autofocus>
+                </div>
+            </form>
+            <div id="friend-search-results" class="friends-grid"></div>
+        </div>
+    </details>
+
+    <div class="dashboard-actions">
+        <a href="/u/{{ username }}" class="btn btn-secondary">👁️ Ver mi perfil público</a>
+    </div>
+</div>
+
+{# ===== Modal de confirmación custom (estilo Aethravox) ===== #}
+<div id="confirm-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <div class="modal-header">
+            <span id="confirm-title">Confirmar acción</span>
+            <button type="button" class="modal-close" title="Cerrar (Esc)">×</button>
+        </div>
+        <div class="modal-body">
+            <p id="confirm-message">¿Estás seguro?</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="confirm-cancel">Cancelar</button>
+            <button type="button" class="btn btn-primary" id="confirm-ok">Aceptar</button>
+        </div>
+    </div>
+</div>
+
+{# ===== Contenedor de toasts (notificaciones flotantes) ===== #}
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+<script>
+(function() {
+    'use strict';
+
+    // ====== Utilidades de escape HTML ======
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ====== Modal de confirmación custom ======
+    function showConfirm(message, opts) {
+        opts = opts || {};
+        return new Promise(function(resolve) {
+            const modal = document.getElementById('confirm-modal');
+            const titleEl = document.getElementById('confirm-title');
+            const msgEl = document.getElementById('confirm-message');
+            const okBtn = document.getElementById('confirm-ok');
+            const cancelBtn = document.getElementById('confirm-cancel');
+            const closeBtn = modal.querySelector('.modal-close');
+
+            titleEl.textContent = opts.title || 'Confirmar acción';
+            msgEl.textContent = message;
+            okBtn.textContent = opts.okText || 'Aceptar';
+            okBtn.className = 'btn ' + (opts.okClass || 'btn-primary');
+            cancelBtn.textContent = opts.cancelText || 'Cancelar';
+
+            modal.hidden = false;
+            requestAnimationFrame(() => modal.classList.add('modal-visible'));
+            okBtn.focus();
+
+            const cleanup = function(result) {
+                modal.classList.remove('modal-visible');
+                setTimeout(() => { modal.hidden = true; }, 200);
+                okBtn.removeEventListener('click', onOk);
+                cancelBtn.removeEventListener('click', onCancel);
+                closeBtn.removeEventListener('click', onCancel);
+                modal.removeEventListener('click', onOverlay);
+                document.removeEventListener('keydown', onKey);
+                resolve(result);
+            };
+            const onOk = () => cleanup(true);
+            const onCancel = () => cleanup(false);
+            const onOverlay = (e) => { if (e.target === modal) cleanup(false); };
+            const onKey = (e) => {
+                if (e.key === 'Escape') cleanup(false);
+                if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
+                    e.preventDefault();
+                    cleanup(true);
+                }
+            };
+            okBtn.addEventListener('click', onOk);
+            cancelBtn.addEventListener('click', onCancel);
+            closeBtn.addEventListener('click', onCancel);
+            modal.addEventListener('click', onOverlay);
+            document.addEventListener('keydown', onKey);
+        });
+    }
+
+    // ====== Toasts ======
+    function showToast(message, type, duration) {
+        type = type || 'info';
+        duration = duration || 3500;
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-' + type;
+        toast.innerHTML = '<span class="toast-icon">' + ({
+            success: '✅',
+            info: 'ℹ️',
+            warning: '⚠️',
+            error: '❌'
+        }[type] || 'ℹ️') + '</span><span class="toast-text">' + escapeHtml(message) + '</span>';
+        container.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('toast-visible'));
+        setTimeout(() => {
+            toast.classList.remove('toast-visible');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+
+    // ====== Interceptar submits de formularios con data-confirm ======
+    document.querySelectorAll('form[data-confirm]').forEach(function(form) {
+        form.addEventListener('submit', async function(e) {
+            if (form.dataset.confirmed === '1') {
+                delete form.dataset.confirmed;
+                return; // ya confirmado, deja que el form se envíe
+            }
+            e.preventDefault();
+            const message = form.dataset.confirm;
+            const okText = form.dataset.confirmOk || 'Aceptar';
+            const okClass = form.dataset.confirmClass || 'btn-primary';
+            const confirmed = await showConfirm(message, { okText: okText, okClass: okClass });
+            if (confirmed) {
+                form.dataset.confirmed = '1';
+                form.submit();
+            }
+        });
+    });
+
+    // ====== Toast de éxito tras acción (leído de ?toast= en la URL) ======
+    (function loadToastFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('toast');
+        const user = params.get('user');
+        if (!action) return;
+        const messages = {
+            send:    '📨 Solicitud enviada a @' + user,
+            accept:  '✓ Ahora eres amigo de @' + user,
+            reject:  '✕ Solicitud de @' + user + ' rechazada',
+            remove:  '🗑 @' + user + ' eliminado de tus amigos',
+        };
+        const type = action === 'reject' || action === 'remove' ? 'info' : 'success';
+        if (messages[action]) showToast(messages[action], type, 4000);
+        // Limpiar el query string para que no se muestre de nuevo al recargar
+        const url = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, url);
+    })();
+
+    // ====== Polling: nuevas solicitudes pendientes ======
+    let lastPendingIds = new Set([
+        {% for p in pending %}{{ p.id }},{% endfor %}
+    ]);
+    let pendingPollTimer = null;
+
+    async function pollPending() {
+        try {
+            const resp = await fetch('/api/friends/pending');
+            if (!resp.ok) return;
+            const list = await resp.json();
+            const currentIds = new Set(list.map(p => p.id));
+            const newOnes = list.filter(p => !lastPendingIds.has(p.id));
+            if (newOnes.length > 0) {
+                lastPendingIds = currentIds;
+                const names = newOnes.slice(0, 3).map(p => '@' + p.username).join(', ');
+                const suffix = newOnes.length > 3 ? ' y ' + (newOnes.length - 3) + ' más' : '';
+                showToast('📨 Nueva solicitud de ' + names + suffix, 'info', 6000);
+                const banner = document.getElementById('new-pending-banner');
+                const countEl = document.getElementById('new-pending-count');
+                if (banner && countEl) {
+                    countEl.textContent = newOnes.length;
+                    banner.hidden = false;
+                }
+                // Actualizar contador del header
+                const pendingCount = document.getElementById('pending-count');
+                if (pendingCount) pendingCount.textContent = String(list.length);
+            }
+        } catch (e) { /* fetch errors are silent */ }
+    }
+
+    // ====== Polling: alguien aceptó mi solicitud ======
+    let lastFriendIds = new Set([
+        {% for f in friends %}{{ f.id }},{% endfor %}
+    ]);
+    let friendPollTimer = null;
+
+    async function pollFriends() {
+        try {
+            const resp = await fetch('/api/friends/list');
+            if (!resp.ok) return;
+            const list = await resp.json();
+            const currentIds = new Set(list.map(f => f.id));
+            const newOnes = list.filter(f => !lastFriendIds.has(f.id));
+            if (newOnes.length > 0) {
+                lastFriendIds = currentIds;
+                const names = newOnes.slice(0, 3).map(f => '@' + f.username).join(', ');
+                const suffix = newOnes.length > 3 ? ' y ' + (newOnes.length - 3) + ' más' : '';
+                showToast('🎉 ¡' + names + suffix + ' aceptó tu solicitud!', 'success', 6000);
+                const banner = document.getElementById('new-friend-banner');
+                const nameEl = document.getElementById('new-friend-name');
+                if (banner && nameEl) {
+                    nameEl.textContent = newOnes.length === 1 ? names : newOnes.length + ' personas';
+                    banner.hidden = false;
+                }
+                // Actualizar contador del header
+                const friendsCount = document.getElementById('friends-count');
+                if (friendsCount) friendsCount.textContent = String(list.length);
+            }
+        } catch (e) { /* silent */ }
+    }
+
+    // ====== Arrancar polling cada 10 segundos ======
+    pendingPollTimer = setInterval(pollPending, 10000);
+    friendPollTimer  = setInterval(pollFriends,  10000);
+    // Primera llamada a los 3s (no bombardear al cargar)
+    setTimeout(pollPending, 3000);
+    setTimeout(pollFriends,  3000);
+
+    // ====== Pausar polling si la pestaña está oculta (ahorra requests) ======
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            clearInterval(pendingPollTimer);
+            clearInterval(friendPollTimer);
+        } else {
+            pendingPollTimer = setInterval(pollPending, 10000);
+            friendPollTimer  = setInterval(pollFriends,  10000);
+            // Poll inmediato al volver
+            pollPending();
+            pollFriends();
+        }
+    });
+
+    // ====== Búsqueda en vivo de usuarios ======
+    const input = document.getElementById('friend-search-input');
+    const results = document.getElementById('friend-search-results');
+    if (input && results) {
+        let timer = null;
+        async function doSearch(q) {
+            if (q.trim().length < 2) {
+                results.innerHTML = '';
+                return;
+            }
+            try {
+                const resp = await fetch('/api/friends/search?q=' + encodeURIComponent(q));
+                if (!resp.ok) return;
+                const list = await resp.json();
+                if (list.length === 0) {
+                    results.innerHTML = '<div class="empty-state"><p class="muted">Sin resultados.</p></div>';
+                    return;
+                }
+                results.innerHTML = list.map(u => `
+                    <div class="friend-card friend-card-search">
+                        <div class="friend-card-top">
+                            <a href="/u/${escapeHtml(u.username)}" class="friend-avatar-link">
+                                <img src="${escapeHtml(u.avatar)}" alt="avatar" class="friend-avatar">
+                            </a>
+                            <div class="friend-info">
+                                <a href="/u/${escapeHtml(u.username)}" class="friend-name">${escapeHtml(u.display)}</a>
+                                <span class="friend-username muted">@${escapeHtml(u.username)} · <span class="role-badge role-${escapeHtml(u.role_css_key)}">${escapeHtml(u.role_display)}</span></span>
+                            </div>
+                        </div>
+                        <div class="friend-actions">
+                            <form method="POST" action="/friends/send"
+                                  data-confirm="¿Enviar solicitud de amistad a ${escapeHtml(u.display)} (@${escapeHtml(u.username)})?"
+                                  data-confirm-ok="＋ Enviar"
+                                  data-confirm-class="btn-primary">
+                                <input type="hidden" name="username" value="${escapeHtml(u.username)}">
+                                <button type="submit" class="btn btn-primary btn-sm">＋ Enviar solicitud</button>
+                            </form>
+                        </div>
+                    </div>
+                `).join('');
+                // Wire up the new forms so they also use the modal
+                results.querySelectorAll('form[data-confirm]').forEach(function(form) {
+                    form.addEventListener('submit', async function(e) {
+                        if (form.dataset.confirmed === '1') {
+                            delete form.dataset.confirmed;
+                            return;
+                        }
+                        e.preventDefault();
+                        const message = form.dataset.confirm;
+                        const okText = form.dataset.confirmOk || 'Aceptar';
+                        const okClass = form.dataset.confirmClass || 'btn-primary';
+                        const confirmed = await showConfirm(message, { okText: okText, okClass: okClass });
+                        if (confirmed) {
+                            form.dataset.confirmed = '1';
+                            form.submit();
+                        }
+                    });
+                });
+            } catch (e) { console.error('friend search:', e); }
+        }
+        input.addEventListener('input', function() {
+            const q = input.value;
+            clearTimeout(timer);
+            timer = setTimeout(() => doSearch(q), 250);
+        });
+    }
+})();
+</script>
+{% endblock %}

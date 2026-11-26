@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+{% import "admin/roles/_color_picker.html" as cp %}
+
+{% block title %}Títulos — Aethravox{% endblock %}
+{% block tagline %}Owner · Títulos{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>🏅 Gestión de títulos</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+    <p class="muted small">
+        Los títulos son <strong>badges cosméticos</strong> que otorgas a los usuarios
+        (p.ej. <em>Creador</em>, <em>Streamer</em>, <em>Dueño de X por colaboración</em>).
+        No dan permisos: solo se muestran. Cada usuario elige hasta <strong>3 visibles</strong>
+        en su perfil y <strong>1 principal</strong> (el principal se ve junto a su nombre
+        en todo el sitio).
+    </p>
+</div>
+
+<div class="toolbar">
+    <span>📍 Total: {{ titles.len() }} títulos</span>
+    <button type="button" class="btn btn-primary" onclick="openCreateModal()">➕ Crear título</button>
+</div>
+
+{% if titles.is_empty() %}
+<div class="empty-state">
+    <div style="font-size:3rem;margin-bottom:15px">🏅</div>
+    <h3>Sin títulos todavía</h3>
+    <p class="muted">Crea el primer título con el botón "Crear título".</p>
+</div>
+{% endif %}
+
+<div class="titles-admin-list">
+    {% for t in titles %}
+    <div class="title-admin-card">
+        <div class="title-admin-head">
+            <span class="title-badge title-{{ t.id }} fx-{{ t.effect }}">{{ t.name }}</span>
+            <span class="muted small">· efecto {{ t.effect_label }} · {{ t.user_count }} usuario(s)</span>
+            {% if let Some(d) = t.description %}
+            <span class="muted small">· {{ d }}</span>
+            {% endif %}
+        </div>
+        <div class="title-admin-actions">
+            <button type="button" class="btn btn-secondary btn-sm"
+                    data-edit-id="{{ t.id }}"
+                    data-edit-name="{{ t.name }}"
+                    data-edit-effect="{{ t.effect }}"
+                    data-edit-color="{{ t.color.as_deref().unwrap_or("") }}"
+                    data-edit-desc="{{ t.description.as_deref().unwrap_or("") }}"
+                    onclick="openEditModal(this)">
+                ✏️ Editar
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm"
+                    data-assign-id="{{ t.id }}"
+                    data-assign-name="{{ t.name }}"
+                    onclick="openAssignModal(this)">
+                👤 Asignar a usuario
+            </button>
+            <form method="POST" action="/admin/titles/{{ t.id }}/delete" class="inline-form"
+                  onsubmit="return confirm('¿Borrar el título «{{ t.name }}»? Se quitará de todos los usuarios que lo tengan.')">
+                <button type="submit" class="btn btn-danger btn-sm">🗑️ Borrar</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{# ===== Modal: Crear / Editar título ===== #}
+<div class="modal-overlay" id="title-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span id="title-modal-title">➕ Crear título</span>
+            <button type="button" class="modal-close" onclick="closeTitleModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="#" id="title-form" class="auth-form">
+                <div class="input-group">
+                    <label>Nombre <span class="muted small">(2–32 caracteres, único)</span></label>
+                    <input type="text" name="name" id="title-name" maxlength="32" required
+                           placeholder="p.ej. Creador">
+                </div>
+                    <div class="input-group">
+                    <label>Color del badge <span class="muted small">(opcional — selector visual, el mismo que en /admin/roles)</span></label>
+                    {% call cp::color_picker("", "Vista previa", "cp-prev-badge", "title-color-picker", "title-color") %}
+                    <p class="muted small">Deja vacío para el color por defecto. El composite final se guarda en el hidden <code>color</code>.</p>
+                </div>
+                <div class="input-group">
+                    <label>Efecto visual</label>
+                    <select name="effect" id="title-effect">
+                        <option value="none">— Sin efecto</option>
+                        <option value="glow">✨ Glow (brillo)</option>
+                        <option value="shimmer">💫 Shimmer (brillo animado)</option>
+                        <option value="gradient">🌈 Degradado animado</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Descripción <span class="muted small">(opcional, máx 120)</span></label>
+                    <input type="text" name="description" id="title-desc" maxlength="120"
+                           placeholder="p.ej. Creador de contenido oficial del estudio">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">💾 Guardar</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Asignar título a un usuario =====
+   Antes pedía el ID del usuario a mano (confuso). Ahora muestra la lista
+   completa de usuarios activos con una barra de búsqueda que filtra en vivo
+   por username/display. Al clicar un usuario se envía el form. #}
+<div class="modal-overlay" id="assign-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>👤 Asignar título <strong id="assign-title-name" class="gold">—</strong></span>
+            <button type="button" class="modal-close" onclick="closeAssignModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group">
+                <label>Buscar usuario</label>
+                <input type="text" id="assign-search" autocomplete="off"
+                       placeholder="Escribe para filtrar por nombre o usuario…"
+                       oninput="filterAssignList()">
+            </div>
+            <div class="assign-user-list" id="assign-user-list">
+                {% for u in users %}
+                <button type="button" class="assign-user-item"
+                        data-username="{{ u.username|lower }}"
+                        data-display="{{ u.display|lower }}"
+                        data-uid="{{ u.id }}"
+                        onclick="pickAssignUser({{ u.id }})">
+                    <span class="assign-user-name">{{ u.display }}</span>
+                    <span class="assign-user-handle muted small">@{{ u.username }}</span>
+                </button>
+                {% endfor %}
+                {% if users.is_empty() %}
+                <p class="muted small" style="padding:12px;text-align:center">
+                    No hay usuarios activos para asignar.</p>
+                {% endif %}
+            </div>
+            <p class="muted small" style="margin-top:10px">Para quitar un título a un usuario, usa el
+            endpoint <code>POST /admin/titles/&lt;id&gt;/revoke</code> con el user_id (panel futuro).</p>
+            {# Form oculto que se rellena y envía al elegir un usuario #}
+            <form method="POST" action="#" id="assign-form" class="auth-form" hidden>
+                <input type="hidden" name="user_id" id="assign-user-id" value="">
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.titles-admin-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.title-admin-card {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.title-admin-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.title-admin-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.btn-sm { padding: 5px 12px; font-size: 0.82rem; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+
+/* ===== Lista de usuarios del modal "Asignar a usuario" ===== */
+.assign-user-list {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid #333;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.25);
+    margin-top: 8px;
+}
+.assign-user-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--blanco);
+    padding: 10px 14px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.12s;
+}
+.assign-user-item:last-child { border-bottom: 0; }
+.assign-user-item:hover { background: rgba(224,163,8,0.10); }
+.assign-user-name { font-weight: 600; }
+.assign-user-handle { font-weight: 400; }
+
+/* ===== Color picker (compartido con /admin/roles vía role_color_picker.js) ===== */
+.color-picker {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 6px;
+}
+.cp-row { margin-bottom: 12px; }
+.cp-row:last-child { margin-bottom: 0; }
+.cp-row > label { display: block; margin-bottom: 6px; }
+.cp-preview-row { display: flex; justify-content: center; padding: 8px 0; }
+.cp-prev-badge { font-size: 0.85rem; padding: 6px 14px; }
+.cp-controls { display: flex; gap: 8px; align-items: center; }
+.cp-controls input[type="text"] {
+    flex: 1; padding: 6px 8px; background: #111; border: 1px solid #333;
+    border-radius: 6px; color: #fff; font-family: monospace; font-size: 0.85rem;
+}
+.cp-controls input[type="color"] {
+    width: 38px; height: 34px; padding: 0; border: 1px solid #333;
+    border-radius: 6px; background: transparent; cursor: pointer;
+}
+.cp-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.cp-swatch {
+    width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.15);
+    cursor: pointer; padding: 0;
+}
+.cp-swatch:hover { transform: scale(1.12); border-color: #fff; }
+.cp-auto { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--gris-claro); margin-bottom: 6px; }
+.cp-auto input { margin: 0; }
+.cp-opacity { width: 100%; accent-color: var(--dorado); }
+select.cp-bg-type {
+    padding: 6px 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #fff;
+}
+</style>
+
+<script>
+(function() {
+    'use strict';
+    function openModal(id) {
+        var m = document.getElementById(id);
+        m.hidden = false;
+        requestAnimationFrame(function(){ m.classList.add('modal-visible'); });
+    }
+    function closeModal(id) {
+        var m = document.getElementById(id);
+        m.classList.remove('modal-visible');
+        setTimeout(function(){ m.hidden = true; }, 200);
+    }
+
+    // Re-inicializa el color picker del modal tras cambiar sus valores.
+    // role_color_picker.js expone window.__reinitColorPicker para esto.
+    function reinitPicker() {
+        if (window.__reinitColorPicker) window.__reinitColorPicker();
+    }
+
+    window.openCreateModal = function() {
+        document.getElementById('title-modal-title').textContent = '➕ Crear título';
+        document.getElementById('title-form').action = '/admin/titles/create';
+        document.getElementById('title-name').value = '';
+        document.getElementById('title-color').value = '';
+        document.getElementById('title-effect').value = 'none';
+        document.getElementById('title-desc').value = '';
+        openModal('title-modal');
+        reinitPicker();
+    };
+    window.openEditModal = function(btn) {
+        var id = btn.getAttribute('data-edit-id');
+        var name = btn.getAttribute('data-edit-name');
+        var effect = btn.getAttribute('data-edit-effect') || 'none';
+        var color = btn.getAttribute('data-edit-color') || '';
+        var desc = btn.getAttribute('data-edit-desc') || '';
+        document.getElementById('title-modal-title').textContent = '✏️ Editar título';
+        document.getElementById('title-form').action = '/admin/titles/' + id + '/update';
+        document.getElementById('title-name').value = name;
+        document.getElementById('title-effect').value = effect;
+        document.getElementById('title-desc').value = desc;
+        // El color llega en formato composite ("#hex|#text|opacidad" o
+        // "#hex1~#hex2|#text|opacidad"); el picker lo parsea desde el hidden.
+        document.getElementById('title-color').value = color;
+        openModal('title-modal');
+        reinitPicker();
+    };
+    window.openAssignModal = function(btn) {
+        var id = btn.getAttribute('data-assign-id');
+        var name = btn.getAttribute('data-assign-name');
+        document.getElementById('assign-title-name').textContent = name;
+        document.getElementById('assign-form').action = '/admin/titles/' + id + '/assign';
+        document.getElementById('assign-user-id').value = '';
+        // Limpiar la búsqueda y mostrar todos los usuarios al abrir.
+        var search = document.getElementById('assign-search');
+        if (search) search.value = '';
+        filterAssignList();
+        openModal('assign-modal');
+        // Foco en la barra de búsqueda para escribir nada más abrir.
+        setTimeout(function(){ if (search) search.focus(); }, 50);
+    };
+    // Filtra la lista de usuarios por username/display (case-insensitive).
+    window.filterAssignList = function() {
+        var q = (document.getElementById('assign-search').value || '').toLowerCase().trim();
+        var items = document.querySelectorAll('.assign-user-item');
+        items.forEach(function(it) {
+            var u = it.getAttribute('data-username') || '';
+            var d = it.getAttribute('data-display') || '';
+            var match = !q || u.indexOf(q) !== -1 || d.indexOf(q) !== -1;
+            it.style.display = match ? '' : 'none';
+        });
+    };
+    // Al elegir un usuario: rellena el hidden y envía el form.
+    window.pickAssignUser = function(uid) {
+        document.getElementById('assign-user-id').value = String(uid);
+        document.getElementById('assign-form').submit();
+    };
+    window.closeTitleModal = function(){ closeModal('title-modal'); };
+    window.closeAssignModal = function(){ closeModal('assign-modal'); };
+
+    document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') { closeTitleModal(); closeAssignModal(); }
+    });
+    var tm = document.getElementById('title-modal');
+    if (tm) tm.addEventListener('click', function(e){
+        if (e.target.id === 'title-modal') closeTitleModal();
+    });
+    var am = document.getElementById('assign-modal');
+    if (am) am.addEventListener('click', function(e){
+        if (e.target.id === 'assign-modal') closeAssignModal();
+    });
+})();
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script defer src="/static/js/role_color_picker.js"></script>
+{% endblock %}

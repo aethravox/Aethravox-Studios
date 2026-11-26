@@ -1,0 +1,420 @@
+/* ============================================================
+   AETHRAVOX STUDIOS — Hoja de estilos principal (COMPLETA)
+   Paleta: negro + dorado (primario) + cian (acento)
+   Cubre: Web 1 (auth), Web 2 (hub+admin), Web 3 (dashboard), Web 4 (docs)
+   ============================================================ */
+
+:root {
+    --negro: #050505;
+    --negro-oscuro: #111113;
+    --negro-suave: #1a1a1c;
+    --dorado: #e0a308;
+    --dorado-brillante: rgba(224, 163, 8, 0.4);
+    --dorado-claro: #f5c542;
+    --cian: #00d4ff;
+    --cian-brillante: rgba(0, 212, 255, 0.4);
+    --cian-claro: #5ee7ff;
+    --blanco: #ffffff;
+    --gris: #888;
+    --gris-claro: #b0b0b0;
+    --rojo: #ff3e3e;
+    --verde: #00ff88;
+    --fondo: #222;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* FIX [hidden]: el atributo hidden del HTML pone display:none vía la hoja UA,
+   pero CUALQUIER regla CSS que asigne display (grid, flex, block…) la pisa
+   porque tiene más especificidad. Esto rompía Transmitir: .transmit-live-card y
+   .transmit-view-card tienen display:grid, así que aunque llevasen hidden se
+   seguían renderizando debajo del form (el "menú de compartir/recibir" aparecía
+   abajo) y le robaban altura al form-card, que quedaba aplastado y sin scroll.
+   Con !important garantizamos que hidden SIEMPRE oculte, sea cual sea el
+   display que ponga el CSS del componente. */
+[hidden] { display: none !important; }
+
+/* FIX defensivo: ninguna imagen puede salirse de su contenedor.
+   Esto evita el bug "imagen gigante" cuando un avatar subido es
+   rectangular (p.ej. 800x600) y el CSS no la recorta. */
+img {
+    max-width: 100%;
+    height: auto;
+}
+/* Avatares circulares: forzamos cover para que nunca se deformen ni
+   se salgan del círculo, sea cual sea la proporción de la imagen original. */
+.hub-avatar,
+.aethravox-nav-avatar img,
+.chat-list-avatar,
+.chat-header-avatar,
+.friend-pick-avatar,
+.profile-avatar,
+.user-avatar {
+    object-fit: cover;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    /* Fondo: color sólido como fallback + fondo.png (negro 100%) por encima.
+       fondo.png da negro puro #000000 para que el logo (con transparencia)
+       se vea completo; --negro (#050505) queda como respaldo si la imagen falla. */
+    background-color: var(--negro);
+    background-image: url('/static/img/fondo.png');
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: var(--blanco);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ===== HEADER ===== */
+/* La posición/estilo vivo del header está en header-nav.css (.aethravox-header
+   ahí es position: sticky; top: 0). Aquí NO tocamos position ni overflow: antes
+   base.css ponía position:relative, que —al cargarse antes pero por detalles de
+   cascada en algunos navegadores— llegaba a pisar el sticky, con lo que el
+   header entero (y con él la hamburguesa) se iba con el scroll. Ahora el sticky
+   de header-nav.css aplica limpio y el header queda fijo arriba siempre.
+   overflow queda en visible (default) para que el panel móvil desplegable
+   (position:absolute; top:100%) pueda salir del header hacia abajo. */
+.aethravox-header {
+    width: 100%;
+    background: radial-gradient(circle at center, #1a1a1a 0%, var(--negro) 80%);
+    border-bottom: 1px solid var(--fondo);
+}
+.aethravox-header h1 {
+    font-size: 2.2rem;
+    letter-spacing: 6px;
+    color: var(--dorado);
+    text-shadow: 0 0 18px var(--dorado-brillante);
+    text-transform: uppercase;
+    font-weight: 800;
+    margin: 0;
+    line-height: 1;
+}
+.aethravox-header .tagline {
+    color: var(--cian);
+    margin-top: 8px;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+/* ===== FOOTER ===== */
+.aethravox-footer {
+    width: 100%;
+    padding: 18px 20px;
+    text-align: center;
+    color: var(--gris);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--fondo);
+    background: var(--negro);
+    letter-spacing: 1px;
+}
+
+/* ===== CONTAINER ===== */
+.container {
+    width: 95%;
+    max-width: 1200px;
+    flex: 1;
+    padding-bottom: 60px;
+}
+
+/* ===== AUTH CARD ===== */
+.auth-card {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 14px;
+    padding: 35px;
+    max-width: 460px;
+    margin: 0 auto;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: hidden;
+}
+.auth-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--dorado), transparent);
+    opacity: 0.7;
+}
+
+/* ===== CONSTRUCTION PAGE (secciones sin página propia, ej. aexOS "En proceso") ===== */
+.construction-page {
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+}
+.construction-card {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 16px;
+    padding: 45px 38px;
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: hidden;
+}
+.construction-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--dorado), transparent);
+    opacity: 0.7;
+}
+.construction-icon {
+    font-size: 56px;
+    margin-bottom: 14px;
+    line-height: 1;
+}
+.construction-name {
+    font-size: 26px;
+    margin: 0 0 16px;
+    color: var(--texto);
+}
+.construction-message {
+    font-size: 16px;
+    color: var(--texto-secundario, #b8b8b8);
+    line-height: 1.6;
+    margin: 0 0 24px;
+}
+.construction-opens {
+    font-size: 14px;
+    color: var(--dorado);
+    margin: 0 0 24px;
+}
+.construction-card .btn { margin-top: 4px; }
+
+/* ===== TABS ===== */
+.auth-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--negro);
+    border: 1px solid var(--fondo);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 25px;
+}
+.auth-tabs .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    color: var(--gris);
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+}
+.auth-tabs .tab:hover { color: var(--blanco); }
+.auth-tabs .tab.active {
+    background: var(--dorado);
+    color: #000;
+}
+
+/* ===== FORM ===== */
+.auth-form { display: flex; flex-direction: column; gap: 18px; }
+.input-group { display: flex; flex-direction: column; gap: 6px; }
+.input-group label {
+    font-size: 0.8rem;
+    color: var(--gris-claro);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.input-group input,
+.input-group select,
+.input-group textarea {
+    background: #0f0f11;
+    border: 1px solid var(--fondo);
+    color: var(--blanco);
+    padding: 12px 14px;
+    border-radius: 8px;
+    outline: none;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    font-family: inherit;
+    width: 100%;
+}
+.input-group input::placeholder { color: #555; }
+.input-group input:focus,
+.input-group select:focus,
+.input-group textarea:focus {
+    border-color: var(--dorado);
+    box-shadow: 0 0 8px var(--dorado-brillante), 0 0 12px rgba(0, 212, 255, 0.1);
+}
+
+.form-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.remember {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--gris-claro);
+    cursor: pointer;
+}
+.link-recover {
+    font-size: 0.85rem;
+    color: var(--cian);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+.link-recover:hover {
+    color: var(--cian-claro);
+    text-shadow: 0 0 8px var(--cian-brillante);
+}
+
+/* ===== BUTTONS ===== */
+.btn {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-decoration: none;
+}
+.btn-primary {
+    background: var(--dorado);
+    color: #000;
+}
+.btn-primary:hover {
+    box-shadow: 0 0 18px var(--dorado-brillante);
+    filter: brightness(1.1);
+}
+.btn-secondary {
+    background: transparent;
+    border: 1px solid var(--fondo);
+    color: var(--gris-claro);
+}
+.btn-secondary:hover {
+    border-color: var(--blanco);
+    color: var(--blanco);
+}
+.btn-block { width: 100%; }
+.btn-sm {
+    padding: 8px 14px !important;
+    font-size: 0.85rem !important;
+}
+
+/* ===== ALERTS ===== */
+.alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+    border-left: 4px solid;
+}
+.alert-error {
+    background: rgba(255, 62, 62, 0.1);
+    color: var(--rojo);
+    border-color: var(--rojo);
+}
+.alert-info {
+    background: rgba(0, 212, 255, 0.06);
+    color: var(--cian-claro);
+    border-color: var(--cian);
+}
+
+/* ===== AUTH FOOT ===== */
+.auth-foot {
+    text-align: center;
+    margin-top: 20px;
+    color: var(--gris);
+    font-size: 0.9rem;
+}
+.auth-foot a {
+    color: var(--dorado);
+    text-decoration: none;
+    font-weight: 600;
+}
+.auth-foot a:hover { text-decoration: underline; }
+
+/* ===== Botón flotante de perfil (FAB abajo-derecha) =====
+   Lleva a /perfil (perfil propio del usuario). Solo se muestra en páginas
+   autenticadas (las de auth vacían el bloque profile_fab en base.html).
+   z-index por debajo del header (50) y de los modales (100), pero por
+   encima del contenido normal. */
+.profile-fab {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--dorado, #e0a308);
+    color: #1a1a1a;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45), 0 0 0 1px rgba(224,163,8,0.4);
+    text-decoration: none;
+    z-index: 40;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.profile-fab:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.55), 0 0 0 2px var(--dorado-brillante, #ffd54f);
+}
+.profile-fab:active { transform: translateY(0) scale(0.98); }
+@media (max-width: 600px) {
+    .profile-fab { right: 14px; bottom: 14px; width: 48px; height: 48px; }
+}
+
+/* ===== Badges de título =====
+   .title-badge.title-<id> recibe background+color desde /title-colors.css.
+   .title-badge.fx-<effect> añade glow/shimmer/gradient. */
+.title-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    vertical-align: middle;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.title-badge.fx-glow { box-shadow: 0 0 6px 1px currentColor; }
+.title-badge.fx-shimmer {
+    background-size: 200% 100%;
+    animation: title-shimmer 2.4s linear infinite;
+}
+@keyframes title-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.title-badge.fx-gradient {
+    background-size: 200% 100%;
+    animation: title-grad 4s ease infinite;
+}
+@keyframes title-grad {
+    0%,100% { background-position: 0 50%; }
+    50% { background-position: 100% 50%; }
+}

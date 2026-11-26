@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Categorías — Aethravox{% endblock %}
+{% block tagline %}Categorías del hub{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/hub.css?v=1">{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <h2 style="display:flex;align-items:center;gap:10px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-primary)" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+        Categorías
+    </h2>
+    <p class="muted" style="margin-bottom:16px">Explora las apps y secciones agrupadas por categoría.</p>
+
+    <div class="app-grid">
+        {% for c in categories %}
+        <div class="app-card-mini app-card">
+            <a href="/categoria/{{ c.slug }}" class="app-card-link">
+                <div class="app-card-icon-box">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                </div>
+                <div class="app-card-content">
+                    <div class="app-card-top">
+                        <div class="app-card-title-wrap">
+                            <div class="app-card-name">{{ c.name }}</div>
+                        </div>
+                        <div class="app-card-head-right">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="app-card-status-ico app-card-arrow" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+                        </div>
+                    </div>
+                    <div class="app-card-body">
+                        <div class="app-card-desc">{% if c.count == 1 %}1 app disponible{% else %}{{ c.count }} apps disponibles{% endif %}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+        {% if categories.is_empty() %}
+        <div class="empty-state">
+            <h3>No hay categorías</h3>
+            <p class="muted">Todavía no se definieron categorías.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Buscar — Aethravox{% endblock %}
+{% block tagline %}Buscar apps{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/hub.css?v=1">{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <h2 style="display:flex;align-items:center;gap:10px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-primary)" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        Buscar
+    </h2>
+    <p class="muted">Busca apps y secciones del Hub por nombre o descripción.</p>
+
+    <form method="GET" action="/buscar" class="auth-form" style="max-width:520px;margin:16px 0">
+        <div class="input-group" style="display:flex;flex-direction:row;gap:8px;align-items:center">
+            <input type="text" name="q" value="{{ q }}" placeholder="Ej: Documentos, Chat, Comunidades…" style="flex:1;min-width:0" required>
+            <button type="submit" class="btn btn-primary" style="flex-shrink:0">Buscar</button>
+        </div>
+    </form>
+
+    {% if !q.is_empty() %}
+    <h3 class="section-title" style="margin-top:14px;margin-bottom:12px">Resultados para «{{ q }}» — {{ apps.len() }}</h3>
+    {% include "categories/_app_grid.html" %}
+    {% else %}
+    <p class="muted">Escribe el nombre (o parte) de una app arriba y pulsa Buscar.</p>
+    {% endif %}
+</div>
+{% endblock %}

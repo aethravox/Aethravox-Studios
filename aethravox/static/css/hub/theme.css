@@ -1,0 +1,67 @@
+/* ============================================================
+   HUB — Responsive (móvil)
+   ============================================================ */
+@media (max-width: 720px) {
+    .hub-welcome {
+        flex-direction: column;
+        text-align: center;
+        gap: 14px;
+        padding: 18px;
+        margin-bottom: 20px;
+    }
+    .hub-avatar { width: 64px; height: 64px; }
+    .hub-welcome-text h2 { font-size: 1.25rem; }
+    .hub-welcome-text p { font-size: 0.9rem; }
+
+    .grid-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .card { padding: 14px; }
+    .card h3 { font-size: 0.7rem; letter-spacing: 0.5px; }
+    .card .stat-value { font-size: 1.3rem; }
+
+    .section-title {
+        font-size: 0.95rem;
+        letter-spacing: 1px;
+        margin: 22px 0 12px;
+    }
+
+    /* Cards cuadradas en móvil en vez de apiladas flex horizontal */
+    .web-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .web-card {
+        padding: 14px;
+        gap: 10px;
+    }
+    .web-icon { font-size: 1.6rem; width: 36px; }
+    .web-name { font-size: 0.95rem; }
+    .web-desc { font-size: 0.78rem; }
+    .web-slug { font-size: 0.72rem; padding: 2px 6px; }
+
+    /* App cards en móvil: una columna, banner más compacto */
+    .app-grid {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-bottom: 20px;
+    }
+    .app-card-banner { padding: 22px 14px; }
+    .app-card-icon { font-size: 2.8rem; }
+    .app-card-body { padding: 14px; }
+    .app-card-name { font-size: 1.05rem; }
+    .app-card-desc { font-size: 0.85rem; min-height: auto; }
+    .app-card-footer { padding: 10px 14px; }
+
+    .hub-actions { gap: 8px; }
+    .hub-actions .btn { flex: 1 1 calc(50% - 8px); }
+}
+
+@media (max-width: 380px) {
+    /* Móvil muy angosto: stats en una sola columna */
+    .grid-stats { grid-template-columns: 1fr; }
+    .hub-actions .btn { flex: 1 1 100%; }
+}

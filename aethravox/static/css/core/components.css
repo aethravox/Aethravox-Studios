@@ -1,0 +1,362 @@
+/* ============================================================
+   Scrollbar + animaciones
+   ============================================================ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--negro); }
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--dorado), var(--cian));
+    border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, var(--dorado-claro), var(--cian-claro));
+}
+
+.flash { animation: flash 0.5s; }
+@keyframes flash {
+    0% { color: var(--dorado); transform: scale(1.2); }
+    100% { color: var(--blanco); transform: scale(1); }
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 600px) {
+    .aethravox-header h1 { font-size: 1.6rem; letter-spacing: 3px; }
+    .auth-card, .dashboard-card { padding: 25px; }
+    .profile-header { flex-direction: column; text-align: center; }
+    .profile-stats, .grid-stats { grid-template-columns: 1fr; }
+    .doc-grid, .app-grid, .web-grid { grid-template-columns: 1fr; }
+    .docs-view-header { flex-direction: column; }
+    .hub-welcome { flex-direction: column; text-align: center; }
+    .app-card-banner { padding: 24px 16px; }
+    .app-card-icon { font-size: 3rem; }
+    .admin-table { min-width: 100%; }
+}
+
+/* ============================================================
+   FRIENDS (Web 5) — Lista de amigos + solicitudes + búsqueda
+   ============================================================ */
+.friends-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+}
+.friend-card {
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.18s, transform 0.18s;
+}
+.friend-card:hover {
+    border-color: var(--dorado);
+    transform: translateY(-2px);
+}
+.friend-card-pending {
+    border-color: var(--dorado-brillante);
+    background: linear-gradient(135deg, var(--negro-suave) 0%, rgba(224, 163, 8, 0.06) 100%);
+}
+.friend-card-search {
+    border-style: dashed;
+}
+/* Fila superior: avatar + info en línea */
+.friend-card-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+.friend-avatar-link {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-block;
+}
+.friend-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--fondo);
+    object-fit: cover;
+    display: block;
+}
+.friend-online-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background: var(--verde);
+    border: 2px solid var(--negro-suave);
+    border-radius: 50%;
+    display: inline-block;
+}
+.friend-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+.friend-name {
+    color: var(--blanco);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+}
+.friend-name:hover { color: var(--dorado); text-decoration: underline; }
+.friend-username {
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.friend-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    border-top: 1px solid var(--fondo);
+    padding-top: 10px;
+}
+.friend-search {
+    margin-top: 12px;
+}
+@media (max-width: 480px) {
+    .friends-grid { grid-template-columns: 1fr; }
+    .friend-actions { justify-content: stretch; }
+    .friend-actions .btn,
+    .friend-actions .btn-icon { flex: 1; min-width: 0; }
+}
+
+/* ============================================================
+   MODAL + TOASTS + REFRESH BANNERS (V3.1)
+   Sistema reutilizable para feedback no intrusivo.
+   ============================================================ */
+
+/* ===== Modal overlay ===== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    padding: 20px;
+}
+.modal-overlay.modal-visible { opacity: 1; }
+.modal-overlay[hidden] { display: none; }
+.modal-dialog {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--dorado);
+    border-radius: 14px;
+    box-shadow: 0 0 0 1px rgba(224, 163, 8, 0.25),
+                0 12px 40px rgba(0, 0, 0, 0.6),
+                0 0 60px rgba(224, 163, 8, 0.15);
+    max-width: 480px;
+    width: 100%;
+    overflow: hidden;
+    transform: translateY(8px);
+    transition: transform 0.22s ease;
+}
+.modal-overlay.modal-visible .modal-dialog { transform: translateY(0); }
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    background: linear-gradient(90deg, var(--negro-suave), var(--negro-oscuro));
+    border-bottom: 1px solid var(--fondo);
+    color: var(--dorado);
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+}
+.modal-close {
+    background: transparent;
+    border: none;
+    color: var(--gris);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 8px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+.modal-close:hover { color: var(--blanco); }
+.modal-body {
+    padding: 22px 20px;
+    color: var(--blanco);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+.modal-body p { margin: 0; }
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 14px 18px 18px;
+    background: var(--negro-oscuro);
+}
+.modal-actions .btn { min-width: 96px; }
+
+/* ===== Toast container ===== */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 10000;
+    pointer-events: none;
+    max-width: 360px;
+}
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--negro-oscuro);
+    border-left: 4px solid var(--cian);
+    color: var(--blanco);
+    font-size: 0.9rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: auto;
+}
+.toast.toast-visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+.toast-success  { border-left-color: var(--verde); }
+.toast-info     { border-left-color: var(--cian); }
+.toast-warning  { border-left-color: var(--dorado); }
+.toast-error    { border-left-color: var(--rojo); }
+.toast-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.toast-text { flex: 1; }
+
+/* ===== Refresh banners ===== */
+.refresh-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    border: 1px solid;
+    animation: bannerSlide 0.35s ease;
+}
+.refresh-banner[hidden] { display: none; }
+.refresh-banner-info {
+    background: rgba(0, 212, 255, 0.08);
+    border-color: var(--cian);
+    color: var(--cian-claro);
+}
+.refresh-banner-success {
+    background: rgba(0, 255, 136, 0.08);
+    border-color: var(--verde);
+    color: var(--verde);
+}
+@keyframes bannerSlide {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+    .toast-container { left: 16px; right: 16px; bottom: 16px; max-width: none; }
+    .modal-actions .btn { flex: 1; }
+}
+
+/* ============================================================
+   ONLINE STATUS — Indicador en tabla de admin users
+   Distingue entre "cuenta activa" (no baneada) y "en línea ahora".
+   ============================================================ */
+.online-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+.online-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.online-status-online {
+    background: rgba(0, 255, 136, 0.12);
+    color: var(--verde);
+}
+.online-status-online .online-status-dot {
+    background: var(--verde);
+    box-shadow: 0 0 6px var(--verde), 0 0 12px rgba(0, 255, 136, 0.5);
+    animation: onlinePulse 2s ease-in-out infinite;
+}
+.online-status-offline {
+    background: rgba(120, 120, 120, 0.12);
+    color: var(--gris);
+}
+.online-status-offline .online-status-dot {
+    background: var(--gris);
+}
+@keyframes onlinePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.7; transform: scale(1.15); }
+}
+
+/* En móvil, ocultar el texto y dejar solo el dot para ahorrar espacio */
+@media (max-width: 768px) {
+    .online-status-text { display: none; }
+    .online-status { padding: 4px; }
+}
+
+/* ============================================================
+   ADMIN UNLOCK — Pantalla de re-autenticación
+   ============================================================ */
+.admin-unlock-header {
+    text-align: center;
+    margin-bottom: 18px;
+}
+.admin-unlock-header h2 {
+    color: var(--dorado);
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+}
+.admin-unlock-header p {
+    margin: 4px 0;
+}
+.admin-unlock-header .small {
+    font-size: 0.8rem;
+    color: var(--gris);
+}

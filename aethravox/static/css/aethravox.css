@@ -1,0 +1,31 @@
+/* ============================================================
+   AETHRAVOX STUDIOS — Manifiesto CSS (punto de entrada)
+   ------------------------------------------------------------
+   Cada web tiene su propia carpeta en static/css/<web>/ con
+   minimo 3 archivos. Este archivo @importa el core compartido
+   y el CSS de cada web en orden. Editar el modulo correspondiente,
+   no este archivo (salvo para reordenar imports).
+   ============================================================ */
+
+@import url("core/base.css?v=21");
+@import url("core/components.css?v=21");
+@import url("core/i18n.css?v=21");
+@import url("core/part1.css?v=21");
+@import url("core/part2.css?v=21");
+@import url("chat/part1.css?v=21");
+@import url("chat/part2.css?v=21");
+@import url("chat/part3.css?v=21");
+@import url("chat/part4.css?v=21");
+@import url("chat/select.css?v=21");
+@import url("admin/components.css?v=21");
+@import url("admin/layout.css?v=21");
+@import url("admin/theme.css?v=21");
+@import url("transmit/components.css?v=21");
+@import url("transmit/layout.css?v=21");
+@import url("transmit/theme.css?v=21");
+@import url("hub/components.css?v=21");
+@import url("hub/layout.css?v=21");
+@import url("hub/theme.css?v=21");
+@import url("playground/components.css?v=21");
+@import url("playground/layout.css?v=21");
+@import url("playground/theme.css?v=21");

@@ -1,0 +1,429 @@
+/* ============================================================
+   NUEVO HEADER v2 — logo + nav + avatar (reemplaza el h1 centrado)
+   Mantiene la identidad negro+dorado+cian pero con navegación real.
+   ============================================================ */
+
+/* Reseteamos el header viejo: era text-align:center con un h1 enorme.
+   Ahora es una barra horizontal con logo a la izquierda y nav a la derecha. */
+.aethravox-header {
+    padding: 14px 20px;
+    text-align: left;
+    background: linear-gradient(180deg, #111113 0%, #0a0a0b 100%);
+    border-bottom: 1px solid var(--fondo);
+    margin-bottom: 30px;
+    position: sticky;
+    top: 0;
+    z-index: 70;
+    box-shadow: 0 1px 0 rgba(224, 163, 8, 0.08);
+}
+.aethravox-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+/* Logo: imagen real logo.png (525x553, un círculo grande con el ave/A y el
+   texto "Aethravox Studios" DENTRO). En desktop a 44px; en móvil a 56px para
+   que el círculo se vea entero y reconocible (a 44px el círculo ya cabe, pero
+   un poco más grande queda más claro en pantallas pequeñas). El logo es casi
+   cuadrado, así que el ancho crece con la altura manteniendo proporción. */
+.aethravox-logo {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    flex-shrink: 0;
+    line-height: 0;
+    /* Color dorado en el propio <a>: si por lo que sea la regla del
+       .aethravox-logo-text no aplica (p.ej. CSS cacheado), el link no cae al
+       color morado de "enlace visitado" del navegador, sino que hereda el
+       dorado de marca. */
+    color: var(--dorado);
+}
+.aethravox-logo-img {
+    height: 44px;
+    width: auto;
+    max-width: 200px;
+    display: block;
+    object-fit: contain;
+}
+/* Texto "Aethravox Studios" junto al logo. El logo.png lleva el texto dentro
+   de la imagen, pero en pantallas pequeñas ese texto interno no se lee bien,
+   así que añadimos una etiqueta de texto real al lado, con la identidad de
+   marca (dorado, mayúsculas, letter-spacing). Visible en TODOS los tamaños
+   (también móvil): en xs solo reducimos fuente/letter-spacing para que quepa
+   junto al icono del logo (70px) + el toggle hamburguesa, sin overflow. */
+.aethravox-logo-text {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--dorado);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-left: 10px;
+    white-space: nowrap;
+    line-height: 1;
+}
+.aethravox-logo:hover .aethravox-logo-text {
+    text-shadow: 0 0 10px var(--dorado-brillante);
+}
+@media (max-width: 480px) {
+    /* Móvil: fuente más pequeña para que "AETHRAVOX STUDIOS" quepa junto al
+       icono del logo y el botón hamburguesa sin desbordar ni saltar de línea. */
+    .aethravox-logo-text {
+        font-size: 0.8rem;
+        letter-spacing: 0.8px;
+        margin-left: 8px;
+    }
+}
+@media (max-width: 360px) {
+    /* Móvil muy estrecho (p.ej. iPhone SE 320px): reducimos aún más el texto
+       para que el logo + toggle hamburguesa quepan sin scroll horizontal. */
+    .aethravox-logo-text {
+        font-size: 0.7rem;
+        letter-spacing: 0.4px;
+    }
+}
+.aethravox-logo:hover .aethravox-logo-img {
+    filter: drop-shadow(0 0 6px var(--dorado-brillante));
+}
+
+/* El tagline sigue disponible para páginas sin sesión (login, register) */
+.aethravox-header .tagline {
+    color: var(--cian);
+    margin: 0;
+    font-size: 0.78rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.85;
+    flex: 1;
+    text-align: right;
+}
+
+/* Botón de cerrar sesión con icono SVG power (.btn-power). Sustituye al glifo
+   ⏻ (U+23FB), que no existe en la fuente Inter ni en muchas fuentes de móvil y
+   se renderizaba como un cuadro roto dentro del menú hamburguesa. El SVG usa
+   stroke="currentColor", así hereda el color del botón (gris → rojo en hover).
+   Desktop: icono only (34px). Móvil panel: icono + texto, full-width al fondo.
+   La variante .btn-power--block (dashboard "Mi cuenta") muestra texto siempre. */
+.btn-power {
+    background: transparent;
+    border: 1px solid #333;
+    color: var(--gris-claro);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    padding: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    white-space: nowrap;
+}
+.btn-power svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+    flex-shrink: 0;
+}
+/* En el header (desktop) solo se ve el icono; el texto va en el panel móvil
+   y en la variante bloque del dashboard. */
+.btn-power-text { display: none; }
+.btn-power:hover {
+    border-color: var(--rojo);
+    color: var(--rojo);
+    background: rgba(255, 62, 62, 0.08);
+}
+.btn-power:focus-visible {
+    outline: 2px solid var(--dorado-brillante);
+    outline-offset: 2px;
+}
+/* Variante bloque: botón ancho con texto (sección "Mi cuenta" del dashboard). */
+.btn-power--block {
+    width: 100%;
+    height: 46px;
+    padding: 0 18px;
+    font-size: 0.95rem;
+}
+.btn-power--block svg { width: 20px; height: 20px; }
+.btn-power--block .btn-power-text { display: inline; }
+
+/* Botón izquierdo del header (CAMALEÓN): un mismo botón hace de toggle del
+   sidebar (PC, /hub y /dashboard), de flecha ← "volver al panel" (PC, páginas
+   leaf) y de hamburguesa que abre el drawer de cuenta (móvil, todas las
+   páginas — es el ÚNICO acceso a logout en móvil). Lleva 4 SVGs y el CSS
+   muestra el que toca según viewport + página. Oculto en auth (sin sidebar ni
+   bottomnav) y en PC-fullscreen (la página lleva su propia flecha de back). */
+.aethravox-header-toggle {
+    display: none;
+    position: relative;
+    z-index: 70;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--gris-claro);
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+body:has(.aethravox-sidebar) .aethravox-header-toggle,
+body:has(.aethravox-bottomnav) .aethravox-header-toggle { display: inline-flex; }
+.aethravox-header-toggle:hover {
+    color: var(--dorado-claro);
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.08);
+}
+.aethravox-header-toggle:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 2px;
+}
+.aethravox-header-toggle .ico { display: none; }
+/* Móvil (≤720px), cualquier página autenticada: hamburguesa → abre el drawer
+   de cuenta. Es el ÚNICO acceso a logout en móvil (el bottom-nav no lo lleva),
+   así que la hamburguesa se mantiene en TODAS las páginas móviles. */
+@media (max-width: 720px) {
+    .aethravox-header-toggle .ico-hamburger { display: block; }
+}
+/* PC (≥721px) — el icono depende del tipo de página: */
+@media (min-width: 721px) {
+    /* Fullscreen (/chat, /transmitir, /playground): el botón se OCULTA. Estas
+       páginas llevan su propia flecha de back (chat-back, page-back), y en PC
+       no queremos la hamburguesa (3 rallitas) que parecía "modo móvil". */
+    body.app-fullscreen .aethravox-header-toggle { display: none !important; }
+    /* Página con sidebar (/hub, /dashboard): icono de sidebar abrir/cerrar
+       (colapsa/expande el sidebar lateral). */
+    body:not(.app-fullscreen):has(.aethravox-sidebar):not(.sidebar-collapsed) .aethravox-header-toggle .ico-sidebar-close { display: block; }
+    body:not(.app-fullscreen):has(.aethravox-sidebar).sidebar-collapsed .aethravox-header-toggle .ico-sidebar-open { display: block; }
+    /* Página SIN sidebar (leaf: communities, docs, friends, perfil…): flechita
+       ← al lado del nombre, vuelve al panel (data-back-url). */
+    body:not(.app-fullscreen):not(:has(.aethravox-sidebar)) .aethravox-header-toggle .ico-back { display: block; }
+}
+
+/* Botón descarga (DERECHA): icono del usuario (flecha abajo + bandeja).
+   Visible en TODAS las páginas autenticadas (PC, móvil y app-fullscreen):
+   se muestra cuando hay sidebar o bottomnav en el DOM. En auth (login/register)
+   no hay nada que descargar, así que se oculta. Acción pendiente de definir. */
+.aethravox-header-download {
+    display: none;
+    margin-left: auto;  /* empuja a la derecha aunque no haya tagline (móvil) */
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: var(--gris-claro);
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.aethravox-header-download:hover {
+    color: var(--dorado-claro);
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.08);
+}
+.aethravox-header-download:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 2px;
+}
+.aethravox-header-download svg { display: block; }
+body:has(.aethravox-sidebar) .aethravox-header-download,
+body:has(.aethravox-bottomnav) .aethravox-header-download { display: inline-flex; }
+
+/* ===== Responsive: tablet (<= 900px) — encoge nav ===== */
+@media (max-width: 900px) {
+    .aethravox-header-inner { gap: 12px; }
+    .aethravox-logo-img { height: 38px; max-width: 180px; }
+}
+
+/* ===== Responsive: móvil (<= 720px) — header con hamburguesa ===== */
+@media (max-width: 720px) {
+    .aethravox-header { padding: 12px 14px; margin-bottom: 18px; }
+    .aethravox-header-inner { flex-wrap: nowrap; }
+    /* En móvil solo comparten header: logo + hamburguesa. El logo completo
+       (logo.png, círculo con ave/A + texto) a 56px se ve entero y reconocible;
+       el texto interior es pequeño pero el icono queda claro. */
+    .aethravox-logo-img { height: 56px; max-width: 70px; }
+    .aethravox-header .tagline { display: none; }  /* en móvil el tagline sobra */
+
+    /* La visibilidad del toggle la decide el body:has(.aethravox-sidebar) /
+       .aethravox-bottomnav del bloque de arriba; aquí no hace falta repetirla.
+       En móvil el sidebar está oculto (display:none), así que el JS detecta
+       que no hay sidebar y abre el drawer en vez de colapsar nada. */
+}
+
+/* En app-fullscreen (/chat, /transmitir, /playground) el sidebar lateral está
+   oculto (display:none !important más arriba), así que el botón izquierdo del
+   header actúa de hamburguesa y abre el drawer de cuenta (único acceso a
+   logout en estas páginas). El icono lo elige el CSS del bloque del toggle:
+   body.app-fullscreen → .ico-hamburger. La visibilidad ya la cubre
+   body:has(.aethravox-sidebar), así que aquí no re-declaramos display. */
+
+/* ============================================================
+   ACCESIBILIDAD — prefers-reduced-motion: desactiva animaciones
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .app-card:hover { transform: none !important; }
+    .app-card:hover .app-card-icon { transform: none !important; }
+    .chat-msg { animation: none !important; }
+}
+
+/* ============================================================
+   MEJORA: focus-visible accesible (anillo dorado visible al tabular)
+   Antes solo había outline:none, ahora damos un anillo claro.
+   ============================================================ */
+:focus-visible {
+    outline: 2px solid var(--dorado);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.input-group input:focus-visible,
+.input-group select:focus-visible,
+.input-group textarea:focus-visible {
+    outline: none;  /* esos ya tienen su propio box-shadow dorado */
+}
+.aethravox-nav-link:focus-visible,
+.btn:focus-visible,
+.btn-icon:focus-visible {
+    outline-offset: 3px;
+}
+
+/* ============================================================
+   MEJORA: contraste del banner de app-card
+   Antes era un degradado casi invisible. Subimos opacidad.
+   Sin !important: así los inline styles de cards con tag-color
+   (como la card de Transmitir) siguen funcionando.
+   ============================================================ */
+.app-card-banner {
+    background: linear-gradient(135deg, rgba(224, 163, 8, 0.14) 0%, rgba(0, 212, 255, 0.09) 100%);
+}
+
+/* ============================================================
+   MEJORA: glows de hover más suaves (antes cansaban en grids grandes)
+   Reducimos intensidad del box-shadow en hover de cards/botones.
+   ============================================================ */
+.app-card:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 8px var(--tag-color, var(--dorado-brillante));
+}
+.btn-primary:hover {
+    box-shadow: 0 0 10px var(--dorado-brillante);
+    filter: brightness(1.05);
+}
+
+/* ============================================================
+   CHAT SIDEBAR — Sección de comunidades (árbol estilo Discord)
+   Las comunidades agrupan conversaciones-grupo. Se muestran como
+   <details> colapsables con sus canales (#grupo) dentro.
+   ============================================================ */
+.chat-list-section-title {
+    color: var(--gris);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 12px 12px 6px;
+    user-select: none;
+}
+
+/* Árbol de comunidad: <details> con summary clickeable */
+.chat-comm-tree {
+    padding: 0 6px;
+    margin-bottom: 4px;
+}
+.chat-comm-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--blanco);
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+    user-select: none;
+}
+.chat-comm-summary::-webkit-details-marker { display: none; }
+.chat-comm-summary:hover { background: rgba(255, 255, 255, 0.04); }
+/* Triángulo personalizado que rota al abrir */
+.chat-comm-summary::before {
+    content: '▸';
+    color: var(--gris);
+    font-size: 0.7rem;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+}
+.chat-comm-tree[open] .chat-comm-summary::before {
+    transform: rotate(90deg);
+    color: var(--dorado);
+}
+.chat-comm-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.chat-comm-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Contenedor de canales dentro de la comunidad */
+.chat-comm-groups {
+    padding: 4px 0 8px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.chat-list-channel {
+    padding-left: 14px !important;
+}
+.chat-channel-hash {
+    color: var(--gris);
+    font-weight: 700;
+    margin-right: 4px;
+    font-size: 1rem;
+    line-height: 1;
+    align-self: center;
+}
+.chat-list-channel.active .chat-channel-hash { color: var(--dorado); }
+.chat-list-channel-empty {
+    padding: 8px 12px 4px 22px;
+}
+.chat-comm-manage {
+    display: block;
+    margin: 6px 0 2px 22px;
+    padding: 6px 10px;
+    color: var(--gris);
+    font-size: 0.75rem;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+}
+.chat-comm-manage:hover {
+    color: var(--dorado);
+    background: rgba(224, 163, 8, 0.06);
+}
+

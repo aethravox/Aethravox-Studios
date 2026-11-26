@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar sesión — AethraMail</title>
+    <link rel="stylesheet" href="/static/css/correo/base.css">
+    <link rel="stylesheet" href="/static/css/correo/auth.css">
+</head>
+<body class="am-auth-body">
+<div class="am-auth-card">
+    <h1 class="am-auth-title">📨 AethraMail</h1>
+    <p class="am-auth-sub">Correo interno del gremio</p>
+
+    {% if let Some(e) = error %}<div class="am-alert am-alert-err">{{ e }}</div>{% endif %}
+
+    <form method="post" action="/login" class="am-form">
+        <label class="am-field">
+            <span>Dirección</span>
+            <div class="am-input-row">
+                <input type="text" name="address" value="{{ address }}" placeholder="usuario"
+                       autocapitalize="none" autocorrect="off" required>
+                <span class="am-at">@</span>
+                <select name="domain">
+                    {% for d in domains %}
+                    <option value="{{ d }}" {% if d.as_str() == domain.as_str() %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </label>
+        <label class="am-field">
+            <span>Contraseña</span>
+            <input type="password" name="password" required>
+        </label>
+        <button type="submit" class="am-btn am-btn-primary">Entrar</button>
+    </form>
+
+    <p class="am-auth-foot">¿No tenés cuenta? <a href="/register">Crear una</a></p>
+</div>
+</body>
+</html>

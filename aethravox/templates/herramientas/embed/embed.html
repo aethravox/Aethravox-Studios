@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Aethravox{% endblock %}
+{% block body_class %}app-fullscreen{% endblock %}
+{% block tagline %}Vista embebida{% endblock %}
+
+{% block content %}
+<div class="embed-wrap">
+    <div class="embed-toolbar">
+        <a href="/hub" class="btn btn-secondary btn-sm">← Hub</a>
+        <span class="embed-title">{{ title }}</span>
+        <a href="{{ external_url }}" target="_blank" class="btn btn-secondary btn-sm" title="Abrir en nueva pestaña">↗</a>
+    </div>
+    <iframe src="{{ external_url }}" class="embed-frame" title="{{ title }}"
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            referrerpolicy="no-referrer"></iframe>
+</div>
+{% endblock %}

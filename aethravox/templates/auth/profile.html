@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ username }} — Aethravox{% endblock %}
+{% block tagline %}Perfil de usuario{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <div class="profile-header">
+        <img src="{{ avatar }}" alt="avatar" class="profile-avatar">
+        <div class="profile-info">
+            <h2>
+                {{ display }}
+                {# Título principal: se ve junto al nombre en todo el sitio. #}
+                {% if let Some(t) = primary_title %}
+                <span class="title-badge title-{{ t.id }} fx-{{ t.effect }}"
+                      title="{{ t.description.as_deref().unwrap_or(t.name.as_str()) }}">{{ t.name }}</span>
+                {% endif %}
+            </h2>
+            <p class="muted">@{{ username }}</p>
+            <span class="role-badge role-{{ role_css_key }}">{{ role }}</span>
+        </div>
+    </div>
+
+    {# Hasta 3 títulos visibles elegidos por el usuario. #}
+    {% if !visible_titles.is_empty() %}
+    <div class="profile-titles-block">
+        <div class="stat-label">Títulos</div>
+        <div class="profile-titles-list">
+            {% for t in visible_titles %}
+            <span class="title-badge title-{{ t.id }} fx-{{ t.effect }}"
+                  title="{{ t.description.as_deref().unwrap_or(t.name.as_str()) }}">{{ t.name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="profile-stats">
+        <div class="stat">
+            <div class="stat-label">Miembro desde</div>
+            <div class="stat-value">{{ created_at }}</div>
+        </div>
+    </div>
+
+    {% if !bio.is_empty() %}
+    <div class="bio-block">
+        <div class="stat-label">Bio</div>
+        <div class="bio-content">{{ bio }}</div>
+    </div>
+    {% endif %}
+
+    <div class="dashboard-actions">
+        {% if is_self %}
+        <a href="/perfil" class="btn btn-primary">✏️ Editar mi perfil y títulos</a>
+        <a href="/dashboard" class="btn btn-secondary">🛡️ Ajustes de cuenta</a>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.profile-titles-block { margin-top: 16px; }
+.profile-titles-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+</style>
+{% endblock %}

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}{{ subject }} — Aethravox{% endblock %}
+{% block tagline %}Ticket #{{ ticket_id }}{% endblock %}
+
+{% block back_url %}/support{% endblock %}{% block content %}
+<div class="dashboard-card" id="ticket-card" data-ticket-id="{{ ticket_id }}">
+    <h2>{{ ticket_type }}: {{ subject }}</h2>
+    <p class="muted">
+        Creado por {{ owner_name }} el {{ created_at }} · Estado:
+        <span id="ticket-status-badge" class="ticket-badge ticket-badge-{{ status }}">
+            {%- if status == "open" -%}
+                Abierto
+            {%- else if status == "answered" -%}
+                {%- if reclamado_por_nombre != "" -%}
+                    Reclamado por {{ reclamado_por_nombre }}
+                {%- else -%}
+                    Respondido
+                {%- endif -%}
+            {%- else if status == "closed" -%}
+                {%- if resolucion == "terminado" -%}
+                    Terminado
+                {%- else if resolucion == "rechazado" -%}
+                    Rechazado
+                {%- else -%}
+                    Cerrado
+                {%- endif -%}
+            {%- endif -%}
+        </span>
+    </p>
+    <div class="alert alert-info" style="margin:14px 0">{{ body }}</div>
+
+    {# ===== Acciones del admin (reclamar / terminar / rechazar / cerrar) ===== #}
+    {% if is_admin && status != "closed" %}
+    <div class="ticket-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px">
+        <form method="POST" action="/support/ticket/{{ ticket_id }}/claim">
+            <button type="submit" class="btn btn-secondary btn-sm">Reclamar</button>
+        </form>
+        <form method="POST" action="/support/ticket/{{ ticket_id }}/resolve">
+            <button type="submit" class="btn btn-primary btn-sm">Terminar</button>
+        </form>
+        <form method="POST" action="/support/ticket/{{ ticket_id }}/reject">
+            <button type="submit" class="btn btn-secondary btn-sm">Rechazar</button>
+        </form>
+        <form method="POST" action="/support/ticket/{{ ticket_id }}/close"
+              onsubmit="return confirm('¿Cerrar este ticket?')">
+            <button type="submit" class="btn btn-secondary btn-sm">Cerrar</button>
+        </form>
+    </div>
+    {% endif %}
+    {# El dueño puede cerrar su propio ticket si no está cerrado #}
+    {% if !is_admin && status != "closed" %}
+    <div class="ticket-actions" style="margin:10px 0 18px">
+        <form method="POST" action="/support/ticket/{{ ticket_id }}/close"
+              onsubmit="return confirm('¿Cerrar tu ticket?')">
+            <button type="submit" class="btn btn-secondary btn-sm">Cerrar ticket</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <h3 class="section-title">Respuestas <span id="ticket-live-dot" class="ticket-live-dot" title="Tiempo real">●</span></h3>
+    <div id="ticket-messages">
+        {# Render inicial (server-side) para no-JS; el JS toma el control al cargar. #}
+        {% for m in messages %}
+        <div class="chat-msg {% if m.is_admin %}sent{% else %}received{% endif %}" style="max-width:90%;margin-bottom:8px" data-msg-id="{{ m.id }}">
+            <div class="chat-msg-sender">{{ m.sender_name }} {% if m.is_admin %}<span class="badge badge-custom">ADMIN</span>{% endif %}</div>
+            <div class="chat-msg-body">{{ m.body }}</div>
+            <div class="chat-msg-time">{{ m.created_at }}</div>
+        </div>
+        {% endfor %}
+        {% if messages.is_empty() %}
+        <p class="muted" id="ticket-no-msgs">Aún no hay respuestas.</p>
+        {% endif %}
+    </div>
+
+    {% if status != "closed" %}
+    <form id="ticket-reply-form" method="POST" action="/support/ticket/{{ ticket_id }}/reply" class="auth-form" style="margin-top:14px">
+        <div class="input-group">
+            <label>Responder</label>
+            <textarea name="body" id="ticket-reply-body" required rows="3" maxlength="2000" placeholder="Escribe tu respuesta..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="ticket-reply-btn">Responder</button>
+    </form>
+    {% else %}
+    <div class="alert" style="background:rgba(136,136,136,0.08);color:var(--gris);border-color:var(--fondo);margin-top:14px">
+        Este ticket está cerrado. No se pueden enviar más respuestas.
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.ticket-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    border: 1px solid var(--fondo);
+}
+.ticket-badge-open { color: var(--dorado); border-color: var(--dorado); background: rgba(224,163,8,0.08); }
+.ticket-badge-answered { color: var(--cian); border-color: var(--cian); background: rgba(0,212,255,0.08); }
+.ticket-badge-closed { color: var(--gris); border-color: var(--fondo); background: rgba(136,136,136,0.06); }
+.ticket-badge.terminado { color: var(--verde); border-color: var(--verde); background: rgba(0,255,136,0.08); }
+.ticket-badge.rechazado { color: var(--rojo); border-color: var(--rojo); background: rgba(255,62,62,0.08); }
+.ticket-actions form { display: inline; }
+.ticket-live-dot {
+    color: var(--verde);
+    font-size: 0.6rem;
+    margin-left: 4px;
+    animation: ticket-pulse 1.6s ease-in-out infinite;
+    vertical-align: middle;
+}
+@keyframes ticket-pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+</style>
+
+<script>
+(function() {
+    'use strict';
+    const ticketId = {{ ticket_id }};
+    const elMsgs = document.getElementById('ticket-messages');
+    const elBadge = document.getElementById('ticket-status-badge');
+    const form = document.getElementById('ticket-reply-form');
+    if (!elMsgs || !ticketId) return;
+
+    function badgeHtml(status, resolucion, reclamado) {
+        let label, cls;
+        if (status === 'open') { label = 'Abierto'; cls = 'ticket-badge-open'; }
+        else if (status === 'answered') {
+            if (reclamado) { label = 'Reclamado por ' + reclamado; }
+            else { label = 'Respondido'; }
+            cls = 'ticket-badge-answered';
+        } else if (status === 'closed') {
+            if (resolucion === 'terminado') { label = 'Terminado'; cls = 'terminado'; }
+            else if (resolucion === 'rechazado') { label = 'Rechazado'; cls = 'rechazado'; }
+            else { label = 'Cerrado'; cls = 'ticket-badge-closed'; }
+        } else { label = status; cls = ''; }
+        return '<span id="ticket-status-badge" class="ticket-badge ' + cls + '">' + label + '</span>';
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function renderMessages(msgs, status, resolucion, reclamado) {
+        // Repinta la lista entera con la versión más fresca del servidor.
+        // Antes de vaciar, recordamos si el usuario estaba pegado al final para
+        // no robarle el scroll si está leyendo historial arriba.
+        const container = elMsgs;
+        const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+        container.innerHTML = '';
+        if (!msgs.length) {
+            const p = document.createElement('p');
+            p.className = 'muted'; p.id = 'ticket-no-msgs';
+            p.textContent = 'Aún no hay respuestas.';
+            container.appendChild(p);
+        } else {
+            for (const m of msgs) {
+                const div = document.createElement('div');
+                div.className = 'chat-msg ' + (m.is_admin ? 'sent' : 'received');
+                div.style.cssText = 'max-width:90%;margin-bottom:8px';
+                const sender = document.createElement('div');
+                sender.className = 'chat-msg-sender';
+                sender.innerHTML = escapeHtml(m.sender) + (m.is_admin ? ' <span class="badge badge-custom">ADMIN</span>' : '');
+                const bodyEl = document.createElement('div');
+                bodyEl.className = 'chat-msg-body';
+                bodyEl.textContent = m.body;
+                const time = document.createElement('div');
+                time.className = 'chat-msg-time';
+                time.textContent = m.created_at;
+                div.append(sender, bodyEl, time);
+                container.appendChild(div);
+            }
+        }
+        // Solo auto-scroll abajo si ya estaba ahí; si no, respeta su lectura.
+        if (wasNearBottom && container.lastElementChild) {
+            container.lastElementChild.scrollIntoView({ block: 'end' });
+        }
+        // Actualiza el badge de estado en su sitio.
+        const oldBadge = document.getElementById('ticket-status-badge');
+        if (oldBadge) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = badgeHtml(status, resolucion, reclamado);
+            oldBadge.replaceWith(tmp.firstElementChild);
+        }
+    }
+
+    // Para evitar reflasheo cada 3s, solo repintamos cuando cambia el último id
+    // de mensaje o el estado del ticket.
+    let lastMaxId = -1;
+    let lastStatusKey = '';
+
+    async function poll() {
+        try {
+            const r = await fetch('/api/support/ticket/' + ticketId + '/messages', { headers: { 'Accept': 'application/json' } });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!d || !d.messages) return;
+            const maxId = d.messages.reduce((mx, m) => Math.max(mx, m.id || 0), 0);
+            const statusKey = (d.status || '') + '|' + (d.resolucion || '') + '|' + (d.reclamado_por || '');
+            if (maxId !== lastMaxId || statusKey !== lastStatusKey) {
+                lastMaxId = maxId;
+                lastStatusKey = statusKey;
+                renderMessages(d.messages, d.status || 'open', d.resolucion || '', d.reclamado_por || '');
+            }
+        } catch (e) { /* red silenciosa: reintentamos en el siguiente tick */ }
+    }
+
+    // Polling cada 3s — sensación de tiempo real sin WebSockets.
+    poll();
+    setInterval(poll, 3000);
+
+    // Envío AJAX: intercepta el submit para no recargar la página.
+    if (form) {
+        const body = document.getElementById('ticket-reply-body');
+        const btn = document.getElementById('ticket-reply-btn');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = (body.value || '').trim();
+            if (!text) return;
+            btn.disabled = true; btn.textContent = 'Enviando…';
+            let ok = false;
+            try {
+                const r = await fetch('/api/support/ticket/' + ticketId + '/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'body=' + encodeURIComponent(text),
+                });
+                const d = await r.json();
+                if (d && d.ok) {
+                    body.value = '';
+                    ok = true;
+                    await poll(); // refresca inmediato
+                } else if (d && d.error === 'cerrado') {
+                    alert('Este ticket está cerrado.');
+                }
+            } catch (err) { /* cae al fallback */ }
+            if (!ok) {
+                // Fallback: envío clásico por form POST (recarga). form.submit()
+                // (método del DOM) envía el formulario sin re-disparar el listener.
+                form.submit();
+            }
+            btn.disabled = false; btn.textContent = 'Responder';
+        });
+    }
+})();
+</script>
+{% endblock %}

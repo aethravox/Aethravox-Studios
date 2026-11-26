@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Asistencia — Aethravox{% endblock %}
+{% block tagline %}Sugerencias y reportes{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+{% block content %}
+<div class="dashboard-card">
+    <h2 style="display:flex;align-items:center;gap:10px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--dorado)" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/></svg>
+        Asistencia
+    </h2>
+    <p class="muted">{% if is_guest %}Envía una sugerencia o reporta un problema de inicio de sesión. El equipo te responderá.{% else %}Envía sugerencias, reportes o consultas. El equipo te responderá.{% endif %}</p>
+    {% if is_guest %}<p class="muted small">Inicia sesión para acceder a todas las categorías (reporte, consulta, bug) y ver el historial de tus tickets.</p>{% endif %}
+    {% if !flash.is_empty() %}<div class="flash-msg" style="padding:10px 14px;margin:12px 0;border-radius:8px;background:rgba(224,163,8,0.12);border:1px solid var(--dorado);color:var(--blanco)">{{ flash }}</div>{% endif %}
+
+    <details class="collapse" open>
+        <summary>Nuevo ticket</summary>
+        <form method="POST" action="/support/create" class="auth-form">
+            <div class="input-group">
+                <label>Tipo</label>
+                <select name="ticket_type">
+                    {% if is_guest %}
+                    <option value="bug">Errores de inicio de sesión</option>
+                    <option value="sugerencia">Sugerencia</option>
+                    {% else %}
+                    <option value="sugerencia">Sugerencia</option>
+                    <option value="reporte">Reporte</option>
+                    <option value="consulta">Consulta</option>
+                    <option value="bug">Bug</option>
+                    {% endif %}
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Asunto</label>
+                <input type="text" name="subject" required maxlength="100" placeholder="Resumen breve">
+            </div>
+            <div class="input-group">
+                <label>Mensaje</label>
+                <textarea name="body" required rows="4" maxlength="2000" placeholder="Describe tu sugerencia, reporte o consulta..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Enviar ticket</button>
+        </form>
+    </details>
+
+    {% if !is_guest %}
+    <h3 class="section-title" style="margin-top:20px">Mis tickets</h3>
+    <div class="table-container">
+        <table class="admin-table">
+            <thead><tr><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+            <tbody>
+            {% for t in tickets %}
+                <tr>
+                    <td>{{ t.ticket_type }}</td>
+                    <td>{{ t.subject }}</td>
+                    <td>
+                        {%- if t.status == "open" -%}
+                            <span class="status-active">Abierto</span>
+                        {%- else if t.status == "answered" -%}
+                            <span style="color:var(--cian)">Respondido</span>
+                        {%- else if t.status == "closed" -%}
+                            {%- if t.resolucion == "terminado" -%}
+                                <span style="color:var(--verde)">Terminado</span>
+                            {%- else if t.resolucion == "rechazado" -%}
+                                <span style="color:var(--rojo)">Rechazado</span>
+                            {%- else -%}
+                                <span class="muted">Cerrado</span>
+                            {%- endif -%}
+                        {%- endif -%}
+                    </td>
+                    <td class="muted">{{ t.created_at }}</td>
+                    <td><a href="/support/ticket/{{ t.id }}" class="btn btn-secondary btn-sm">Ver →</a></td>
+                </tr>
+            {% endfor %}
+            {% if tickets.is_empty() %}
+                <tr><td colspan="5" class="muted" style="text-align:center;padding:20px">No tienes tickets todavía.</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    <div class="dashboard-actions">
+    </div>
+</div>
+{% endblock %}

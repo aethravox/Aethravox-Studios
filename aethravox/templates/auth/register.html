@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Registro — Aethravox Studios{% endblock %}
+{% block tagline %}Crear cuenta{% endblock %}
+
+{% block header_icons %}{% endblock %}
+{% block profile_fab %}{% endblock %}
+{% block global_nav %}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <div class="auth-tabs">
+        <a href="/" class="tab">Iniciar Sesión</a>
+        <a href="/register" class="tab active">Registrarse</a>
+    </div>
+
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+
+    <form method="POST" action="/register" class="auth-form" id="register-form">
+        <div class="input-group">
+            <label for="username">Nombre de usuario</label>
+            <input type="text" id="username" name="username" autocomplete="username" required
+                   value="{{ username }}" placeholder="3-32 caracteres, letras/números/_/-/.">
+        </div>
+
+        <div class="input-group">
+            <label for="email">Correo interno (AethraMail)</label>
+            <input type="email" id="email" name="email" autocomplete="email" required
+                   value="{{ email }}" placeholder="tu_usuario@aethra.sac">
+            <div class="auth-domain-row" aria-label="Dominios permitidos">
+                <span class="muted small">Dominios válidos:</span>
+                <button type="button" class="auth-domain-btn" data-fill-email="email" data-domain="aethra.sac">@aethra.sac</button>
+                <button type="button" class="auth-domain-btn" data-fill-email="email" data-domain="shadow.sac">@shadow.sac</button>
+                <button type="button" class="auth-domain-btn" data-fill-email="email" data-domain="cents.sac">@cents.sac</button>
+            </div>
+            <div class="auth-inline-error" id="email-domain-err" hidden></div>
+            <p class="muted small" style="margin-top:4px;">
+                No se acepta Gmail ni correos externos. Usa tu buzón interno de AethraMail.
+            </p>
+        </div>
+
+        <div class="input-group">
+            <label for="correo_interno">Correo interno secundario (opcional)</label>
+            <input type="text" id="correo_interno" name="correo_interno" autocomplete="off"
+                   placeholder="p.ej. tu_usuario@shadow.sac">
+            <div class="auth-inline-error" id="interno-domain-err" hidden></div>
+            <p class="muted small" style="margin-top:4px;">
+                Si tienes otro buzón interno de AethraMail, vincúlalo ahora para recibir enlaces de recuperación.
+            </p>
+        </div>
+
+        <div class="input-group">
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" name="password" autocomplete="new-password" required
+                   placeholder="Mínimo 8 caracteres">
+        </div>
+
+        <div class="input-group">
+            <label for="password_confirm">Repite la contraseña</label>
+            <input type="password" id="password_confirm" name="password_confirm" autocomplete="new-password" required
+                   placeholder="Confirma tu contraseña secreta">
+        </div>
+
+        <div class="input-group input-checkbox-group">
+            <label class="remember accept-terms-label">
+                <input type="checkbox" name="accept_terms" value="1" id="accept_terms" required>
+                <span>He leído y acepto los <a href="/privacidad" target="_blank" rel="noopener">Términos y la Política de Privacidad</a>.</span>
+            </label>
+            <p class="muted small accept-terms-hint">
+                Al registrarte consentes el tratamiento de tus datos según la
+                <a href="/privacidad" target="_blank" rel="noopener">política de privacidad</a>.
+                Puedes leer ambos documentos completos en
+                <a href="/terminos" target="_blank" rel="noopener">/terminos</a>
+                y <a href="/privacidad" target="_blank" rel="noopener">/privacidad</a>
+                sin necesidad de iniciar sesión.
+            </p>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Crear cuenta</button>
+    </form>
+
+    <div class="auth-foot">
+        ¿Ya tienes cuenta?
+        <a href="/">Inicia sesión</a>
+    </div>
+</div>
+
+<script>
+(function() {
+    var ALLOWED = ['aethra.sac', 'shadow.sac', 'cents.sac'];
+    function validateInternal(val) {
+        var v = (val || '').trim().toLowerCase();
+        if (!v) return '';
+        var at = v.indexOf('@');
+        if (at <= 0 || v.indexOf('@', at + 1) !== -1) return 'Introduce una dirección válida (usuario@aethra.sac).';
+        var dom = v.slice(at + 1);
+        if (dom === 'gmail.com' || dom === 'googlemail.com') {
+            return 'No se admite Gmail ni correos externos. Usa @aethra.sac, @shadow.sac o @cents.sac.';
+        }
+        if (ALLOWED.indexOf(dom) === -1) {
+            return 'Dominio no admitido. Solo se permiten @aethra.sac, @shadow.sac o @cents.sac.';
+        }
+        return '';
+    }
+    var emailEl = document.getElementById('email');
+    var emailErr = document.getElementById('email-domain-err');
+    var intEl = document.getElementById('correo_interno');
+    var intErr = document.getElementById('interno-domain-err');
+    var form = document.getElementById('register-form');
+
+    function checkField(el, errEl, optional) {
+        if (!el || !errEl) return true;
+        var val = el.value.trim();
+        if (optional && !val) { errEl.hidden = true; return true; }
+        var msg = validateInternal(val);
+        if (msg) { errEl.textContent = msg; errEl.hidden = false; return false; }
+        errEl.hidden = true;
+        return true;
+    }
+
+    document.querySelectorAll('[data-fill-email]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var dom = btn.getAttribute('data-domain');
+            var userEl = document.getElementById('username');
+            var cur = (emailEl.value || '').trim();
+            var local = cur.indexOf('@') !== -1 ? cur.split('@')[0] : (cur || (userEl && userEl.value.trim()) || 'usuario');
+            emailEl.value = local + '@' + dom;
+            checkField(emailEl, emailErr, false);
+        });
+    });
+    if (emailEl) emailEl.addEventListener('input', function() { checkField(emailEl, emailErr, false); });
+    if (intEl) intEl.addEventListener('input', function() { checkField(intEl, intErr, true); });
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            var ok1 = checkField(emailEl, emailErr, false);
+            var ok2 = checkField(intEl, intErr, true);
+            if (!ok1 || !ok2) e.preventDefault();
+        });
+    }
+})();
+</script>
+{% endblock %}

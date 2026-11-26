@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Panel — Aethravox Studios{% endblock %}
+{% block tagline %}Panel principal{% endblock %}
+{% block header_nav %}{# nav global ahora en sidebar/bottom-nav (base.html); el header solo lleva logo + tagline #}{% endblock %}
+
+{# Invitado: mostrar login/registro en el header (Sección 3.3). #}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px">
+    <a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a>
+    <a href="/register" class="btn btn-primary btn-sm">Registrarse</a>
+</span>{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/hub.css?v=1">
+{% endblock %}
+
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+
+{% block content %}
+<div class="hub-welcome">
+    <div class="hub-welcome-left">
+        <img src="{{ avatar }}" alt="avatar" class="hub-avatar">
+        <div class="hub-welcome-text">
+            <h2>Hola, <span class="gold">{{ display }}</span></h2>
+            <p class="hub-welcome-meta">
+                <span>Rol: <span class="role-badge role-{{ role_css_key }}">{{ role_display }}</span></span>
+                <span>· <span class="status-dot-ok" aria-hidden="true"></span> <span id="stat-online" class="tabular-nums">…</span> en línea</span>
+                <span>· <span id="stat-docs" class="tabular-nums">…</span> documentos</span>
+                <span>· <span class="tabular-nums">{{ owner_count + admin_count + staff_count + user_count }}</span> registrados</span>
+            </p>
+            {% if is_guest %}
+            <p class="muted" style="margin-top:8px">Estás viendo el panel como <strong>invitado</strong>.
+            Inicia sesión para acceder a chat, amigos, dashboard, transmitir y más.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% if !categories.is_empty() %}
+    <div class="hub-welcome-controls">
+        <div class="hub-search-wrap">
+            <svg class="hub-search-ico" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="hub-app-search" class="hub-search-input" placeholder="Buscar aplicación…" autocomplete="off" aria-label="Buscar aplicación">
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# Sección 4: filtro de categorías + cuadrícula 3-col por categoría (1:1 con preview React). #}
+{% if categories.is_empty() %}
+<div class="empty-state">
+    <div style="margin-bottom:12px;color:var(--text-muted);display:flex;justify-content:center">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+    </div>
+    <h3>No hay secciones disponibles</h3>
+    <p class="muted">{% if is_guest %}Inicia sesión para ver más secciones.{% else %}Contacta al Owner para que te asigne permisos.{% endif %}</p>
+</div>
+{% else %}
+<div class="hub-filter-bar" id="hub-category-filters" role="group" aria-label="Filtrar por categoría">
+    <button type="button" class="hub-filter-btn is-active" data-cat-filter="all">Todas</button>
+    {% for c in categories %}
+    <button type="button" class="hub-filter-btn" data-cat-filter="{{ c.slug }}">{{ c.name }} ({{ c.items.len() }})</button>
+    {% endfor %}
+</div>
+<div id="hub-empty-filter" class="empty-state" hidden style="border:1px solid var(--border-subtle);border-radius:12px;background:var(--bg-surface);">
+    <h3>Sin coincidencias</h3>
+    <p class="muted">No hay aplicaciones que coincidan con tu búsqueda o filtro.</p>
+</div>
+{% for c in categories %}{% include "hub/_category_row.html" %}{% endfor %}
+{% endif %}
+
+{# Sección 4.10: el panel de administración vive abajo del hub, solo si can_access_admin. #}
+{% if can_access_admin %}
+<div class="hub-admin-link">
+    <a href="/admin" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        Panel de administración
+    </a>
+</div>
+{% endif %}
+
+{# Modal que aparece cuando el usuario hace click en una card con tag próximamente/mantenimiento #}
+<div id="locked-web-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="locked-web-title">
+        <div class="modal-header">
+            <span id="locked-web-title">Información de disponibilidad</span>
+            <button type="button" class="modal-close" onclick="hideLockedWebModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p id="locked-web-message" style="font-size:1rem; line-height:1.6; color: var(--blanco);"></p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-primary" onclick="hideLockedWebModal()">Entendido</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var searchEl = document.getElementById('hub-app-search');
+    var filterBar = document.getElementById('hub-category-filters');
+    var emptyEl = document.getElementById('hub-empty-filter');
+    if (!filterBar) return;
+    var activeCat = 'all';
+
+    var totalCards = document.querySelectorAll('.cat-row .app-card-mini').length;
+    var allBtn = filterBar.querySelector('[data-cat-filter="all"]');
+    if (allBtn) allBtn.textContent = 'Todas (' + totalCards + ')';
+
+    function applyHubFilters() {
+        var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+        var anyRowVisible = false;
+        document.querySelectorAll('.cat-row[data-cat-slug]').forEach(function(row) {
+            var cat = row.getAttribute('data-cat-slug');
+            var catMatch = (activeCat === 'all' || cat === activeCat);
+            var visibleInRow = 0;
+            row.querySelectorAll('.app-card-mini').forEach(function(card) {
+                var text = (card.getAttribute('data-search') || card.textContent || '').toLowerCase();
+                var ok = catMatch && (!q || text.indexOf(q) !== -1);
+                card.hidden = !ok;
+                if (ok) visibleInRow++;
+            });
+            row.hidden = visibleInRow === 0;
+            if (visibleInRow > 0) anyRowVisible = true;
+        });
+        if (emptyEl) emptyEl.hidden = anyRowVisible;
+    }
+
+    if (searchEl) searchEl.addEventListener('input', applyHubFilters);
+    filterBar.querySelectorAll('.hub-filter-btn[data-cat-filter]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activeCat = btn.getAttribute('data-cat-filter') || 'all';
+            filterBar.querySelectorAll('.hub-filter-btn').forEach(function(b) {
+                b.classList.toggle('is-active', b === btn);
+            });
+            applyHubFilters();
+        });
+    });
+})();
+
+function showLockedWebModal(name, id) {
+    // Busca la mini-card por data attribute (Sección 4: cards ahora son .app-card-mini)
+    const card = document.querySelector('.app-card-mini[onclick*="' + id + '"]');
+    if (!card) return;
+    const msg = card.getAttribute('data-tag-msg') || 'Esta sección no está disponible en este momento.';
+    document.getElementById('locked-web-message').textContent = msg;
+    const modal = document.getElementById('locked-web-modal');
+    modal.hidden = false;
+    requestAnimationFrame(() => modal.classList.add('modal-visible'));
+}
+function hideLockedWebModal() {
+    const modal = document.getElementById('locked-web-modal');
+    modal.classList.remove('modal-visible');
+    setTimeout(() => { modal.hidden = true; }, 200);
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideLockedWebModal();
+});
+document.getElementById('locked-web-modal')?.addEventListener('click', e => {
+    if (e.target.id === 'locked-web-modal') hideLockedWebModal();
+});
+</script>
+
+<script>
+async function refreshHubStats() {
+    try {
+        const resp = await fetch('/api/stats');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const update = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && el.textContent != val) {
+                el.textContent = val;
+                el.classList.add('flash');
+                setTimeout(() => el.classList.remove('flash'), 500);
+            }
+        };
+        update('stat-online', data.online_count);
+        update('stat-docs', data.doc_count);
+        // Badges de mensajes sin leer en las tarjetas de Chat y Comunidades
+        // (ahora mini-cards en las tiras de categoría).
+        const setUnreadBadge = (role, n) => {
+            const el = document.querySelector('.app-card-unread-badge[data-unread="' + role + '"]');
+            if (!el) return;
+            if (n > 0) {
+                const txt = String(n);
+                if (el.textContent !== txt) el.textContent = txt;
+                el.hidden = false;
+            } else {
+                el.hidden = true;
+            }
+        };
+        setUnreadBadge('chat', data.chat_unread || 0);
+        setUnreadBadge('communities', data.community_unread || 0);
+    } catch (e) { console.error('refreshHubStats:', e); }
+}
+refreshHubStats();
+setInterval(refreshHubStats, 5000);
+</script>
+{% endblock %}

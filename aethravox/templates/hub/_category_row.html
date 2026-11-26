@@ -1,0 +1,51 @@
+<section class="cat-row" data-cat-slug="{{ c.slug }}">
+    <div class="cat-row-head">
+        <h3 class="cat-row-title">{{ c.name }}</h3>
+        <a class="cat-row-more" href="/categoria/{{ c.slug }}">Ver más →</a>
+    </div>
+    <div class="cat-row-track">
+        {% for w in c.items %}
+        <div class="app-card-mini {% if !w.is_clickable_for(role) %}app-card-locked{% endif %}"
+             data-slug="{{ w.slug }}"
+             data-cat-slug="{{ c.slug }}"
+             data-search="{{ w.name }} {{ w.description_or_empty() }} {{ w.slug }}"
+             style="--tag-color: {{ w.tag_color() }}"
+             {% if !w.is_clickable_for(role) %}
+             onclick="showLockedWebModal('{{ w.name }}', {{ w.id }})"
+             data-tag-msg="{{ w.tag_display_message() }}"
+             data-tag-opens="{% if w.has_opens_at() %}{{ w.tag_opens_at.unwrap().format("%Y-%m-%dT%H:%M") }}{% endif %}"
+             {% endif %}>
+            {% if w.is_clickable_for(role) %}<a href="{{ w.effective_url() }}" class="app-card-link">{% endif %}
+            <div class="app-card-icon-box">
+                {% include "hub/_web_icon.html" %}
+            </div>
+            <div class="app-card-content">
+                <div class="app-card-top">
+                    <div class="app-card-title-wrap">
+                        <div class="app-card-name">{{ w.name }}</div>
+                        {% if w.tag_normalized() != "activo" %}
+                        <span class="app-card-tag-inline">· {{ w.tag_label() }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="app-card-head-right">
+                        {% if w.slug == "chat" %}
+                        <span class="app-card-unread-badge" data-unread="chat" hidden></span>
+                        {% else if w.slug == "communities" %}
+                        <span class="app-card-unread-badge" data-unread="communities" hidden></span>
+                        {% endif %}
+                        {% if !w.is_clickable_for(role) %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="app-card-status-ico" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        {% else %}
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="app-card-status-ico app-card-arrow" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="app-card-body">
+                    <div class="app-card-desc">{{ w.description_or_empty() }}</div>
+                </div>
+            </div>
+            {% if w.is_clickable_for(role) %}</a>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>

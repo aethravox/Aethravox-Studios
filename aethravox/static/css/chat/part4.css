@@ -1,0 +1,273 @@
+/* ===== Chat: archivos, notas de voz, llamadas (V4) ===== */
+
+/* Tarjeta de archivo en el cuerpo del mensaje */
+.chat-file-card {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--negro-suave, #111);
+    border: 1px solid var(--fondo, #222);
+    border-radius: 10px;
+    padding: 10px 12px;
+    max-width: 280px;
+    text-decoration: none;
+    color: var(--texto-claro, #e5e5e5);
+    transition: border-color 0.15s, transform 0.1s;
+    cursor: pointer;
+}
+.chat-file-card:hover {
+    border-color: var(--dorado, #d4af37);
+    transform: translateY(-1px);
+}
+.chat-file-card:active { transform: translateY(0); }
+.chat-file-icon {
+    font-size: 1.8rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.chat-file-meta {
+    display: flex; flex-direction: column;
+    flex: 1; min-width: 0;
+}
+.chat-file-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--blanco, #fff);
+}
+.chat-file-size {
+    font-size: 0.75rem;
+    color: var(--gris, #888);
+    margin-top: 2px;
+}
+.chat-file-dl {
+    font-size: 1.1rem;
+    color: var(--dorado, #d4af37);
+    flex-shrink: 0;
+}
+
+/* Nota de voz */
+.chat-voice-note {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--negro-suave, #111);
+    border: 1px solid var(--fondo, #222);
+    border-radius: 18px;
+    padding: 6px 10px;
+    max-width: 280px;
+}
+.chat-voice-note audio {
+    flex: 1;
+    height: 32px;
+    filter: invert(0.9) hue-rotate(180deg);
+}
+.chat-voice-mic { font-size: 1.2rem; flex-shrink: 0; }
+.chat-voice-dur {
+    font-size: 0.78rem;
+    color: var(--gris, #888);
+    flex-shrink: 0;
+    min-width: 36px;
+    text-align: right;
+}
+
+/* Pill de grabación en la barra de input */
+.chat-voice-rec-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(220, 53, 69, 0.15);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    border-radius: 16px;
+    padding: 4px 8px;
+    color: #ff8a8a;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+.chat-voice-rec-dot {
+    width: 8px; height: 8px;
+    background: #ff4d4d;
+    border-radius: 50%;
+    animation: chat-voice-pulse 1s infinite;
+}
+@keyframes chat-voice-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+}
+.chat-voice-rec-pill button {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0 4px;
+}
+.chat-voice-rec-pill #chat-voice-stop { color: #10b981; }
+.chat-voice-rec-pill #chat-voice-cancel { color: #ff6b6b; }
+#chat-voice-btn.is-recording .chat-mic-bg {
+    fill: #dc3545;  /* fondo rojo del SVG mientras graba */
+}
+#chat-voice-btn.is-recording {
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.45);
+    animation: chat-mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes chat-mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.45); }
+    50%      { box-shadow: 0 0 0 7px rgba(220, 53, 69, 0.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #chat-voice-btn.is-recording { animation: none; }
+}
+
+/* Botones de llamada en el header del chat */
+.chat-call-buttons {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-left: auto;  /* empuja los botones a la derecha del header */
+    flex-shrink: 0;
+}
+.chat-call-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--gris-claro, #b0b0b0);
+    font-size: 1.05rem;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.chat-call-btn:hover {
+    background: rgba(212, 175, 55, 0.1);
+    color: var(--dorado, #d4af37);
+    border-color: rgba(212, 175, 55, 0.3);
+}
+
+/* Overlay de llamada */
+.call-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+.call-overlay.call-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.call-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+#call-remote-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+#call-remote-video[hidden] { display: none; }
+.call-local-thumb {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 140px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 2px solid var(--dorado, #d4af37);
+    background: #000;
+    z-index: 2;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.call-local-thumb[hidden] { display: none; }
+.call-info {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 10px 14px;
+    border-radius: 10px;
+}
+.call-name {
+    color: var(--blanco, #fff);
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+.call-status {
+    color: var(--dorado, #d4af37);
+    font-size: 0.85rem;
+}
+.call-timer {
+    color: var(--gris-claro, #b0b0b0);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+.call-controls {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    display: flex;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 12px 18px;
+    border-radius: 36px;
+}
+.call-ctrl {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 1.3rem;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.call-ctrl:hover { background: rgba(255, 255, 255, 0.22); transform: scale(1.05); }
+.call-ctrl.is-off { background: rgba(220, 53, 69, 0.5); }
+.call-ctrl-end { background: #c0392b; width: 60px; height: 60px; }
+.call-ctrl-end:hover { background: #e74c3c; }
+
+/* Modal llamada entrante: un poco más pequeño */
+.modal-dialog-sm {
+    max-width: 360px;
+    width: 92%;
+}
+
+/* Responsive: en móvil el thumb local es más chico y la info más compacta */
+@media (max-width: 720px) {
+    .call-local-thumb { width: 90px; height: 120px; top: 10px; right: 10px; }
+    .call-info { padding: 8px 10px; top: 10px; left: 10px; }
+    .call-name { font-size: 0.95rem; }
+    .call-controls { bottom: 20px; padding: 8px 12px; gap: 8px; }
+    .call-ctrl { width: 44px; height: 44px; font-size: 1.1rem; }
+    .call-ctrl-end { width: 52px; height: 52px; }
+    .chat-file-card { max-width: 220px; }
+    .chat-voice-note { max-width: 220px; }
+    /* En móvil la barra de input tiene muchos botones; reducir paddings */
+    .chat-input-bar { padding: 6px 6px; gap: 4px; }
+    /* En móvil la barra de input tiene muchos botones; reducir paddings.
+       El voice-btn lleva un SVG que llena el slot 40×40, así que padding=0. */
+    #chat-attach { padding: 6px 6px; font-size: 1rem; }
+    #chat-voice-btn { padding: 0; }
+    #chat-voice-btn .chat-mic-icon { width: 36px; height: 36px; }
+    #chat-voice-rec-pill { font-size: 0.72rem; padding: 3px 6px; }
+    /* Los botones de llamada van pegados al nombre en móvil */
+    .chat-call-buttons { gap: 2px; }
+    .chat-call-btn { padding: 6px 7px; font-size: 0.95rem; }
+}

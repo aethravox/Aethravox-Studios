@@ -1,0 +1,213 @@
+/* ===== Chat message management: menú contextual, edición, borrado ===== */
+
+/* Botón ⋯ que aparece al hover sobre un mensaje.
+   Va DENTRO del flujo flex del .chat-msg (al lado del content), no absoluto,
+   así nunca se solapa con el texto. */
+.chat-msg-menu-btn {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    color: var(--dorado);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+.chat-msg:hover .chat-msg-menu-btn {
+    opacity: 1;
+}
+.chat-msg-menu-btn:hover {
+    background: rgba(0, 0, 0, 0.75);
+    border-color: var(--dorado);
+}
+@media (max-width: 768px) {
+    /* En móvil el botón ⋯ se OCULTA: las opciones se abren manteniendo
+       presionado el mensaje (long-press, implementado en chat.html).
+       Así las burbujas quedan limpias y no estorba el icono. */
+    .chat-msg-menu-btn {
+        display: none;
+    }
+}
+
+/* Menú contextual flotante */
+.chat-context-menu {
+    position: fixed;
+    background: var(--negro-oscuro);
+    border: 1px solid var(--dorado);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    padding: 6px;
+    min-width: 180px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.chat-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--texto-claro);
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    transition: background 0.12s ease;
+}
+.chat-context-item:hover {
+    background: rgba(255, 215, 0, 0.08);
+    color: var(--dorado);
+}
+.chat-context-item.danger {
+    color: #ff6b6b;
+}
+.chat-context-item.danger:hover {
+    background: rgba(255, 80, 80, 0.12);
+    color: #ff8a8a;
+}
+.chat-context-item.is-disabled,
+.chat-context-item[disabled] {
+    color: var(--gris);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.chat-context-item.is-disabled:hover {
+    background: transparent;
+    color: var(--gris);
+}
+.chat-context-icon {
+    width: 18px;
+    text-align: center;
+    font-size: 1rem;
+    opacity: 0.85;
+}
+
+/* Badge "editado" junto al body */
+.chat-msg-edited-badge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-style: italic;
+    opacity: 0.7;
+    vertical-align: middle;
+}
+
+/* Mensaje borrado */
+.chat-msg-deleted {
+    font-style: italic;
+    color: var(--muted);
+    opacity: 0.6;
+    font-size: 0.9rem;
+    user-select: none;
+}
+.chat-msg[data-deleted="1"] {
+    opacity: 0.55;
+}
+.chat-msg[data-deleted="1"] .chat-msg-body {
+    pointer-events: none;
+}
+
+/* Editor inline (textarea + botones) */
+.chat-edit-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+.chat-edit-input {
+    width: 100%;
+    background: var(--negro-oscuro);
+    border: 1px solid var(--dorado);
+    color: var(--texto-claro);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.92rem;
+    resize: none;
+    min-height: 36px;
+    outline: none;
+}
+.chat-edit-input:focus {
+    border-color: var(--dorado-brillo);
+    box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.15);
+}
+.chat-edit-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* Modal info del mensaje */
+.msg-info-body {
+    background: var(--negro-oscuro);
+    border: 1px solid var(--fondo);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+    word-break: break-word;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.msg-info-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.msg-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.msg-info-row:last-child {
+    border-bottom: none;
+}
+.msg-info-row > span {
+    color: var(--muted);
+}
+.msg-info-row > strong {
+    color: var(--texto-claro);
+    font-weight: 500;
+    text-align: right;
+}
+.msg-info-row.danger > strong {
+    color: #ff6b6b;
+}
+
+/* Botón de peligro (borrar) */
+.btn-danger {
+    background: linear-gradient(135deg, #c0392b, #8e2b1f);
+    color: #fff;
+    border: 1px solid #c0392b;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+.btn-danger:hover {
+    filter: brightness(1.15);
+}
+.btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+

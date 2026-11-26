@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Descargas — Aethravox{% endblock %}
+{% block tagline %}Clientes nativos{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <h2>⬇️ Descargas</h2>
+    <p class="muted">Clientes nativos de Aethravox Studios. Recomendados para juegos 3D y para compartir pantalla desde móvil (la versión web no soporta captura de pantalla en Android/iOS).</p>
+
+    {% for p in platforms %}
+    <section class="dl-platform">
+        <h3 class="dl-platform-title">{{ p.icon }} {{ p.name }}
+            {% if p.coming_soon %}<span class="badge badge-soon">Próximamente</span>{% endif %}
+        </h3>
+
+        {% if p.coming_soon %}
+        <p class="muted">Soporte en camino. {%- if p.key == "macos" %} Requiere macOS para compilar/notarizar.{% else if p.key == "ios" %} Requiere cuenta Apple Developer ($99/año).{% endif %}</p>
+        {% else if p.apps.is_empty() %}
+        <p class="muted">Sin archivos publicados todavía.</p>
+        {% else %}
+        <div class="dl-apps">
+            {% for a in p.apps %}
+            <div class="dl-app">
+                <div class="dl-app-name">{{ a.name }}</div>
+                <ul class="dl-files">
+                    {% for f in a.files %}
+                    <li>
+                        <a href="{{ f.url }}" class="btn btn-primary btn-sm" download>⬇️ {{ f.orig_name }}</a>
+                        <span class="muted small">{{ f.version }} · {{ f.size_mb }} · {{ f.created_at }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+    {% endfor %}
+</div>
+
+<style>
+.dl-platform { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--fondo, #1a1a1a); }
+.dl-platform:first-of-type { border-top: none; margin-top: 8px; }
+.dl-platform-title { margin: 0 0 8px; }
+.badge-soon {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px; margin-left: 6px;
+    background: rgba(255,140,66,.12); color: #ff8c42; border: 1px solid rgba(255,140,66,.3);
+}
+.dl-apps { display: grid; gap: 12px; }
+.dl-app {
+    background: var(--negro, #050505);
+    border: 1px solid var(--fondo, #1a1a1a);
+    border-radius: 10px; padding: 12px 14px;
+}
+.dl-app-name { font-weight: 700; color: var(--dorado, #c9a227); margin-bottom: 8px; }
+.dl-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dl-files li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dl-files .small { font-size: 0.78rem; }
+</style>
+{% endblock %}

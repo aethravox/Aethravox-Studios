@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover{% block viewport_extra %}{% endblock %}">
+    <meta name="theme-color" content="#050505">
+    <title>{% block title %}Aethravox Studios{% endblock %}</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/img/favicon-192.png">
+    <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+    <script>window.AETHRAVOX_CLIENT=(function(){try{var m=document.cookie.match(/(?:^|;\s*)aethravox_client=native/);return m?"native":"web";}catch(e){return "web";}})();</script>
+    <link rel="stylesheet" href="/static/fonts/inter.css">
+    <link rel="stylesheet" href="/static/css/aethravox.css?v=21">
+    {# Colores de rol generados server-side desde la DB (evita FOUC de los
+       badges: antes role_colors.js los pintaba tarde vía fetch). /role-colors.css
+       va fuera de /static porque /static es un nest_service(ServeDir) y una
+       ruta explícita bajo ese prefijo haría chocar el router de axum. #}
+    <link rel="stylesheet" href="/role-colors.css">
+    {# Colores de los títulos (badges cosméticos). Mismo patrón que
+       /role-colors.css: CSS dinámico enlazado en <head> para evitar FOUC. #}
+    <link rel="stylesheet" href="/title-colors.css">
+    {# role_colors.js: eliminado. Daba 404 (el archivo no existe en static/js/)
+       y su función (pintar el nombre display del rol en badges dinámicos) ya
+       la cubre /role-colors.css + el server-side role_display() en cada
+       handler. #}
+    {# CSS extra por página (Sección 4: hub.css para el hub categorizado). #}
+    <link rel="stylesheet" href="/static/css/themes/theme-system.css?v=2">
+    <link rel="stylesheet" href="/static/css/themes/aethravox.css?v=1" data-theme-css>
+    {# Nuevo diseño (portado de la maqueta React): tipografías + hoja que se
+       carga la ÚLTIMA para ganar a las reglas anteriores. Para volver al
+       diseño viejo, borrar estas 4 líneas. #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/themes/preview-look.css?v=1">
+    <script>(function(){try{var t=localStorage.getItem('aethravox_theme');if(t==='aethravox'||t==='shadow'||t==='commoncents'){document.documentElement.setAttribute('data-theme',t);var l=document.querySelector('link[data-theme-css]');if(l)l.href='/static/css/themes/'+t+'.css?v=1';}else{document.documentElement.setAttribute('data-theme','aethravox');}var m=localStorage.getItem('aethravox_color_mode');document.documentElement.setAttribute('data-mode',m==='light'?'light':'dark');}catch(e){}})();</script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}default{% endblock %}">
+    <header class="aethravox-header">
+        <div class="aethravox-header-inner">
+            {# Botón izquierdo (CAMALEÓN): un solo botón con 4 SVGs que el CSS
+               elige según contexto —
+               · móvil (≤720px), cualquier página → hamburguesa, abre el drawer
+                 de cuenta (ÚNICO acceso a logout en móvil/fullscreen, ya que
+                 el bottom-nav no lleva logout)
+               · PC (≥721px) con sidebar (/hub, /dashboard) → icono de sidebar;
+                 colapsa/expande el sidebar (estado persistido en localStorage)
+               · PC (≥721px) sin sidebar (páginas leaf) → flechita ←, vuelve
+                 al panel (data-back-url, por defecto /hub)
+               · PC (≥721px) fullscreen → botón OCULTO (la página lleva su propia
+                 flecha de back: chat-back, page-back…)
+               id="aethravox-fab-menu" conservado para el JS del drawer. #}
+            <button type="button" class="aethravox-header-toggle" id="aethravox-fab-menu"
+                    aria-label="Menú" aria-expanded="false"
+                    aria-controls="aethravox-account-drawer"
+                    data-back-url="{% block back_url %}/hub{% endblock %}">
+                <svg class="ico ico-hamburger" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <line x1="4" y1="6" x2="20" y2="6"></line>
+                    <line x1="4" y1="12" x2="20" y2="12"></line>
+                    <line x1="4" y1="18" x2="20" y2="18"></line>
+                </svg>
+                <svg class="ico ico-sidebar-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="4" y="4" width="16" height="16" rx="3" ry="3"></rect>
+                    <line x1="9" y1="7" x2="9" y2="17"></line>
+                    <polyline points="15 10 12 12 15 14"></polyline>
+                </svg>
+                <svg class="ico ico-sidebar-open" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="4" y="4" width="16" height="16" rx="3" ry="3"></rect>
+                    <line x1="9" y1="7" x2="9" y2="17"></line>
+                    <polyline points="13 10 16 12 13 14"></polyline>
+                </svg>
+                <svg class="ico ico-back" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+            </button>
+            {# Logo + texto: ya NO enlaza a /hub (se llega al hub desde el sidebar
+               en PC o la bottom-nav en móvil). Es branding puro, sin navegación,
+               para que al tocarlo no te saque de la página actual. #}
+            <span class="aethravox-logo" aria-label="Aethravox Studios">
+                <img src="/static/img/logo.png" alt="Aethravox Studios" class="aethravox-logo-img">
+                <span class="aethravox-logo-text">Aethravox Studios</span>
+            </span>
+            <span class="aethravox-header-sep" aria-hidden="true">/</span>
+            <span class="tagline aethravox-header-subtitle">{% block tagline %}AI Engineers · App Dev · Games{% endblock %}</span>
+            {% block header_nav %}{% endblock %}
+            <div class="aethravox-header-actions">
+                {% block header_auth %}{% endblock %}
+                {% block header_icons %}{% endblock %}
+                <button type="button" class="aethravox-header-mode" id="aethravox-mode-toggle"
+                        aria-label="Cambiar modo claro u oscuro" title="Cambiar modo claro / oscuro">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                </button>
+                <button type="button" class="aethravox-header-aris" id="aethravox-header-aris"
+                        aria-label="Abrir Asistente Aris" title="Abrir Asistente Aris">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+                    <span class="aethravox-header-aris-label">Aris</span>
+                </button>
+                <button type="button" class="aethravox-header-download" id="aethravox-header-download"
+                        aria-label="Descargar apps nativas" onclick="window.location.href='/descargas'" title="Descargar apps nativas">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" x2="12" y1="15" y2="3"/>
+                    </svg>
+                </button>
+                <select id="aethravox-header-theme" class="aethravox-header-theme-select"
+                        aria-label="Cambiar tema visual" title="Cambiar tema visual">
+                    <option value="aethravox">Tema: Aethravox Studios</option>
+                    <option value="shadow">Tema: Shadow Studios</option>
+                    <option value="commoncents">Tema: CommonCents</option>
+                </select>
+                <a href="/perfil" class="aethravox-header-avatar-btn" id="aethravox-header-avatar"
+                   title="Ver perfil" aria-label="Ver perfil">
+                    <span class="hdr-profile-avatar" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                </a>
+            </div>
+        </div>
+    </header>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="aethravox-footer">
+        <span>Aethravox Studios — AI Engineers & Application Development</span>
+    </footer>
+    {# El FAB flotante de perfil (bolita dorada abajo-derecha) se eliminó: el
+       acceso a perfil ahora vive en el sidebar (PC) y en la bottom-nav (móvil),
+       con la foto real del usuario. Las páginas de auth vacían este bloque. #}
+    {% block profile_fab %}{% endblock %}
+    {# Navegación global: sidebar vertical colapsable (PC) + bottom-nav (móvil).
+       Orden I|E|C|B|P = Inicio, Explorar, Categorías, Buscar, Perfil (Sección 4.8).
+       - El logo NO va aquí: vive en el header superior (y va a /hub).
+       - El botón "Perfil" usa la FOTO REAL del usuario (cargada vía JS desde
+         /api/me, ver script más abajo). Si el fetch falla, cae al emoji 👤.
+       - Cerrar sesión: form POST /logout al final del sidebar (PC) y de la
+         bottom-nav (móvil).
+       - Ajustes (/dashboard) ya NO está en el bottom-nav: vive en el drawer de
+         cuenta + en /hub. El panel admin vive abajo del hub (solo admins).
+       - El sidebar lleva un botón toggle para colapsar a solo iconos. El
+         estado se persiste en localStorage.
+       - Las páginas de auth vacían este bloque (no están logueadas). #}
+    {% block global_nav %}
+    {# Sidebar lateral (PC, ≥721px). Solo en /hub y /dashboard: esas páginas
+       rellenan {% block sidebar %} con {% include "_sidebar.html" %}. En el
+       resto de páginas el bloque queda vacío → no hay sidebar, y el botón
+       izquierdo del header actúa de flecha ← (volver al panel). #}
+    {% block sidebar %}{% endblock %}
+    <nav class="aethravox-bottomnav" aria-label="Navegación principal">
+        <a href="/hub" class="aethravox-bottom-link" data-nav="home">
+            <span class="bn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+            <span>Inicio</span>
+        </a>
+        <a href="/aris" class="aethravox-bottom-link" data-nav="aris">
+            <span class="bn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg></span>
+            <span>Aris</span>
+        </a>
+        <a href="/explorar" class="aethravox-bottom-link" data-nav="explore">
+            <span class="bn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span>
+            <span>Explorar</span>
+        </a>
+        <a href="/buscar" class="aethravox-bottom-link" data-nav="search">
+            <span class="bn-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+            <span>Buscar</span>
+        </a>
+        <a href="/perfil" class="aethravox-bottom-link" data-nav="profile" id="bn-profile-link">
+            <span class="bn-ico bn-profile-avatar" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+            <span>Perfil</span>
+        </a>
+    </nav>
+
+    {# ===== Asistente rápido flotante de Aris ===== #}
+    <button type="button" class="aris-quick-fab" id="aris-quick-fab"
+            aria-label="Abrir Aris rápido" title="Preguntar a Aris">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent-primary)"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+        <span class="aris-quick-fab-label">Aris</span>
+    </button>
+
+    <div class="aris-quick-backdrop" id="aris-quick-backdrop" hidden></div>
+    <aside class="aris-quick-drawer" id="aris-quick-drawer" role="dialog" aria-modal="true" aria-label="Aris rápido" hidden>
+        <div class="aris-quick-header">
+            <div class="aris-quick-title">
+                <span class="aris-quick-avatar" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-primary)"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg></span>
+                <div>
+                    <strong>Aris</strong>
+                    <small id="aris-quick-context">Asistente contextual</small>
+                </div>
+            </div>
+            <div class="aris-quick-head-actions">
+                <a href="/aris" class="aris-quick-expand" title="Abrir vista completa de Aris" aria-label="Abrir vista completa de Aris">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+                </a>
+                <button type="button" class="aris-quick-close" id="aris-quick-close" aria-label="Cerrar Aris rápido">×</button>
+            </div>
+        </div>
+        <div class="aris-quick-chips" id="aris-quick-chips"></div>
+        <div class="aris-quick-messages" id="aris-quick-messages">
+            <div class="aris-quick-welcome">
+                Pregúntame sobre esta sección, código o ideas rápidas sin salir de la página.
+            </div>
+        </div>
+        <form class="aris-quick-form" id="aris-quick-form">
+            <input type="text" id="aris-quick-input" placeholder="Escribe a Aris..." autocomplete="off">
+            <button type="submit" id="aris-quick-send" aria-label="Enviar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+            </button>
+        </form>
+    </aside>
+
+    {# ===== Drawer de cuenta ===== #}
+    <div class="aethravox-account-backdrop" id="aethravox-account-backdrop" hidden></div>
+    <aside class="aethravox-account-drawer" id="aethravox-account-drawer"
+           aria-label="Menú de cuenta" role="dialog" aria-modal="true" hidden>
+        <div class="aethravox-account-header">
+            <a href="/perfil" class="aethravox-account-avatar-link" id="account-avatar-link">
+                <span class="aethravox-account-avatar" id="aethravox-account-avatar" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </span>
+                <span class="aethravox-account-meta">
+                    <span class="aethravox-account-name" id="aethravox-account-name">…</span>
+                    <span class="aethravox-account-role" id="aethravox-account-role">…</span>
+                </span>
+            </a>
+            <button type="button" class="aethravox-account-close" id="aethravox-account-close" aria-label="Cerrar menú">×</button>
+        </div>
+        <nav class="aethravox-account-links">
+            <a href="/hub" class="aethravox-account-link" data-nav="home"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Inicio</a>
+            <a href="/aris" class="aethravox-account-link" data-nav="aris"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg></span> Aris</a>
+            <a href="/explorar" class="aethravox-account-link" data-nav="explore"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span> Explorar</a>
+            <a href="/categorias" class="aethravox-account-link" data-nav="categories"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span> Categorías</a>
+            <a href="/buscar" class="aethravox-account-link" data-nav="search"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span> Buscar</a>
+            <a href="/dashboard" class="aethravox-account-link" data-nav="settings"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span> Ajustes</a>
+            <a href="/perfil" class="aethravox-account-link" data-nav="profile"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Perfil</a>
+            <div class="sidebar-divider-label">Servicio independiente</div>
+            <a href="/correo" class="aethravox-account-link" data-nav="aethramail"><span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span> AethraMail</a>
+        </nav>
+        <form method="POST" action="/logout" class="aethravox-account-logout-form">
+            <button type="submit" class="aethravox-account-logout" title="Cerrar sesión">
+                <span aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                        <line x1="12" y1="2" x2="12" y2="12"></line>
+                    </svg>
+                </span> Cerrar sesión
+            </button>
+        </form>
+    </aside>
+    {% include "_theme_onboarding.html" %}
+    {% endblock %}
+    {% block extra_js %}{% endblock %}
+<script src="/static/js/core/base_1.js" defer></script></body>
+</html>

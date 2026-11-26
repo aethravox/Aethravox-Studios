@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Baneos de IP — Aethravox{% endblock %}
+{% block tagline %}Owner · Anti-abuso{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>🔒 Baneos de IP</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+</div>
+
+<div class="toolbar">
+    <span>📍 Bans activos: <strong>{{ active_count }}</strong></span>
+</div>
+
+<h3 class="section-title">➕ Nuevo ban</h3>
+<form method="POST" action="/admin/ip_bans/create" class="auth-form ban-form">
+    <div class="input-group">
+        <label>Dirección IP</label>
+        <input type="text" name="ip" required pattern="^(\d{1,3}\.){3}\d{1,3}$"
+               placeholder="192.168.1.100" maxlength="45">
+    </div>
+    <div class="input-group">
+        <label>Motivo del ban</label>
+        <textarea name="reason" required rows="2" maxlength="500"
+                  placeholder="Ej: Intentos de fuerza bruta en login. Ataque DDoS detectado."></textarea>
+    </div>
+    <div class="input-group">
+        <label>Duración</label>
+        <div class="ban-duration-tabs">
+            <label class="ban-duration-option">
+                <input type="radio" name="ban_type" value="permanent" id="ban-permanent">
+                <span>🔒 Permanente</span>
+            </label>
+            <label class="ban-duration-option">
+                <input type="radio" name="ban_type" value="duration" id="ban-duration" checked>
+                <span>⏱️ Temporal</span>
+            </label>
+        </div>
+    </div>
+    <div class="input-group" id="duration-fields">
+        <label>Duración del ban</label>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <input type="number" name="duration_value" value="1" min="1" max="365"
+                   style="flex: 1; min-width: 100px;">
+            <select name="duration_unit" style="flex: 1; min-width: 120px;">
+                <option value="minutes">Minutos</option>
+                <option value="hours">Horas</option>
+                <option value="days" selected>Días</option>
+                <option value="weeks">Semanas</option>
+                <option value="months">Meses</option>
+            </select>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">🚫 Banear IP</button>
+</form>
+
+<h3 class="section-title">✓ Activos ahora ({{ active.len() }})</h3>
+{% if !active.is_empty() %}
+<div class="table-container">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>IP</th>
+                <th>Motivo</th>
+                <th>Baneado por</th>
+                <th>Aplicado el</th>
+                <th>Expira</th>
+                <th style="text-align:right">Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in active %}
+            <tr>
+                <td><strong>{{ b.ip }}</strong></td>
+                <td>{{ b.reason }}</td>
+                <td class="muted">{{ b.banned_by_username.as_deref().unwrap_or("sistema") }}</td>
+                <td class="muted">{{ b.created_at }}</td>
+                <td>
+                    {% if b.is_permanent %}
+                    <span class="ban-permanent-badge">PERMANENTE</span>
+                    {% else %}
+                    <span class="muted">{{ b.expires_at }}</span>
+                    {% endif %}
+                </td>
+                <td style="text-align:right">
+                    <button type="button" class="btn btn-secondary btn-sm" title="Levantar ban"
+                            onclick="openRevokeIpBanModal({{ b.id }}, '{{ b.ip }}')">🔓 Levantar</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <div style="font-size:3rem;margin-bottom:10px">✅</div>
+    <h3>No hay bans activos</h3>
+    <p class="muted">Las IPs baneadas aparecerán aquí.</p>
+</div>
+{% endif %}
+
+<details class="collapse">
+    <summary>📜 Histórico de bans (últimos 50)</summary>
+    {% if !history.is_empty() %}
+    <div class="table-container">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>IP</th>
+                    <th>Motivo</th>
+                    <th>Aplicado el</th>
+                    <th>Expira</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in history %}
+                <tr>
+                    <td><strong>{{ b.ip }}</strong></td>
+                    <td>{{ b.reason }}</td>
+                    <td class="muted">{{ b.created_at }}</td>
+                    <td>
+                        {% if b.is_permanent %}
+                        <span class="ban-permanent-badge">PERMANENTE</span>
+                        {% else %}
+                        <span class="muted">{{ b.expires_at }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted" style="text-align:center; padding:20px;">Sin bans históricos todavía.</p>
+    {% endif %}
+</details>
+
+<div class="admin-nav">
+</div>
+
+<style>
+.ban-form {
+    background: var(--negro-suave);
+    border: 1px solid var(--fondo);
+    border-radius: 12px;
+    padding: 18px;
+    margin: 14px 0 24px;
+}
+.ban-duration-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.ban-duration-option {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--negro);
+    color: var(--blanco);
+    text-align: center;
+    justify-content: center;
+}
+.ban-duration-option:has(input:checked) {
+    border-color: var(--dorado);
+    background: rgba(224, 163, 8, 0.08);
+}
+.ban-duration-option input {
+    accent-color: var(--dorado);
+}
+.ban-permanent-badge {
+    display: inline-block;
+    background: rgba(255, 62, 62, 0.12);
+    color: var(--rojo);
+    border: 1px solid rgba(255, 62, 62, 0.4);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+</style>
+
+{# ===== Modal: Levantar ban de IP ===== #}
+<div class="modal-overlay" id="revoke-ip-ban-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>🔓 Levantar ban de IP</span>
+            <button type="button" class="modal-close" onclick="closeRevokeIpBanModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Levantar el ban de la IP <strong id="revoke-ip-ban-ip" class="gold">—</strong>?</p>
+            <div class="alert alert-info" style="margin:14px 0;">
+                ℹ️ La IP volverá a poder acceder inmediatamente. Si el problema persiste,
+                puedes volver a banearla cuando quieras desde esta misma página.
+            </div>
+            <form method="POST" action="#" id="revoke-ip-ban-form">
+                <button type="submit" class="btn btn-primary btn-block">🔓 Sí, levantar ban</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeRevokeIpBanModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+    function openModal(id) {
+        const m = document.getElementById(id);
+        m.hidden = false;
+        requestAnimationFrame(() => m.classList.add('modal-visible'));
+    }
+    function closeModal(id) {
+        const m = document.getElementById(id);
+        m.classList.remove('modal-visible');
+        setTimeout(() => { m.hidden = true; }, 200);
+    }
+    window.openRevokeIpBanModal = function(banId, ip) {
+        document.getElementById('revoke-ip-ban-ip').textContent = ip;
+        document.getElementById('revoke-ip-ban-form').action = '/admin/ip_bans/' + banId + '/revoke';
+        openModal('revoke-ip-ban-modal');
+    };
+    window.closeRevokeIpBanModal = function() { closeModal('revoke-ip-ban-modal'); };
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeRevokeIpBanModal();
+    });
+    document.getElementById('revoke-ip-ban-modal').addEventListener('click', e => {
+        if (e.target.id === 'revoke-ip-ban-modal') closeRevokeIpBanModal();
+    });
+})();
+</script>
+{% endblock %}

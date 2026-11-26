@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración — Aethravox{% endblock %}
+{% block tagline %}Owner · Configuración global{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>⚙️ Configuración global del estudio</h2>
+    <p>Solo el Owner puede modificar estos valores. Operando como <strong>{{ actor_username }}</strong>.</p>
+</div>
+
+{% if let Some(i) = info %}
+<div class="alert alert-info">✅ {{ i }}</div>
+{% endif %}
+
+<div class="auth-card" style="max-width:600px">
+    <form method="POST" action="/admin/config" class="auth-form">
+        <div class="input-group">
+            <label>Nombre del estudio</label>
+            <input type="text" name="studio_name" value="{{ studio_name }}">
+        </div>
+        <div class="input-group">
+            <label>Fecha de fundación (YYYY-MM-DD)</label>
+            <input type="text" name="foundation_date" value="{{ foundation_date }}" placeholder="2026-01-24">
+        </div>
+        <div class="input-group">
+            <label>Rol por defecto al registrarse</label>
+            <select name="default_role">
+                <option value="usuario" {% if default_role == "usuario" %}selected{% endif %}>🧑 usuario</option>
+                <option value="staff"   {% if default_role == "staff" %}selected{% endif %}>⚔️ staff</option>
+                <option value="admin"   {% if default_role == "admin" %}selected{% endif %}>🛡️ admin</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label class="remember">
+                <input type="checkbox" name="allow_public_register" value="1" {% if allow_public_register %}checked{% endif %}>
+                <span>Permitir registro público</span>
+            </label>
+        </div>
+        <div class="input-group">
+            <label class="remember">
+                <input type="checkbox" name="maintenance_mode" value="1" {% if maintenance_mode %}checked{% endif %}>
+                <span>🚨 Modo mantenimiento (bloquea TODO)</span>
+            </label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">💾 Guardar</button>
+    </form>
+</div>
+
+<div class="admin-nav">
+</div>
+{% endblock %}

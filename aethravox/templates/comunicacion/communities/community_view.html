@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}{{ community_name }} — Aethravox{% endblock %}
+{% block tagline %}Comunidad{% endblock %}
+
+{% block back_url %}/communities{% endblock %}
+{% block header_nav %}{# nav global ahora en sidebar/bottom-nav (base.html); el header solo lleva logo + tagline #}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px"><a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a><a href="/register" class="btn btn-primary btn-sm">Registrarse</a></span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <div class="profile-header">
+        <div class="profile-info">
+            <h2>{{ community_icon }} {{ community_name }}</h2>
+            {% if !community_description.is_empty() %}
+            <p class="muted">{{ community_description }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ===== Invitar a la comunidad (lista buscable de amigos) =====
+       No se escriben nombres: se selecciona de la lista de amigos que aún no
+       son miembros. El input de texto SÓLO sirve para buscar/filtrar rápido.
+       Oculto para invitados: las APIs de invitar/crear grupo están tras
+       require_auth (requieren cuenta). #}
+    {% if !is_guest %}
+    <details class="collapse">
+        <summary>📨 Invitar a la comunidad</summary>
+        <form method="POST" action="/api/communities/{{ community_id }}/invite" class="auth-form" id="invite-community-form">
+            <div class="input-group">
+                <label>Buscar entre tus amigos</label>
+                <input type="text" id="invite-search" placeholder="Escribe para filtrar (solo buscar, no hace falta escribir el nombre completo)" autocomplete="off">
+            </div>
+            <div id="invite-list" class="invite-list">
+                <p class="muted">Cargando tus amigos…</p>
+            </div>
+            <input type="hidden" name="members" id="invite-members-input" value="">
+            <button type="submit" class="btn btn-primary btn-block" id="invite-submit">📨 Invitar seleccionados (<span id="invite-count">0</span>)</button>
+            <p class="muted small">Solo puedes invitar a tus amigos. Si no aparece alguien, envíale antes una solicitud de amistad desde Amigos.</p>
+        </form>
+    </details>
+
+    <details class="collapse">
+        <summary>➕ Crear grupo en esta comunidad</summary>
+        <form method="POST" action="/api/communities/{{ community_id }}/group/create" class="auth-form">
+            <div class="input-group">
+                <label>Nombre del grupo</label>
+                <input type="text" name="name" required maxlength="64" placeholder="Ej: General">
+            </div>
+            <div class="input-group">
+                <label>Descripción</label>
+                <input type="text" name="description" maxlength="280" placeholder="De qué trata">
+            </div>
+            <div class="input-group">
+                <label>Añadir miembros (selecciona de la lista de miembros de la comunidad)</label>
+                <input type="text" id="group-member-search" placeholder="Escribe para filtrar miembros" autocomplete="off">
+            </div>
+            <div id="group-member-list" class="invite-list">
+                <p class="muted">Cargando miembros…</p>
+            </div>
+            <input type="hidden" name="members" id="group-members-input" value="">
+            <button type="submit" class="btn btn-primary btn-block">👥 Crear grupo</button>
+        </form>
+    </details>
+    {% else %}
+    <p class="muted" style="margin:12px 0">Estás viendo esta comunidad como invitado (solo lectura). Inicia sesión para unirte, invitar o crear grupos.</p>
+    {% endif %}
+
+    <h3 class="section-title" style="margin-top:20px">Grupos de esta comunidad</h3>
+    <div class="app-grid">
+        {% for g in groups %}
+        <div class="app-card">
+            <a href="/chat" class="app-card-link">
+                <div class="app-card-banner">
+                    <div class="app-card-icon">👥</div>
+                    <span class="app-card-tag-badge">✅ Activo</span>
+                </div>
+                <div class="app-card-body">
+                    <div class="app-card-name">{{ g.name }}</div>
+                    <div class="app-card-desc">{{ g.description }}</div>
+                </div>
+                <div class="app-card-footer">
+                    <span class="app-card-cta">Abrir chat →</span>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+        {% if groups.is_empty() %}
+        <div class="empty-state">
+            <div style="font-size:4rem;margin-bottom:15px">👥</div>
+            <h3>Sin grupos todavía</h3>
+            <p class="muted">Crea un grupo arriba para empezar.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.invite-list {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--fondo);
+    border-radius: 8px;
+    background: #0f0f11;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.invite-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+    user-select: none;
+}
+.invite-row:hover { background: rgba(255,255,255,0.04); }
+.invite-row.selected { background: rgba(224,163,8,0.12); }
+.invite-row input[type="checkbox"] { accent-color: var(--dorado); width: 18px; height: 18px; flex-shrink: 0; }
+.invite-row img {
+    width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+    border: 1px solid var(--fondo);
+}
+.invite-row .invite-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-row .invite-name b { color: var(--blanco); font-weight: 600; }
+.invite-row .invite-name span { color: var(--gris); font-size: 0.8rem; }
+.invite-empty { color: var(--gris); padding: 12px; text-align: center; font-size: 0.85rem; }
+</style>
+
+<script>
+(function() {
+    'use strict';
+    const cid = {{ community_id }};
+
+    // Componente reutilizable: lista de personas con buscador + selección.
+    // opts: { listEl, searchEl, hiddenEl, countEl, url, emptyText }
+    async function initPickList(opts) {
+        let people = [];
+        const selected = new Set();
+
+        async function load() {
+            try {
+                const r = await fetch(opts.url, { headers: { 'Accept': 'application/json' } });
+                people = await r.json();
+            } catch (e) {
+                people = [];
+            }
+            render();
+        }
+
+        function render() {
+            const q = (opts.searchEl.value || '').toLowerCase();
+            const filtered = people.filter(p => {
+                const name = (p.display || p.username || '').toLowerCase();
+                const uname = (p.username || '').toLowerCase();
+                return !q || name.includes(q) || uname.includes(q);
+            });
+            opts.listEl.innerHTML = '';
+            if (!people.length) {
+                opts.listEl.innerHTML = '<p class="invite-empty">' + opts.emptyText + '</p>';
+                return;
+            }
+            if (!filtered.length) {
+                opts.listEl.innerHTML = '<p class="invite-empty">Nadie coincide con la búsqueda.</p>';
+                return;
+            }
+            for (const p of filtered) {
+                const row = document.createElement('label');
+                row.className = 'invite-row' + (selected.has(p.id) ? ' selected' : '');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox'; cb.value = p.id; cb.checked = selected.has(p.id);
+                const img = document.createElement('img');
+                img.src = p.avatar || ''; img.alt = '';
+                const name = document.createElement('div');
+                name.className = 'invite-name';
+                name.innerHTML = '<b>' + esc(p.display || p.username) + '</b> <span>@' + esc(p.username) + '</span>';
+                row.append(cb, img, name);
+                cb.addEventListener('change', () => {
+                    if (cb.checked) selected.add(p.id); else selected.delete(p.id);
+                    row.classList.toggle('selected', cb.checked);
+                    syncHidden();
+                });
+                opts.listEl.appendChild(row);
+            }
+        }
+
+        function syncHidden() {
+            opts.hiddenEl.value = Array.from(selected).join(',');
+            if (opts.countEl) opts.countEl.textContent = String(selected.size);
+        }
+
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        opts.searchEl.addEventListener('input', render);
+        await load();
+    }
+
+    // Invitar a la comunidad (lista de amigos no miembros).
+    const invSearch = document.getElementById('invite-search');
+    const invList = document.getElementById('invite-list');
+    const invHidden = document.getElementById('invite-members-input');
+    const invCount = document.getElementById('invite-count');
+    if (invList) {
+        initPickList({
+            listEl: invList, searchEl: invSearch, hiddenEl: invHidden, countEl: invCount,
+            url: '/api/communities/' + cid + '/inviteable',
+            emptyText: 'Todos tus amigos ya son miembros de esta comunidad.',
+        });
+    }
+
+    // Miembros para crear grupo.
+    const gmSearch = document.getElementById('group-member-search');
+    const gmList = document.getElementById('group-member-list');
+    const gmHidden = document.getElementById('group-members-input');
+    if (gmList) {
+        initPickList({
+            listEl: gmList, searchEl: gmSearch, hiddenEl: gmHidden, countEl: null,
+            url: '/api/communities/' + cid + '/members',
+            emptyText: 'Aún no hay otros miembros en la comunidad.',
+        });
+    }
+})();
+</script>
+{% endblock %}

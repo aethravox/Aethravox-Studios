@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}AethraMail — Servicio independiente{% endblock %}
+{% block tagline %}Servicio independiente · Correo interno{% endblock %}
+{% block header_nav %}{% endblock %}
+
+{% block content %}
+<div class="dashboard-card settings-page">
+    <div class="profile-header">
+        <div class="profile-info">
+            <h2 style="display:flex;align-items:center;gap:10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-primary)" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                AethraMail
+            </h2>
+            <span class="role-badge">Servicio independiente (fuera del Hub)</span>
+        </div>
+    </div>
+
+    {% if let Some(i) = info %}
+    <div class="alert alert-info">{{ i }}</div>
+    {% endif %}
+    {% if let Some(e) = error %}
+    <div class="alert alert-error">{{ e }}</div>
+    {% endif %}
+
+    <p class="muted small" style="margin-bottom:14px;">
+        Vincula un correo interno de AethraMail (dominios permitidos:
+        <code>@aethra.sac</code>, <code>@shadow.sac</code> o <code>@cents.sac</code>)
+        a tu cuenta. Te enviamos un <strong>código de 8 dígitos</strong> para confirmar que es tuyo.
+        No se admite Gmail ni correos externos.
+    </p>
+
+    {# ===== Correos vinculados ===== #}
+    <details class="collapse" open>
+        <summary>Correos vinculados ({{ emails.len() }})</summary>
+        <div class="table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Correo</th>
+                        <th>Estado</th>
+                        <th>Primario</th>
+                        <th style="text-align:right">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in emails %}
+                    <tr>
+                        <td>{{ e.email }}</td>
+                        <td>
+                            {% if e.verified %}<span class="status-active">verificado</span>
+                            {% else %}<span class="muted">pendiente</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if e.is_primary %}
+                            <span style="color:var(--accent-primary);font-weight:600;">Primario</span>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="text-align:right">
+                            {% if e.verified && !e.is_primary %}
+                            <form method="POST" action="/cuenta/correo/primary" class="inline-form" style="display:inline">
+                                <input type="hidden" name="email_id" value="{{ e.id }}">
+                                <button type="submit" class="btn btn-secondary btn-sm" title="Marcar como primario">Primario</button>
+                            </form>
+                            {% endif %}
+                            {% if !e.is_primary %}
+                            <form method="POST" action="/cuenta/correo/remove" class="inline-form" style="display:inline"
+                                  onsubmit="return confirm('¿Desvincular {{ e.email }}?')">
+                                <input type="hidden" name="email_id" value="{{ e.id }}">
+                                <button type="submit" class="btn-icon delete" title="Desvincular" aria-label="Desvincular">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if emails.is_empty() %}
+                    <tr><td colspan="4" class="empty-state">No tienes correos internos vinculados todavía.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    {# ===== Vincular nuevo correo (pedir código) ===== #}
+    <details class="collapse"{% if pending_email.is_none() %} open{% endif %}>
+        <summary>Vincular un correo nuevo</summary>
+        <form method="POST" action="/cuenta/correo/solicitar" class="auth-form" id="correo-link-form">
+            <div class="input-group">
+                <label for="correo-new-input">Correo interno</label>
+                <input type="text" id="correo-new-input" name="email" required
+                       placeholder="{{ username }}@aethra.sac"
+                       autocomplete="email">
+                <div class="auth-domain-row">
+                    <span class="muted small">Atajo:</span>
+                    <button type="button" class="auth-domain-btn" data-domain="aethra.sac">@aethra.sac</button>
+                    <button type="button" class="auth-domain-btn" data-domain="shadow.sac">@shadow.sac</button>
+                    <button type="button" class="auth-domain-btn" data-domain="cents.sac">@cents.sac</button>
+                </div>
+                <div class="auth-inline-error" id="correo-domain-err" hidden></div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Enviar código de verificación</button>
+        </form>
+    </details>
+
+    {# ===== Verificar código (visible si acaba de mandarse) ===== #}
+    {% if let Some(p) = pending_email %}
+    <details class="collapse" open>
+        <summary>Verificar código para {{ p }}</summary>
+        <form method="POST" action="/cuenta/correo/verificar" class="auth-form">
+            <input type="hidden" name="email" value="{{ p }}">
+            <div class="input-group">
+                <label>Código (8 dígitos)</label>
+                <input type="text" name="code" required inputmode="numeric"
+                       pattern="[0-9]{8}" maxlength="8"
+                       placeholder="12345678" autocomplete="one-time-code">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Verificar y vincular</button>
+        </form>
+    </details>
+    {% endif %}
+
+    <div class="dashboard-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        {% if let Some(ext_url) = aethramail_url %}
+        <a href="{{ ext_url }}" class="btn btn-primary" rel="noopener">Abrir web de AethraMail →</a>
+        {% endif %}
+        <a href="/hub" class="btn btn-secondary">← Volver al Hub</a>
+    </div>
+</div>
+
+<script>
+(function() {
+    var ALLOWED = ['aethra.sac', 'shadow.sac', 'cents.sac'];
+    var inp = document.getElementById('correo-new-input');
+    var err = document.getElementById('correo-domain-err');
+    var form = document.getElementById('correo-link-form');
+    function validate() {
+        var v = (inp.value || '').trim().toLowerCase();
+        var at = v.indexOf('@');
+        if (at <= 0) { err.hidden = true; return true; }
+        var dom = v.slice(at + 1);
+        if (dom === 'gmail.com' || dom === 'googlemail.com') {
+            err.textContent = 'No se admite Gmail en AethraMail. Usa @aethra.sac, @shadow.sac o @cents.sac.';
+            err.hidden = false;
+            return false;
+        }
+        if (ALLOWED.indexOf(dom) === -1) {
+            err.textContent = 'Solo se permiten buzones internos (@aethra.sac, @shadow.sac o @cents.sac).';
+            err.hidden = false;
+            return false;
+        }
+        err.hidden = true;
+        return true;
+    }
+    document.querySelectorAll('.auth-domain-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var dom = btn.getAttribute('data-domain');
+            var cur = (inp.value || '').trim();
+            var local = cur.indexOf('@') !== -1 ? cur.split('@')[0] : (cur || '{{ username }}');
+            inp.value = local + '@' + dom;
+            validate();
+        });
+    });
+    if (inp) inp.addEventListener('input', validate);
+    if (form) form.addEventListener('submit', function(e) { if (!validate()) e.preventDefault(); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% import "admin/roles/_color_picker.html" as cp %}
+
+{% block title %}Roles — Aethravox{% endblock %}
+{% block tagline %}{{ actor_role_display }} · Roles y permisos{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>Roles y permisos</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+    <p class="muted small">
+        Cada rol agrupa <strong>permisos atómicos</strong> (incluidos los <strong>carriles de Aris</strong>
+        <code>aris.lane.*</code> para IA en Playground, Analíticas, Social y Estudio) y
+        <strong>secciones visibles</strong> del hub. El Owner puede crear roles personalizados o de nivel
+        de pago (p. ej. <em>VIP Pro</em>) con acceso exclusivo a Aris en secciones donde otros roles no tienen permiso.
+        Los 4 roles base (<em>Owner</em>, <em>Admin</em>, <em>Staff</em>, <em>Usuario</em>) son del sistema y no se pueden borrar.
+    </p>
+</div>
+
+<div class="admin-nav">
+    <a href="/admin" class="btn btn-secondary">← Volver al panel</a>
+    <a href="/admin/users" class="btn btn-primary">Asignar roles a usuarios</a>
+    <button type="button" class="btn btn-primary" onclick="openCreateRoleModal()">+ Crear rol</button>
+</div>
+
+{# ===== Modal: Crear rol =====
+   Antes el form de creación estaba siempre visible arriba de la lista; ahora
+   va en un modal que abre el botón "Crear rol". Menos ruido visual. #}
+<div class="modal-overlay" id="create-role-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>Crear rol nuevo</span>
+            <button type="button" class="modal-close" onclick="closeCreateRoleModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="/admin/roles/create" class="auth-form">
+                <div class="input-group">
+                    <label>Nombre <span class="muted small">(2–32 caracteres, único)</span></label>
+                    <input type="text" name="name" maxlength="32" required placeholder="p.ej. Moderador">
+                </div>
+                <div class="input-group">
+                    <label>Color del badge <span class="muted small">(opcional — se ve en los badges de rol)</span></label>
+                    {% call cp::color_picker("", "Vista previa", "role-badge cp-prev-badge", "", "") %}
+                </div>
+                <div class="input-group">
+                    <label>Posición jerárquica <span class="muted small">(0–999; mayor = más poder. Usuario=100, Staff=200, Admin=500, Owner=1000)</span></label>
+                    <input type="number" name="position" min="0" max="999" value="150" required>
+                </div>
+                <div class="input-group">
+                    <label>Descripción <span class="muted small">(opcional, máx 120)</span></label>
+                    <input type="text" name="description" maxlength="120" placeholder="p.ej. Moderador con permisos de chat y soporte">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Crear rol</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    function openModal(id) {
+        var m = document.getElementById(id);
+        m.hidden = false;
+        requestAnimationFrame(function(){ m.classList.add('modal-visible'); });
+    }
+    function closeModal(id) {
+        var m = document.getElementById(id);
+        m.classList.remove('modal-visible');
+        setTimeout(function(){ m.hidden = true; }, 200);
+    }
+    window.openCreateRoleModal = function() { openModal('create-role-modal'); };
+    window.closeCreateRoleModal = function() { closeModal('create-role-modal'); };
+    document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeCreateRoleModal();
+    });
+    var m = document.getElementById('create-role-modal');
+    if (m) m.addEventListener('click', function(e){
+        if (e.target.id === 'create-role-modal') closeCreateRoleModal();
+    });
+})();
+</script>
+
+{# ===== Lista de roles ===== #}
+{% if roles.is_empty() %}
+<div class="empty-state" style="margin-top:20px">
+    <div style="font-size:4rem">🎭</div>
+    <h3>Aún no hay roles</h3>
+    <p class="muted">Esto no debería pasar — los 4 roles base se crean en la migración 030.</p>
+</div>
+{% endif %}
+
+{% for r in roles %}
+{# Cada rol es un acordeón: header compacto (badge + stats), y al abrir
+   muestra las 4 secciones (editar / permisos / secciones / borrar), cada
+   una en su propio <details> cerrado. Así la lista ocupa poco y solo se
+   expande lo que se va a tocar. Antes cada rol era una tarjeta enorme con
+   los permisos siempre abiertos. #}
+<details class="role-accordion collapse">
+    <summary class="role-accordion-head">
+        <span class="role-badge role-{{ r.role_key }}">{{ r.name }}</span>
+        {% if r.is_system %}<span class="muted small">· sistema</span>{% endif %}
+        {% if r.is_protected %}<span class="muted small">· protegido</span>{% endif %}
+        <span class="muted small role-accordion-meta">
+            pos {{ r.position }} · {{ r.perm_count }} perm · {{ r.web_count }} sec · {{ r.user_count }} usr
+        </span>
+        <span class="role-accordion-chevron" aria-hidden="true">▾</span>
+    </summary>
+
+    <div class="role-accordion-body">
+    {# ===== Editar nombre/color/posición ===== #}
+    <details class="collapse">
+        <summary>Editar nombre / color / posición</summary>
+        <form method="POST" action="/admin/roles/{{ r.id }}/update" class="auth-form">
+            <div class="input-group">
+                <label>Nombre</label>
+                <input type="text" name="name" maxlength="32" required value="{{ r.name }}" {% if r.is_protected %}disabled{% endif %}>
+                {% if r.is_protected %}
+                    <p class="muted small">El rol Owner es protegido: no se puede renombrar ni cambiar su posición.</p>
+                {% endif %}
+            </div>
+            <div class="input-group">
+                <label>Color del badge</label>
+                {% call cp::color_picker(r.color.as_deref().unwrap_or(""), r.name, "role-badge cp-prev-badge", "", "") %}
+            </div>
+            <div class="input-group">
+                <label>Posición</label>
+                <input type="number" name="position" min="0" max="999" value="{{ r.position }}" {% if r.is_protected %}disabled{% endif %}>
+            </div>
+            <div class="input-group">
+                <label>Descripción</label>
+                <input type="text" name="description" maxlength="120" value="{{ r.description.as_deref().unwrap_or("") }}">
+            </div>
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        </form>
+    </details>
+
+    {# ===== Permisos atómicos (capabilities) ===== #}
+    <details class="collapse">
+        <summary>Permisos atómicos ({{ r.perm_count }})</summary>
+        <p class="muted small">Cada checkbox es una acción individual del sistema. Activá solo lo que este rol necesita.</p>
+        <form method="POST" action="/admin/roles/{{ r.id }}/perms" class="auth-form">
+            {% for g in r.perm_checks %}
+            <div class="perm-group">
+                <h4>{{ g.category }}</h4>
+                <div class="perm-grid">
+                    {% for p in g.perms %}
+                    <label class="perm-check">
+                        <input type="checkbox" name="perms" value="{{ p.key }}"
+                            {% if p.checked %}checked{% endif %}>
+                        <span>{{ p.label }}</span>
+                        <code class="perm-key">{{ p.key }}</code>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">Guardar permisos</button>
+        </form>
+    </details>
+
+    {# ===== Secciones visibles ===== #}
+    <details class="collapse">
+        <summary>Secciones visibles ({{ r.web_count }})</summary>
+        <p class="muted small">Qué webs del hub puede ver este rol. El Owner ve todas (bypass).</p>
+        <form method="POST" action="/admin/roles/{{ r.id }}/web_perms" class="auth-form">
+            <div class="perm-grid">
+                {% for w in r.web_checks %}
+                <label class="perm-check">
+                    <input type="checkbox" name="web_ids" value="{{ w.id }}"
+                        {% if w.checked %}checked{% endif %}>
+                    <span>{{ w.name }}</span>
+                    <code class="perm-key">/{{ w.slug }}</code>
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Guardar secciones</button>
+        </form>
+    </details>
+
+    {# ===== Borrar (solo custom) ===== #}
+    {% if r.is_system %}
+    <p class="muted small" style="margin-top:12px">Los roles del sistema no se pueden borrar.</p>
+    {% else %}
+    <details class="collapse">
+        <summary>Borrar rol</summary>
+        {% if r.user_count > 0 %}
+        <p class="muted small">Este rol tiene <strong>{{ r.user_count }} usuario(s)</strong> asignados. Antes de borrar, reasignalos a otro rol:</p>
+        <form method="POST" action="/admin/roles/{{ r.id }}/delete" class="auth-form"
+              onsubmit="return confirm('¿Borrar el rol «{{ r.name }}» y reasignar sus {{ r.user_count }} usuario(s) al rol destino?')">
+            <div class="input-group">
+                <label>Reasignar usuarios a:</label>
+                <select name="reassign_to" required>
+                    <option value="">— Elegir rol destino —</option>
+                    {% for other in roles %}
+                        {% if other.id != r.id && other.role_key != "owner" %}
+                        <option value="{{ other.id }}">{{ other.name }} (posición {{ other.position }})</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-danger">Borrar rol y reasignar</button>
+        </form>
+        {% else %}
+        <form method="POST" action="/admin/roles/{{ r.id }}/delete" class="auth-form"
+              onsubmit="return confirm('¿Borrar el rol «{{ r.name }}»? No tiene usuarios asignados.')">
+            <button type="submit" class="btn btn-danger">Borrar rol</button>
+        </form>
+        {% endif %}
+    </details>
+    {% endif %}
+    </div>
+</details>
+{% endfor %}
+
+<style>
+.perm-group { margin: 12px 0; padding: 12px; background: var(--bg-obsidian, rgba(255,255,255,0.02)); border: 1px solid var(--border-subtle, #1E1830); border-radius: 8px; }
+.perm-group h4 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px; }
+.perm-check { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.perm-check:hover { background: var(--bg-elevated, rgba(255,255,255,0.04)); }
+.perm-check input { margin: 0; }
+.perm-check span { flex: 1; }
+.perm-key { font-size: 10px; color: var(--text-muted); background: var(--bg-elevated, rgba(255,255,255,0.05)); padding: 2px 6px; border-radius: 4px; }
+.btn-danger { background: var(--status-err, #dc2626); color: #fff; }
+.btn-danger:hover { opacity: .9; }
+
+/* ===== Color picker de rol (role_color_picker.js) =====
+   El picker guarda un composite "<bg>|<text>|<opacity>" en el hidden
+   `color`; el backend lo parsea en role_color::parse_role_color. */
+.color-picker {
+    background: var(--bg-obsidian, rgba(255,255,255,0.03));
+    border: 1px solid var(--border-strong, #333);
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 6px;
+}
+.cp-row { margin-bottom: 12px; }
+.cp-row:last-child { margin-bottom: 0; }
+.cp-row > label { display: block; margin-bottom: 6px; }
+.cp-preview-row { display: flex; justify-content: center; padding: 8px 0; }
+.cp-prev-badge { font-size: 0.85rem; padding: 6px 14px; }
+.cp-controls { display: flex; gap: 8px; align-items: center; }
+.cp-controls input[type="text"] {
+    flex: 1; padding: 6px 8px; background: var(--bg-surface, #111); border: 1px solid var(--border-strong, #333);
+    border-radius: 6px; color: var(--text-primary, #fff); font-family: monospace; font-size: 0.85rem;
+}
+.cp-controls input[type="color"] {
+    width: 38px; height: 34px; padding: 0; border: 1px solid var(--border-strong, #333);
+    border-radius: 6px; background: transparent; cursor: pointer;
+}
+.cp-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.cp-swatch {
+    width: 22px; height: 22px; border-radius: 5px; border: 1px solid var(--border-strong, rgba(255,255,255,0.15));
+    cursor: pointer; padding: 0;
+}
+.cp-swatch:hover { transform: scale(1.12); border-color: var(--accent-primary, #fff); }
+.cp-auto { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px; }
+.cp-auto input { margin: 0; }
+.cp-opacity { width: 100%; accent-color: var(--accent-primary, var(--dorado)); }
+select.cp-bg-type {
+    padding: 6px 8px; background: var(--bg-surface, #111); border: 1px solid var(--border-strong, #333); border-radius: 6px; color: var(--text-primary, #fff);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script defer src="/static/js/role_color_picker.js"></script>
+{% endblock %}

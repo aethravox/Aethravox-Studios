@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}Secciones — Aethravox{% endblock %}
+{% block tagline %}Owner · Secciones del panel{% endblock %}
+
+{% block back_url %}/admin{% endblock %}
+{% block content %}
+<div class="admin-header">
+    <h2>📚 Gestión de secciones</h2>
+    <p>Operando como <strong>{{ actor_username }}</strong> · <span class="role-badge role-{{ actor_role_css_key }}">{{ actor_role_display }}</span></p>
+</div>
+
+<div class="toolbar">
+    <span>📍 Total: {{ webs.len() }} secciones</span>
+    <button type="button" class="btn btn-primary" onclick="openCreateWebModal()">➕ Añadir sección</button>
+</div>
+
+<div class="web-list">
+    {% for w in webs %}
+    {# Cada sección es un acordeón: header compacto (icono + nombre + badges +
+       estado + chevron) y al desplegar muestra tipo, permisos, tag-editor y
+       acciones. Antes era una tabla de 6 columnas con el tag-editor siempre
+       empujando la fila; ahora la lista ocupa menos y solo se expande lo que
+       se va a tocar. Rutas POST y los 5 modales NO cambian. #}
+    <details class="web-accordion collapse {% if !w.is_active %}web-accordion-inactive{% endif %}">
+        <summary class="web-accordion-head">
+            <span class="web-accordion-ico" aria-hidden="true">{{ w.icon }}</span>
+            <span class="web-accordion-title">
+                <strong>{{ w.name }}</strong>
+                {% if w.is_core %}<span class="badge badge-core">🔒 CORE</span>{% endif %}
+                {% if w.is_feature %}<span class="badge badge-feature">📦 FEATURE</span>{% endif %}
+                {% if w.is_custom %}<span class="badge badge-custom">✨ CUSTOM</span>{% endif %}
+                <br><code class="muted small">{{ w.url }}</code>
+            </span>
+            <span class="web-accordion-meta">
+                {% if w.is_active %}<span class="active-badge">✓ Activa</span>{% else %}<span class="inactive-badge">⏸️ Desactivada</span>{% endif %}
+                <span class="muted small">· 🔐 {{ w.perms.len() }} rol{%- if w.perms.len() != 1 %}es{%- endif %}</span>
+            </span>
+            <span class="role-accordion-chevron" aria-hidden="true">▾</span>
+        </summary>
+        <div class="web-accordion-body">
+            <dl class="web-accordion-data">
+                <div><dt>Tipo</dt><dd>
+                    {% if w.is_system %}<span class="muted">Sistema</span>{% endif %}
+                    {% if w.is_custom && w.has_html %}HTML custom{% endif %}
+                    {% if w.is_custom && !w.has_html %}URL externa{% endif %}
+                </dd></div>
+                <div><dt>Permisos</dt><dd>
+                    <button type="button" class="btn btn-secondary btn-sm" title="Editar permisos"
+                            onclick="openPermsModal({{ w.id }}, '{{ w.name }}',
+                                              {{ w.has_owner_perm }},
+                                              {{ w.has_admin_perm }},
+                                              {{ w.has_staff_perm }},
+                                              {{ w.has_usuario_perm }})">
+                        🔐 <span class="perms-count">{{ w.perms.len() }}</span> rol{%- if w.perms.len() != 1 %}es{%- endif %}
+                    </button>
+                </dd></div>
+            </dl>
+
+            {# Tag-editor: sigue siendo un <details> anidado, ahora dentro del body #}
+            <details class="collapse tag-editor">
+                <summary>
+                    <span class="tag-summary tag-summary-{{ w.tag_normalized() }}">Tag: {{ w.tag_normalized() }}</span>
+                </summary>
+                <form method="POST" action="/admin/webs/{{ w.id }}/tag" class="auth-form tag-form">
+                    <div class="input-group">
+                        <label>Tag</label>
+                        <select name="tag" class="role-select">
+                            <option value="activo" {% if w.tag_normalized() == "activo" %}selected{% endif %}>✅ Activo</option>
+                            <option value="nuevo" {% if w.tag_normalized() == "nuevo" %}selected{% endif %}>✨ Nuevo</option>
+                            <option value="beta" {% if w.tag_normalized() == "beta" %}selected{% endif %}>🧪 Beta</option>
+                            <option value="mantenimiento" {% if w.tag_normalized() == "mantenimiento" %}selected{% endif %}>🚧 Mantenimiento</option>
+                            <option value="en_proceso" {% if w.tag_normalized() == "en_proceso" %}selected{% endif %}>🔧 En proceso <span class="muted small">(admin/staff/owner entran)</span></option>
+                            <option value="próximamente" {% if w.tag_normalized() == "próximamente" %}selected{% endif %}>🔜 Próximamente</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Mensaje <span class="muted small">(opcional)</span></label>
+                        <textarea name="tag_message" rows="2" maxlength="280"
+                                  placeholder="Mensaje al hacer click en la card">{{ w.tag_message.as_deref().unwrap_or("") }}</textarea>
+                    </div>
+                    <div class="input-group">
+                        <label>Fecha de apertura <span class="muted small">(solo próximos/mantenimiento)</span></label>
+                        <input type="datetime-local" name="tag_opens_at"
+                               value="{{ w.tag_opens_at.as_deref().unwrap_or("") }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block btn-sm">💾 Guardar tag</button>
+                </form>
+            </details>
+
+            <div class="web-accordion-actions">
+                {# Toggle activar/desactivar — NO disponible para CORE (login, hub, etc.) #}
+                {% if w.is_core %}
+                <span class="core-lock" title="Sección CORE del sistema, no se puede desactivar">🔒 CORE</span>
+                {% else if w.is_active %}
+                <button type="button" class="btn btn-secondary btn-sm" title="Desactivar sección"
+                        onclick="openDeactivateModal({{ w.id }}, '{{ w.name }}', {{ w.is_system }}, {{ w.is_custom }}, {{ w.has_html }})">⏸️ Desactivar</button>
+                {% else %}
+                <form method="POST" action="/admin/webs/{{ w.id }}/toggle" class="inline-form">
+                    <input type="hidden" name="active" value="1">
+                    <button type="submit" class="btn btn-secondary btn-sm" title="Activar sección">▶️ Activar</button>
+                </form>
+                {% endif %}
+
+                {# Editar HTML — solo secciones custom con HTML #}
+                {% if w.has_html %}
+                <button type="button" class="btn btn-secondary btn-sm" title="Editar HTML"
+                        onclick="openEditHtmlModal({{ w.id }}, '{{ w.name }}')">📝 Editar HTML</button>
+                {% endif %}
+
+                {# Eliminar — solo secciones custom (no CORE ni FEATURE) #}
+                {% if w.is_custom %}
+                <button type="button" class="btn btn-danger btn-sm" title="Eliminar sección"
+                        onclick="openDeleteWebModal({{ w.id }}, '{{ w.name }}', '{{ w.slug }}')">🗑️ Eliminar</button>
+                {% else %}
+                <span class="system-lock" title="Sección del sistema, no se puede eliminar">🔒 Sistema</span>
+                {% endif %}
+            </div>
+        </div>
+    </details>
+    {% endfor %}
+</div>
+
+<div class="admin-nav">
+</div>
+
+{# ===== Modal: Añadir sección ===== #}
+<div class="modal-overlay" id="create-web-modal" hidden>
+    <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>➕ Añadir sección</span>
+            <button type="button" class="modal-close" onclick="closeCreateWebModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="/admin/webs/create" id="create-web-form" class="auth-form">
+                <div class="input-group">
+                    <label>Slug <span class="muted small">(URL = /slug)</span></label>
+                    <input type="text" name="slug" required maxlength="32"
+                           pattern="[a-zA-Z0-9_-]{2,32}"
+                           placeholder="ej: hola, foro, wiki">
+                    <p class="muted small">Solo letras, números, _ y -. 2-32 caracteres. No uses slugs del sistema (login, hub, chat, etc.).</p>
+                </div>
+                <div class="input-group">
+                    <label>Nombre</label>
+                    <input type="text" name="name" required maxlength="64" placeholder="ej: Foro del Estudio">
+                </div>
+                <div class="input-group">
+                    <label>Descripción</label>
+                    <input type="text" name="description" maxlength="280" placeholder="Breve descripción (opcional)">
+                </div>
+                <div class="input-group">
+                    <label>Icono <span class="muted small">(emoji)</span></label>
+                    <input type="text" name="icon" maxlength="4" placeholder="📄">
+                </div>
+                <div class="input-group">
+                    <label>Tipo de sección</label>
+                    <div class="ban-duration-tabs">
+                        <label class="ban-duration-option">
+                            <input type="radio" name="url_type" value="external" id="type-external" checked>
+                            <span>🔗 URL externa</span>
+                        </label>
+                        <label class="ban-duration-option">
+                            <input type="radio" name="url_type" value="custom" id="type-custom">
+                            <span>📄 HTML propio</span>
+                        </label>
+                    </div>
+                </div>
+
+                {# Panel URL externa #}
+                <div class="input-group" id="external-panel">
+                    <label>URL externa</label>
+                    <input type="text" name="url" placeholder="https://discord.gg/...">
+                </div>
+
+                {# Panel HTML custom #}
+                <div class="input-group" id="custom-panel" style="display:none;">
+                    <label>HTML <span class="muted small">(puede incluir &lt;style&gt; y &lt;script&gt;)</span></label>
+                    <textarea name="html_content" rows="10"
+                              placeholder="<!DOCTYPE html>&#10;<html>&#10;<head><style>body{font-family:sans-serif;background:#111;color:#fff;padding:20px}</style></head>&#10;<body>&#10;<h1>Hola!</h1>&#10;<p>Esta es mi sección custom.</p>&#10;</body>&#10;</html>"
+                              style="font-family:Menlo,Monaco,monospace;font-size:0.85rem;"></textarea>
+                    <p class="muted small">Este HTML se servirá en /slug cuando alguien visite la URL. Útil para probar ideas antes de programarlas en Rust.</p>
+                </div>
+
+                <div class="input-group">
+                    <label class="remember">
+                        <input type="checkbox" name="is_public" value="1">
+                        <span>Pública (visible sin login)</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">✓ Crear sección</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeCreateWebModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Editar HTML ===== #}
+<div class="modal-overlay" id="edit-html-modal" hidden>
+    <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>📝 Editar HTML — <span id="edit-html-name">—</span></span>
+            <button type="button" class="modal-close" onclick="closeEditHtmlModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="#" id="edit-html-form" class="auth-form">
+                <div class="input-group">
+                    <label>HTML content</label>
+                    <textarea name="html_content" id="edit-html-textarea" rows="18"
+                              style="font-family:Menlo,Monaco,monospace;font-size:0.85rem;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">💾 Guardar HTML</button>
+            </form>
+            <p class="muted small" style="margin-top:8px;">
+                💡 Consejo: abre el preview del HTML en el <a href="/playground" target="_blank">Playground</a> antes
+                de pegarlo aquí para ver cómo se ve.
+            </p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeEditHtmlModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Eliminar sección custom ===== #}
+<div class="modal-overlay" id="delete-web-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>🗑️ Eliminar sección</span>
+            <button type="button" class="modal-close" onclick="closeDeleteWebModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Seguro que quieres eliminar la sección <strong id="delete-web-name" class="gold">—</strong>?</p>
+            <div class="alert alert-error" style="margin:14px 0;">
+                ⚠️ Esta acción <strong>NO se puede deshacer</strong>. Se borrará:
+                <ul style="margin:6px 0 0 20px;">
+                    <li>La sección <code id="delete-web-slug">—</code></li>
+                    <li>Todos sus permisos</li>
+                    <li>El HTML asociado</li>
+                </ul>
+                Si solo quieres ocultarla temporalmente, usa el botón ⏸️ (desactivar) en su lugar.
+            </div>
+            <form method="POST" action="#" id="delete-web-form">
+                <button type="submit" class="btn btn-primary btn-block">🗑️ Sí, eliminar</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeDeleteWebModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Confirmar desactivar ===== #}
+<div class="modal-overlay" id="deactivate-web-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>⏸️ Desactivar sección</span>
+            <button type="button" class="modal-close" onclick="closeDeactivateWebModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Desactivar la sección <strong id="deactivate-web-name" class="gold">—</strong>?</p>
+
+            {# Warning para FEATURE (sección del sistema como chat, friends, docs) #}
+            <div id="deactivate-warning-system" class="alert alert-error" style="margin:14px 0;" hidden>
+                ⚠️ <strong>Esta es una sección FEATURE del sistema.</strong>
+                <ul style="margin:6px 0 0 20px;">
+                    <li>La card desaparecerá del hub</li>
+                    <li>La ruta <code id="deactivate-system-url">/slug</code> seguirá funcionando (está hardcoded)</li>
+                    <li>Nuevos usuarios que no conozcan la URL no podrán acceder</li>
+                </ul>
+            </div>
+
+            {# Warning para CUSTOM (HTML propio o URL externa) #}
+            <div id="deactivate-warning-custom" class="alert alert-error" style="margin:14px 0;" hidden>
+                ⚠️ <strong>Esta es una sección CUSTOM.</strong>
+                <ul style="margin:6px 0 0 20px;">
+                    <li>La card desaparecerá del hub</li>
+                    <li id="deactivate-custom-html-warning" hidden>
+                        La URL <code>/slug</code> <strong>dejará de funcionar</strong> (el HTML custom no se sirve mientras esté desactivada).
+                    </li>
+                    <li id="deactivate-custom-external-warning" hidden>
+                        La URL externa seguirá siendo accesible si alguien la conoce.
+                    </li>
+                    <li>La sección se conserva intacta en la DB, puedes reactivarla con ▶️</li>
+                </ul>
+            </div>
+
+            <div class="alert alert-info" style="margin:14px 0;">
+                💡 Si solo quieres ocultarla temporalmente, desactiva. Si quieres borrarla para siempre, usa el botón 🗑️.
+            </div>
+            <form method="POST" action="#" id="deactivate-web-form">
+                <button type="submit" class="btn btn-primary btn-block">⏸️ Sí, desactivar</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeDeactivateWebModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Editar permisos de una sección ===== #}
+<div class="modal-overlay" id="perms-web-modal" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span>🔐 Permisos — <span id="perms-web-name">—</span></span>
+            <button type="button" class="modal-close" onclick="closePermsModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Selecciona qué roles pueden ver esta sección en el hub:</p>
+            <form method="POST" action="#" id="perms-web-form" class="auth-form">
+                <div class="perms-list">
+                    <label class="perm-row">
+                        <input type="checkbox" name="owner" value="1" id="perm-owner">
+                        <span>👑 owner <span class="muted small">(puede todo)</span></span>
+                    </label>
+                    <label class="perm-row">
+                        <input type="checkbox" name="admin" value="1" id="perm-admin">
+                        <span>🛡️ admin</span>
+                    </label>
+                    <label class="perm-row">
+                        <input type="checkbox" name="staff" value="1" id="perm-staff">
+                        <span>⚔️ staff</span>
+                    </label>
+                    <label class="perm-row">
+                        <input type="checkbox" name="usuario" value="1" id="perm-usuario">
+                        <span>🧑 usuario</span>
+                    </label>
+                </div>
+                <div class="alert alert-info" style="margin-top:14px;">
+                    💡 Si no marcas ninguno, la sección no aparecerá en el hub para nadie
+                    (pero la URL seguirá siendo accesible si alguien la conoce).
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">💾 Guardar permisos</button>
+            </form>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closePermsModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* ===== Acordeón de secciones (reutiliza .collapse de admin.css) ===== */
+.web-accordion { margin-top: 10px; }
+.web-accordion.web-accordion-inactive { opacity: 0.6; }
+.web-accordion > summary.web-accordion-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    color: var(--blanco);
+    font-weight: 600;
+}
+.web-accordion > summary.web-accordion-head::before { content: none; }
+.web-accordion-ico { font-size: 1.6rem; flex: 0 0 auto; }
+.web-accordion-title { flex: 1 1 auto; min-width: 180px; }
+.web-accordion-title .badge { margin-left: 4px; }
+.web-accordion-meta {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.78rem;
+}
+.web-accordion-body { padding: 12px 16px 14px; }
+.web-accordion-data {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px 24px;
+    margin: 0 0 14px;
+}
+.web-accordion-data > div { display: flex; flex-direction: column; gap: 4px; }
+.web-accordion-data dt {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--texto-secundario);
+}
+.web-accordion-data dd { margin: 0; font-size: 0.9rem; }
+.web-accordion-body .tag-editor { margin-top: 0; margin-bottom: 14px; }
+.web-accordion-actions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding-top: 10px; border-top: 1px solid var(--fondo);
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-left: 6px;
+}
+.badge-core {
+    background: rgba(255, 62, 62, 0.12);
+    color: var(--rojo);
+    border: 1px solid rgba(255, 62, 62, 0.3);
+}
+.badge-feature {
+    background: rgba(0, 212, 255, 0.12);
+    color: var(--cian);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+.badge-custom {
+    background: rgba(0, 255, 136, 0.12);
+    color: var(--verde);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+}
+.active-badge {
+    display: inline-block;
+    background: rgba(0, 255, 136, 0.1);
+    color: var(--verde);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.inactive-badge {
+    display: inline-block;
+    background: rgba(255, 140, 66, 0.1);
+    color: #ff8c42;
+    border: 1px solid rgba(255, 140, 66, 0.3);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.web-row-inactive {
+    opacity: 0.55;
+    background: rgba(255, 140, 66, 0.03);
+}
+.core-lock, .system-lock {
+    display: inline-block;
+    color: var(--gris);
+    font-size: 1.2rem;
+}
+.modal-dialog-lg {
+    max-width: 720px !important;
+}
+.actions-cell {
+    white-space: nowrap;
+}
+.perms-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.perm-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--fondo);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--negro);
+    color: var(--blanco);
+}
+.perm-row:hover { background: rgba(255,255,255,0.04); }
+.perm-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--dorado);
+    cursor: pointer;
+}
+.perms-count {
+    color: var(--dorado);
+    font-weight: 700;
+}
+</style>
+
+<script src="/static/js/admin/admin_webs_1.js" defer></script>{% endblock %}
