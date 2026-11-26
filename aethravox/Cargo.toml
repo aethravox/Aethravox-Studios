@@ -6,6 +6,7 @@ description = "Aethravox Studios — Web 1: Login/Register (puerta al hub)"
 authors = ["Aethravox Studios"]
 
 [dependencies]
+aethravox-core = { path = "../crates/aethravox-core" }
 # Web framework
 axum = { version = "0.7", features = ["macros", "form", "multipart", "ws"] }
 tokio = { version = "1", features = ["full"] }
@@ -64,9 +65,3 @@ http-body-util = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 async-stream = "0.3"
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-strip = true
-panic = "abort"

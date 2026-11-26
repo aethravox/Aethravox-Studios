@@ -1,0 +1,15 @@
+[package]
+name = "aethravox-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Aethravox Studios — Native Desktop Client (egui / eframe)"
+authors = ["Aethravox Studios"]
+
+[dependencies]
+aethravox-core = { path = "../aethravox-core" }
+eframe = "0.29"
+egui = "0.29"
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
