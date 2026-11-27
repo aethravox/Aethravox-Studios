@@ -627,7 +627,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         ui.add_space(6.0);
                         elevated_frame(p).show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new(format!("Editar HTML de "{hname}"")).strong(),
+                                egui::RichText::new(format!("Editar HTML de \"{hname}\"")).strong(),
                             );
                             ui.add(
                                 egui::TextEdit::multiline(&mut app.admin_web_html_draft)
@@ -649,7 +649,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         ui.add_space(6.0);
                         elevated_frame(p).show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new(format!("Etiqueta y estado de "{tname}""))
+                                egui::RichText::new(format!("Etiqueta y estado de \"{tname}\""))
                                     .strong(),
                             );
                             ui.horizontal_wrapped(|ui| {
