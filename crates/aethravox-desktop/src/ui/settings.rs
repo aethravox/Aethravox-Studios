@@ -530,7 +530,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
         spawn_revoke_device(
             &app.rt,
             app.tx.clone(),
-            ctx,
+            ctx.clone(),
             app.server_url.clone(),
             app.token.clone(),
             tok,
