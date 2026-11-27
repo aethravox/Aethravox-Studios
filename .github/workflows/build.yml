@@ -21,15 +21,17 @@ env:
 jobs:
   windows:
     name: Windows (${{ matrix.label }})
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
+            runner: windows-latest
             msvc_arch: amd64
             label: x86_64
           - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
             msvc_arch: arm64
             label: arm64
     steps:
@@ -236,15 +238,38 @@ jobs:
       - name: Install cargo-apk
         run: cargo install cargo-apk --locked
 
+      - name: Prepare Android Keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/release-key.jks
+            echo "CARGO_APK_RELEASE_KEYSTORE=/tmp/release-key.jks" >> "$GITHUB_ENV"
+            echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ANDROID_USING_RELEASE_KEY=1" >> "$GITHUB_ENV"
+          else
+            keytool -genkeypair -v \
+              -keystore /tmp/debug-release.jks \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Aethravox Debug,O=Aethravox,C=ES"
+            echo "CARGO_APK_RELEASE_KEYSTORE=/tmp/debug-release.jks" >> "$GITHUB_ENV"
+            echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "ANDROID_USING_RELEASE_KEY=0" >> "$GITHUB_ENV"
+            echo "::warning::Secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD no configurados; usando firma debug temporal."
+          fi
+
       - name: Build Universal APK (32-bit, 64-bit, x86_64, TV & PDI)
         working-directory: crates/aethravox-desktop
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: cargo apk build --release
 
-      - name: Align and Sign APK
+      - name: Align and Verify/Sign APK
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -264,8 +289,7 @@ jobs:
 
           "$ZIPALIGN" -f -p 4 "$RAW_APK" dist-out/aethravox-aligned.apk
 
-          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/release-key.jks
+          if [ "${ANDROID_USING_RELEASE_KEY:-0}" = "1" ]; then
             SIGN_ARGS=(
               --ks /tmp/release-key.jks
               --ks-pass env:ANDROID_KEYSTORE_PASSWORD
@@ -282,8 +306,13 @@ jobs:
             "$APKSIGNER" verify --verbose dist-out/aethravox-android-universal.apk
             echo "APK firmado correctamente con tu keystore (.jks)."
           else
-            mv dist-out/aethravox-aligned.apk dist-out/aethravox-android-universal-debug.apk
-            echo "::warning::Secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD no configurados; se subió APK con firma debug."
+            "$APKSIGNER" sign \
+              --ks /tmp/debug-release.jks \
+              --ks-pass pass:android \
+              --out dist-out/aethravox-android-universal-debug.apk \
+              dist-out/aethravox-aligned.apk
+            rm -f /tmp/debug-release.jks dist-out/aethravox-aligned.apk
+            "$APKSIGNER" verify --verbose dist-out/aethravox-android-universal-debug.apk
           fi
 
       - name: Upload Android APK

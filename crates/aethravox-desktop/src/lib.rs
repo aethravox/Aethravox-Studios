@@ -27,6 +27,7 @@ fn detect_initial_device_profile() -> DeviceProfile {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn base_native_options(profile: DeviceProfile) -> eframe::NativeOptions {
+    #[allow(unused_mut)]
     let mut viewport = egui::ViewportBuilder::default().with_title("Aethravox Studios");
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
