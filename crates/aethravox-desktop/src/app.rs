@@ -1,9 +1,9 @@
 use aethravox_core::{
-    AdminOverviewDto, AexosProfileDto, ArisChatDto, ArisCreditsDto, ArisMessageDto, ArisMode,
-    ChatConversationDto, ChatMessageDto, ColorMode, CommunityDetailDto, CommunityDto,
-    DeviceProfile, DocumentDto, DownloadPlatformDto, EmailsPayload, FriendsPayload, HubPayload,
-    LinkCodeDto, ProfilePayload, ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto,
-    WebAppDto,
+    AdminIpBansPayload, AdminOverviewDto, AexosProfileDto, ArisChatDto, ArisCreditsDto,
+    ArisMessageDto, ArisMode, ChatConversationDto, ChatGroupManageDto, ChatMessageDto, ColorMode,
+    CommunityDetailDto, CommunityDto, DeviceProfile, DocumentDto, DownloadPlatformDto,
+    EmailsPayload, FriendsPayload, HubPayload, LinkCodeDto, ProfilePayload, SystemConfigDto,
+    ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto, WebAppDto,
 };
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -11,12 +11,13 @@ use tokio::sync::mpsc;
 use crate::api::{
     demo_aexos_profiles, demo_aris_chats, demo_chat_conversations, demo_chat_messages,
     demo_communities, demo_docs, demo_downloads, demo_friends, demo_tickets, demo_videos,
-    offline_demo_hub, spawn_admin_overview, spawn_aexos_profiles, spawn_aris_chats,
-    spawn_aris_credits, spawn_aris_messages, spawn_community_detail, spawn_community_inviteable,
-    spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
-    spawn_fetch_emails, spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages,
-    spawn_fetch_profile, spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read,
-    spawn_save_theme, spawn_send_message, spawn_ticket_detail, ApiEvent, AsyncRt,
+    offline_demo_hub, spawn_admin_config_get, spawn_admin_ip_bans, spawn_admin_overview,
+    spawn_aexos_profiles, spawn_aris_chats, spawn_aris_credits, spawn_aris_messages,
+    spawn_community_detail, spawn_community_inviteable, spawn_fetch_communities,
+    spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads, spawn_fetch_emails,
+    spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages, spawn_fetch_profile,
+    spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read, spawn_save_theme,
+    spawn_send_message, spawn_ticket_detail, ApiEvent, AsyncRt,
 };
 use crate::theme::{apply_theme_for_device, Palette};
 use crate::ui;
@@ -107,6 +108,22 @@ pub struct AethravoxApp {
     pub chat_group_members: String,
     pub chat_editing_id: Option<i64>,
     pub chat_edit_draft: String,
+    pub chat_group_panel: bool,
+    pub chat_group_manage: Option<ChatGroupManageDto>,
+    pub chat_group_edit_name: String,
+    pub chat_group_edit_desc: String,
+    pub chat_group_add_user: String,
+    pub chat_rank_name: String,
+    pub chat_rank_color: String,
+    pub chat_rank_can_send: bool,
+    pub chat_rank_can_add: bool,
+    pub chat_rank_can_edit_info: bool,
+    pub chat_rank_can_delete: bool,
+    pub chat_rank_can_remove: bool,
+    pub chat_rank_can_manage: bool,
+    pub chat_rank_can_assign: bool,
+    pub chat_rank_can_pin: bool,
+    pub chat_rank_can_transfer: bool,
 
     // Aris state
     pub aris_chats: Vec<ArisChatDto>,
@@ -175,6 +192,14 @@ pub struct AethravoxApp {
     pub videos: Vec<VideoDto>,
     pub aextube_filter: String,
     pub aextube_error: Option<String>,
+    pub aextube_upload_open: bool,
+    pub aextube_up_title: String,
+    pub aextube_up_desc: String,
+    pub aextube_up_is_short: bool,
+    pub aextube_up_path: String,
+    pub aextube_up_busy: bool,
+    pub aextube_up_dropped_name: Option<String>,
+    pub aextube_up_dropped_bytes: Option<Vec<u8>>,
 
     // Playground state
     pub pg_tab: usize,
@@ -207,6 +232,21 @@ pub struct AethravoxApp {
     pub admin_ban_reason: String,
     pub admin_ban_permanent: bool,
     pub admin_ban_hours: String,
+    pub admin_suspend_target: Option<(i64, String)>,
+    pub admin_suspend_reason: String,
+    pub admin_suspend_hours: String,
+    pub admin_delete_confirm: Option<(i64, String)>,
+    pub admin_ip_bans: Option<AdminIpBansPayload>,
+    pub admin_ip_ban_ip: String,
+    pub admin_ip_ban_reason: String,
+    pub admin_ip_ban_perm: bool,
+    pub admin_ip_ban_hours: String,
+    pub admin_config: Option<SystemConfigDto>,
+    pub admin_cfg_studio: String,
+    pub admin_cfg_date: String,
+    pub admin_cfg_register: bool,
+    pub admin_cfg_default_role: String,
+    pub admin_cfg_maintenance: bool,
     pub admin_error: Option<String>,
 
     // Neon Canvas / PDI state
@@ -321,6 +361,22 @@ impl AethravoxApp {
             chat_group_members: String::new(),
             chat_editing_id: None,
             chat_edit_draft: String::new(),
+            chat_group_panel: false,
+            chat_group_manage: None,
+            chat_group_edit_name: String::new(),
+            chat_group_edit_desc: String::new(),
+            chat_group_add_user: String::new(),
+            chat_rank_name: String::new(),
+            chat_rank_color: "#00d4ff".to_string(),
+            chat_rank_can_send: true,
+            chat_rank_can_add: false,
+            chat_rank_can_edit_info: false,
+            chat_rank_can_delete: false,
+            chat_rank_can_remove: false,
+            chat_rank_can_manage: false,
+            chat_rank_can_assign: false,
+            chat_rank_can_pin: false,
+            chat_rank_can_transfer: false,
             aris_chats,
             active_aris_chat_id: 1,
             aris_messages,
@@ -379,6 +435,14 @@ impl AethravoxApp {
             videos: demo_videos(),
             aextube_filter: "all".to_string(),
             aextube_error: None,
+            aextube_upload_open: false,
+            aextube_up_title: String::new(),
+            aextube_up_desc: String::new(),
+            aextube_up_is_short: false,
+            aextube_up_path: String::new(),
+            aextube_up_busy: false,
+            aextube_up_dropped_name: None,
+            aextube_up_dropped_bytes: None,
             pg_tab: 0,
             pg_html: "<div class=\"hero\">\n  <h1>Hola Aethravox</h1>\n  <p>Edita este HTML, CSS o JS y ábrelo en vivo.</p>\n</div>".into(),
             pg_css: "body { background:#06030c; color:#f8f8fc; font-family:sans-serif; padding:40px; }\nh1 { color:#e0a308; }".into(),
@@ -403,6 +467,21 @@ impl AethravoxApp {
             admin_ban_reason: String::new(),
             admin_ban_permanent: false,
             admin_ban_hours: "24".to_string(),
+            admin_suspend_target: None,
+            admin_suspend_reason: String::new(),
+            admin_suspend_hours: "24".to_string(),
+            admin_delete_confirm: None,
+            admin_ip_bans: None,
+            admin_ip_ban_ip: String::new(),
+            admin_ip_ban_reason: String::new(),
+            admin_ip_ban_perm: false,
+            admin_ip_ban_hours: "24".to_string(),
+            admin_config: None,
+            admin_cfg_studio: String::new(),
+            admin_cfg_date: String::new(),
+            admin_cfg_register: true,
+            admin_cfg_default_role: "usuario".to_string(),
+            admin_cfg_maintenance: false,
             admin_error: None,
             neon_strokes: Vec::new(),
             neon_active_stroke: None,
@@ -683,6 +762,15 @@ impl AethravoxApp {
         self.emails_payload = None;
         self.link_code_generated = None;
         self.admin_overview = None;
+        self.admin_ip_bans = None;
+        self.admin_config = None;
+        self.admin_ban_target = None;
+        self.admin_suspend_target = None;
+        self.admin_delete_confirm = None;
+        self.aextube_upload_open = false;
+        self.aextube_up_busy = false;
+        self.aextube_up_dropped_name = None;
+        self.aextube_up_dropped_bytes = None;
         self.active_community = None;
         self.active_ticket = None;
         self.reset_chat_state();
@@ -698,12 +786,20 @@ impl AethravoxApp {
         self.chat_sending = false;
         self.chat_pending = None;
         self.chat_last_poll = None;
+        self.chat_editing_id = None;
+        self.chat_edit_draft.clear();
+        self.chat_group_panel = false;
+        self.chat_group_manage = None;
     }
 
     /// Abre una conversación: carga sus mensajes y la marca como leída (modo online).
     pub fn chat_open_conversation(&mut self, ctx: &egui::Context, conv_id: i64) {
         self.active_conv_id = conv_id;
         self.chat_error = None;
+        self.chat_editing_id = None;
+        self.chat_edit_draft.clear();
+        self.chat_group_panel = false;
+        self.chat_group_manage = None;
         if self.offline_mode || self.token.is_none() || conv_id == 0 {
             return;
         }
@@ -898,6 +994,40 @@ impl AethravoxApp {
                     );
                     self.chat_open_conversation(ctx, conv_id);
                 }
+                ApiEvent::ChatGroupManageLoaded(dto) => {
+                    self.chat_error = None;
+                    self.chat_group_edit_name = dto.name.clone();
+                    self.chat_group_edit_desc = dto.description.clone();
+                    self.chat_group_manage = Some(dto);
+                }
+                ApiEvent::ChatGroupActionOk(msg) => {
+                    self.chat_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_conversations(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::ChatGroupLeft(cid) => {
+                    if self.active_conv_id == cid {
+                        self.active_conv_id = 0;
+                        self.chat_messages.retain(|m| m.conversation_id != cid);
+                    }
+                    self.chat_group_panel = false;
+                    self.chat_group_manage = None;
+                    self.mobile_detail_open = false;
+                    self.status_banner = Some("Has salido del grupo.".into());
+                    spawn_fetch_conversations(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
                 ApiEvent::ChatErr(msg) => {
                     self.chat_error = Some(msg);
                 }
@@ -1068,6 +1198,17 @@ impl AethravoxApp {
                     self.docs_error = None;
                     self.docs = list;
                 }
+                ApiEvent::DocsActionOk(msg) => {
+                    self.docs_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_docs(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
                 ApiEvent::DocsErr(e) => {
                     self.docs_error = Some(e);
                 }
@@ -1152,11 +1293,21 @@ impl AethravoxApp {
 
                 // aexTube
                 ApiEvent::VideosLoaded(list) => {
+                    self.aextube_up_busy = false;
                     self.aextube_error = None;
                     self.videos = list;
                 }
                 ApiEvent::AextubeActionOk(msg) => {
+                    self.aextube_up_busy = false;
                     self.aextube_error = None;
+                    if msg.contains("publicado") {
+                        self.aextube_up_title.clear();
+                        self.aextube_up_desc.clear();
+                        self.aextube_up_path.clear();
+                        self.aextube_up_dropped_name = None;
+                        self.aextube_up_dropped_bytes = None;
+                        self.aextube_upload_open = false;
+                    }
                     self.status_banner = Some(msg);
                     spawn_fetch_videos(
                         &self.rt,
@@ -1167,6 +1318,7 @@ impl AethravoxApp {
                     );
                 }
                 ApiEvent::AextubeErr(e) => {
+                    self.aextube_up_busy = false;
                     self.aextube_error = Some(e);
                 }
 
@@ -1214,6 +1366,19 @@ impl AethravoxApp {
                     self.admin_error = None;
                     self.admin_overview = Some(ov);
                 }
+                ApiEvent::AdminIpBansLoaded(p) => {
+                    self.admin_error = None;
+                    self.admin_ip_bans = Some(p);
+                }
+                ApiEvent::AdminConfigLoaded(cfg) => {
+                    self.admin_error = None;
+                    self.admin_cfg_studio = cfg.studio_name.clone();
+                    self.admin_cfg_date = cfg.foundation_date.clone();
+                    self.admin_cfg_register = cfg.allow_public_register;
+                    self.admin_cfg_default_role = cfg.default_role.clone();
+                    self.admin_cfg_maintenance = cfg.maintenance_mode;
+                    self.admin_config = Some(cfg);
+                }
                 ApiEvent::AdminActionOk(msg) => {
                     self.admin_error = None;
                     self.status_banner = Some(msg);
@@ -1224,6 +1389,23 @@ impl AethravoxApp {
                         self.server_url.clone(),
                         self.token.clone(),
                     );
+                    if self.admin_tab == 3 {
+                        spawn_admin_ip_bans(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    } else if self.admin_tab == 4 {
+                        spawn_admin_config_get(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    }
                 }
                 ApiEvent::AdminErr(e) => {
                     self.admin_error = Some(e);

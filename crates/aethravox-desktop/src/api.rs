@@ -1,18 +1,21 @@
 use aethravox_core::{
-    AdminBanRequest, AdminOverviewDto, AdminRoleRequest, AexosLinkRequest, AexosProfileDto,
-    AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto, ArisCreateChatRequest,
-    ArisCreditsDto, ArisMessageDto, ArisMode, ArisSendRequest, ArisSendResponse, AuthSuccess,
-    CategoryRowDto, ChangePasswordRequest, ChatConversationDto, ChatMessageDto, CommunityDetailDto,
-    CommunityDto, CreateCommunityGroupRequest, CreateCommunityRequest, CreateGroupRequest,
+    base64_encode, AddGroupMemberRequest, AdminBanRequest, AdminIpBansPayload, AdminOverviewDto,
+    AdminRoleRequest, AexosLinkRequest, AexosProfileDto, AexosSavePrefsRequest,
+    AexosSwitchRequest, ApiError, ArisChatDto, ArisCreateChatRequest, ArisCreditsDto,
+    ArisMessageDto, ArisMode, ArisSendRequest, ArisSendResponse, AssignMemberRankRequest,
+    AuthSuccess, CategoryRowDto, ChangePasswordRequest, ChatConversationDto, ChatGroupManageDto,
+    ChatMessageDto, CommunityDetailDto, CommunityDto, CreateCommunityGroupRequest,
+    CreateCommunityRequest, CreateGroupRankRequest, CreateGroupRequest, CreateIpBanRequest,
     CreateTicketRequest, DocumentDto, DownloadAppDto, DownloadFileDto, DownloadPlatformDto,
     EditMessageRequest, EmailIdBody, EmailRequestBody, EmailVerifyBody, EmailsPayload, FriendDto,
     FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest,
     LinkCodeDto, LinkConsumeRequest, LoginRequest, PendingFriendDto, PlaygroundGenRequest,
     PlaygroundGenResult, ProfilePayload, RecoverRequest, RecoverResponse, RegisterRequest,
     ReplyTicketRequest, ResetPasswordRequest, SendMessageRequest, StartDmRequest,
-    StartDmResponse, ThemeKind, ThemeSelectRequest, TicketActionRequest, TicketDetailDto,
-    TicketDto, UpdateProfileRequest, UpdateTitlesRequest, UserSearchDto, UserSummary, VideoDto,
-    VideoReactRequest, WebAppDto,
+    StartDmResponse, SuspendUserRequest, SystemConfigDto, ThemeKind, ThemeSelectRequest,
+    TicketActionRequest, TicketDetailDto, TicketDto, TransferGroupOwnershipRequest,
+    UpdateGroupInfoRequest, UpdateProfileRequest, UpdateTitlesRequest, UploadVideoRequest,
+    UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto,
 };
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -52,6 +55,9 @@ pub enum ApiEvent {
     },
     MessageSent(ChatMessageDto),
     ChatRoomOpened(i64),
+    ChatGroupManageLoaded(ChatGroupManageDto),
+    ChatGroupActionOk(String),
+    ChatGroupLeft(i64),
     ChatErr(String),
     ChatSendErr(String),
 
@@ -89,6 +95,7 @@ pub enum ApiEvent {
 
     // Documentos y Descargas
     DocsLoaded(Vec<DocumentDto>),
+    DocsActionOk(String),
     DocsErr(String),
     DownloadsLoaded(Vec<DownloadPlatformDto>),
     DownloadsErr(String),
@@ -121,6 +128,8 @@ pub enum ApiEvent {
 
     // Admin
     AdminOverviewLoaded(AdminOverviewDto),
+    AdminIpBansLoaded(AdminIpBansPayload),
+    AdminConfigLoaded(SystemConfigDto),
     AdminActionOk(String),
     AdminErr(String),
 
@@ -987,6 +996,28 @@ pub fn spawn_fetch_docs(
     });
 }
 
+pub fn spawn_docs_delete(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    doc_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/docs/{doc_id}");
+        match delete_json::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::DocsActionOk("Documento eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::DocsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
 pub fn spawn_fetch_downloads(
     rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
@@ -1406,6 +1437,153 @@ pub fn spawn_delete_video(
         }
         ctx.request_repaint();
     });
+}
+
+fn infer_video_mime(filename: &str, hint: &str) -> String {
+    if !hint.trim().is_empty() {
+        return hint.trim().to_string();
+    }
+    let lower = filename.to_ascii_lowercase();
+    if lower.ends_with(".webm") {
+        "video/webm".into()
+    } else if lower.ends_with(".mov") {
+        "video/quicktime".into()
+    } else if lower.ends_with(".ogv") || lower.ends_with(".ogg") {
+        "video/ogg".into()
+    } else {
+        "video/mp4".into()
+    }
+}
+
+pub fn spawn_aextube_upload_bytes(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title: String,
+    description: String,
+    is_short: bool,
+    filename: String,
+    content_type: String,
+    bytes: Vec<u8>,
+) {
+    rt.spawn(async move {
+        if bytes.is_empty() {
+            let _ = tx.send(ApiEvent::AextubeErr("El archivo de vídeo está vacío.".into()));
+            ctx.request_repaint();
+            return;
+        }
+        if bytes.len() > 20 * 1024 * 1024 {
+            let _ = tx.send(ApiEvent::AextubeErr("El vídeo supera el límite de 20 MB.".into()));
+            ctx.request_repaint();
+            return;
+        }
+        let mime = infer_video_mime(&filename, &content_type);
+        let req = UploadVideoRequest {
+            title,
+            description,
+            is_short,
+            filename,
+            content_type: mime,
+            data_base64: base64_encode(&bytes),
+        };
+        match post_json::<UploadVideoRequest, Vec<VideoDto>>(
+            &base_url,
+            "/api/v1/aextube/upload",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::VideosLoaded(list));
+                let _ = tx.send(ApiEvent::AextubeActionOk("Vídeo publicado en aexTube.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AextubeErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+#[allow(unused_variables)]
+pub fn spawn_aextube_upload_path(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title: String,
+    description: String,
+    is_short: bool,
+    path: String,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = tx.send(ApiEvent::AextubeErr(
+            "En navegador web arrastra el archivo directamente al área de subida.".into(),
+        ));
+        ctx.request_repaint();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rt.spawn(async move {
+            let trimmed = path.trim().trim_matches('"').to_string();
+            let bytes = match std::fs::read(&trimmed) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AextubeErr(format!(
+                        "No se pudo leer el archivo ({trimmed}): {e}"
+                    )));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            if bytes.is_empty() {
+                let _ = tx.send(ApiEvent::AextubeErr("El archivo de vídeo está vacío.".into()));
+                ctx.request_repaint();
+                return;
+            }
+            if bytes.len() > 20 * 1024 * 1024 {
+                let _ = tx.send(ApiEvent::AextubeErr("El vídeo supera el límite de 20 MB.".into()));
+                ctx.request_repaint();
+                return;
+            }
+            let filename = std::path::Path::new(&trimmed)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("video.mp4")
+                .to_string();
+            let mime = infer_video_mime(&filename, "");
+            let req = UploadVideoRequest {
+                title,
+                description,
+                is_short,
+                filename,
+                content_type: mime,
+                data_base64: base64_encode(&bytes),
+            };
+            match post_json::<UploadVideoRequest, Vec<VideoDto>>(
+                &base_url,
+                "/api/v1/aextube/upload",
+                &token,
+                &req,
+            )
+            .await
+            {
+                Ok(list) => {
+                    let _ = tx.send(ApiEvent::VideosLoaded(list));
+                    let _ = tx.send(ApiEvent::AextubeActionOk("Vídeo publicado en aexTube.".into()));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AextubeErr(e));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
 }
 
 // ===================== Playground =====================
@@ -1995,6 +2173,424 @@ pub fn spawn_remove_email(
             }
             Err(e) => {
                 let _ = tx.send(ApiEvent::EmailErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Gestión de Grupos (Chat) =====================
+
+pub fn spawn_chat_group_manage(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/manage");
+        match get_json::<ChatGroupManageDto>(&base_url, &path, &token).await {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_update_info(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    req: UpdateGroupInfoRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/info");
+        match post_json::<UpdateGroupInfoRequest, ChatGroupManageDto>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Información del grupo actualizada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_add_member(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    username: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/members/add");
+        let req = AddGroupMemberRequest { username };
+        match post_json::<AddGroupMemberRequest, ChatGroupManageDto>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Miembro añadido al grupo.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_remove_member(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    user_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/members/{user_id}/remove");
+        match post_empty::<ChatGroupManageDto>(&base_url, &path, &token).await {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Miembro expulsado del grupo.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_assign_rank(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    user_id: i64,
+    rank_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/ranks/assign");
+        let req = AssignMemberRankRequest { user_id, rank_id };
+        match post_json::<AssignMemberRankRequest, ChatGroupManageDto>(
+            &base_url,
+            &path,
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Rango asignado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_create_rank(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    req: CreateGroupRankRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/ranks/create");
+        match post_json::<CreateGroupRankRequest, ChatGroupManageDto>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Rango creado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_delete_rank(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    rank_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/ranks/{rank_id}");
+        match delete_json::<ChatGroupManageDto>(&base_url, &path, &token).await {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Rango eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_transfer(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    new_owner_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/transfer");
+        let req = TransferGroupOwnershipRequest { new_owner_id };
+        match post_json::<TransferGroupOwnershipRequest, ChatGroupManageDto>(
+            &base_url,
+            &path,
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Ownership transferido.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_group_leave(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/leave");
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ChatGroupLeft(conv_id));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Admin Extendido (Suspender, Eliminar, Bans IP, Config) =====================
+
+pub fn spawn_admin_suspend_user(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    user_id: i64,
+    req: SuspendUserRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/users/{user_id}/suspend");
+        match post_json::<SuspendUserRequest, serde_json::Value>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Usuario suspendido.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_delete_user(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    user_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/users/{user_id}/delete");
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Usuario eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_ip_bans(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<AdminIpBansPayload>(&base_url, "/api/v1/admin/ip_bans", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminIpBansLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_create_ip_ban(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: CreateIpBanRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<CreateIpBanRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/admin/ip_bans/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                if let Ok(p) =
+                    get_json::<AdminIpBansPayload>(&base_url, "/api/v1/admin/ip_bans", &token).await
+                {
+                    let _ = tx.send(ApiEvent::AdminIpBansLoaded(p));
+                }
+                let _ = tx.send(ApiEvent::AdminActionOk("IP baneada correctamente.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_revoke_ip_ban(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    ban_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/ip_bans/{ban_id}/revoke");
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                if let Ok(p) =
+                    get_json::<AdminIpBansPayload>(&base_url, "/api/v1/admin/ip_bans", &token).await
+                {
+                    let _ = tx.send(ApiEvent::AdminIpBansLoaded(p));
+                }
+                let _ = tx.send(ApiEvent::AdminActionOk("Ban de IP revocado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_config_get(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<SystemConfigDto>(&base_url, "/api/v1/admin/config", &token).await {
+            Ok(cfg) => {
+                let _ = tx.send(ApiEvent::AdminConfigLoaded(cfg));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_config_save(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: SystemConfigDto,
+) {
+    rt.spawn(async move {
+        match post_json::<SystemConfigDto, SystemConfigDto>(
+            &base_url,
+            "/api/v1/admin/config",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(cfg) => {
+                let _ = tx.send(ApiEvent::AdminConfigLoaded(cfg));
+                let _ = tx.send(ApiEvent::AdminActionOk(
+                    "Configuración del sistema guardada.".into(),
+                ));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
             }
         }
         ctx.request_repaint();

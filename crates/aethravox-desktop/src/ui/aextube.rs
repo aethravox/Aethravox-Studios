@@ -1,9 +1,26 @@
 use crate::api::{
-    spawn_delete_video, spawn_fetch_videos, spawn_react_video, spawn_subscribe_channel,
-    spawn_view_video,
+    spawn_aextube_upload_bytes, spawn_aextube_upload_path, spawn_delete_video, spawn_fetch_videos,
+    spawn_react_video, spawn_subscribe_channel, spawn_view_video,
 };
 use crate::app::AethravoxApp;
 use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palette};
+
+#[allow(dead_code)]
+enum UploadAction {
+    Bytes {
+        title: String,
+        description: String,
+        is_short: bool,
+        filename: String,
+        bytes: Vec<u8>,
+    },
+    Path {
+        title: String,
+        description: String,
+        is_short: bool,
+        path: String,
+    },
+}
 
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let ctx = ui.ctx().clone();
@@ -12,6 +29,26 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let mut subscribe_author: Option<String> = None;
     let mut delete_id: Option<i64> = None;
     let mut watch_video: Option<(i64, String)> = None;
+    let mut upload_action: Option<UploadAction> = None;
+
+    if app.aextube_upload_open {
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if let Some(f) = dropped.into_iter().next() {
+            if let Some(bytes) = f.bytes {
+                let name = if f.name.is_empty() {
+                    "video.mp4".to_string()
+                } else {
+                    f.name.clone()
+                };
+                app.aextube_up_dropped_name = Some(name);
+                app.aextube_up_dropped_bytes = Some(bytes.to_vec());
+            } else if let Some(path) = f.path {
+                app.aextube_up_path = path.display().to_string();
+                app.aextube_up_dropped_name = None;
+                app.aextube_up_dropped_bytes = None;
+            }
+        }
+    }
 
     let my_id = app.hub.as_ref().map(|h| h.user.id).unwrap_or(0);
     let is_admin = app
@@ -35,11 +72,118 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                             app.aextube_filter = key.to_string();
                         }
                     }
+                    let up_lbl = if app.aextube_upload_open {
+                        "✕ Cerrar subida"
+                    } else {
+                        "⬆ Subir vídeo"
+                    };
+                    if ui
+                        .selectable_label(app.aextube_upload_open, up_lbl)
+                        .clicked()
+                    {
+                        app.aextube_upload_open = !app.aextube_upload_open;
+                    }
                     if ui.button("↻ Actualizar").clicked() {
                         refresh = true;
                     }
                 });
             });
+
+            if app.aextube_upload_open {
+                ui.add_space(8.0);
+                elevated_frame(p).show(ui, |ui| {
+                    ui.label(egui::RichText::new("Subir vídeo o Short a aexTube").strong());
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut app.aextube_up_title)
+                            .desired_width(ui.available_width().min(360.0))
+                            .hint_text("Título del vídeo…"),
+                    );
+                    ui.add(
+                        egui::TextEdit::multiline(&mut app.aextube_up_desc)
+                            .desired_rows(2)
+                            .desired_width(ui.available_width().min(480.0))
+                            .hint_text("Descripción (opcional)…"),
+                    );
+                    ui.checkbox(&mut app.aextube_up_is_short, "Es un Short");
+
+                    ui.label(
+                        egui::RichText::new(
+                            "Arrastra aquí un archivo .mp4 / .webm / .mov / .ogv (máx. 20 MB)",
+                        )
+                        .small()
+                        .color(p.accent_secondary),
+                    );
+
+                    if let Some(name) = app.aextube_up_dropped_name.clone() {
+                        let mb = app
+                            .aextube_up_dropped_bytes
+                            .as_ref()
+                            .map(|b| b.len() as f64 / (1024.0 * 1024.0))
+                            .unwrap_or(0.0);
+                        ui.horizontal_wrapped(|ui| {
+                            badge_pill(
+                                ui,
+                                &format!("📎 {name} ({mb:.2} MB)"),
+                                p.success.gamma_multiply(0.18),
+                                p.success,
+                            );
+                            if ui.small_button("Quitar").clicked() {
+                                app.aextube_up_dropped_name = None;
+                                app.aextube_up_dropped_bytes = None;
+                            }
+                        });
+                    } else {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.aextube_up_path)
+                                    .desired_width(ui.available_width().min(480.0))
+                                    .hint_text("O escribe/pega la ruta local del vídeo…"),
+                            );
+                        }
+                    }
+
+                    ui.add_space(4.0);
+                    let pub_lbl = if app.aextube_up_busy {
+                        "Subiendo…"
+                    } else {
+                        "📤 Publicar"
+                    };
+                    if primary_button(ui, p, pub_lbl).clicked() && !app.aextube_up_busy {
+                        let title = app.aextube_up_title.trim().to_string();
+                        if title.is_empty() {
+                            app.aextube_error = Some("El título es obligatorio.".into());
+                        } else if app.offline_mode || app.token.is_none() {
+                            app.aextube_error = Some(
+                                "Inicia sesión conectado al servidor para publicar vídeos.".into(),
+                            );
+                        } else if let (Some(fname), Some(bytes)) = (
+                            app.aextube_up_dropped_name.clone(),
+                            app.aextube_up_dropped_bytes.clone(),
+                        ) {
+                            upload_action = Some(UploadAction::Bytes {
+                                title,
+                                description: app.aextube_up_desc.trim().to_string(),
+                                is_short: app.aextube_up_is_short,
+                                filename: fname,
+                                bytes,
+                            });
+                        } else if !app.aextube_up_path.trim().is_empty() {
+                            upload_action = Some(UploadAction::Path {
+                                title,
+                                description: app.aextube_up_desc.trim().to_string(),
+                                is_short: app.aextube_up_is_short,
+                                path: app.aextube_up_path.trim().to_string(),
+                            });
+                        } else {
+                            app.aextube_error = Some(
+                                "Arrastra un archivo de vídeo o indica la ruta local.".into(),
+                            );
+                        }
+                    }
+                });
+            }
 
             if let Some(err) = &app.aextube_error {
                 ui.add_space(6.0);
@@ -136,6 +280,51 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
             }
         });
 
+    if let Some(act) = upload_action {
+        app.aextube_up_busy = true;
+        app.aextube_error = None;
+        match act {
+            UploadAction::Bytes {
+                title,
+                description,
+                is_short,
+                filename,
+                bytes,
+            } => {
+                spawn_aextube_upload_bytes(
+                    &app.rt,
+                    app.tx.clone(),
+                    ctx.clone(),
+                    app.server_url.clone(),
+                    app.token.clone(),
+                    title,
+                    description,
+                    is_short,
+                    filename,
+                    String::new(),
+                    bytes,
+                );
+            }
+            UploadAction::Path {
+                title,
+                description,
+                is_short,
+                path,
+            } => {
+                spawn_aextube_upload_path(
+                    &app.rt,
+                    app.tx.clone(),
+                    ctx.clone(),
+                    app.server_url.clone(),
+                    app.token.clone(),
+                    title,
+                    description,
+                    is_short,
+                    path,
+                );
+            }
+        }
+    }
     if refresh && !app.offline_mode {
         spawn_fetch_videos(
             &app.rt,
@@ -195,3 +384,4 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
         ctx.open_url(egui::OpenUrl::new_tab(url));
     }
 }
+

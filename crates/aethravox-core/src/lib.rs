@@ -736,3 +736,219 @@ pub struct EmailIdBody {
 pub struct EditMessageRequest {
     pub body: String,
 }
+
+// ===================== Gestión de Grupos (Chat) =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatGroupRankDto {
+    pub id: i64,
+    pub name: String,
+    pub color: String,
+    pub position: i64,
+    pub is_owner_rank: bool,
+    pub can_send_messages: bool,
+    pub can_add_members: bool,
+    pub can_edit_group_info: bool,
+    pub can_delete_messages: bool,
+    pub can_remove_members: bool,
+    pub can_manage_ranks: bool,
+    pub can_assign_ranks: bool,
+    pub can_pin_messages: bool,
+    pub can_transfer_ownership: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatGroupMemberDto {
+    pub user_id: i64,
+    pub username: String,
+    pub display: String,
+    pub rank_id: i64,
+    pub rank_name: String,
+    pub rank_color: String,
+    pub is_owner: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatGroupManageDto {
+    pub conversation_id: i64,
+    pub name: String,
+    pub description: String,
+    pub is_group: bool,
+    pub owner_id: i64,
+    pub my_user_id: i64,
+    pub can_add_members: bool,
+    pub can_edit_group_info: bool,
+    pub can_remove_members: bool,
+    pub can_manage_ranks: bool,
+    pub can_assign_ranks: bool,
+    pub can_transfer_ownership: bool,
+    pub members: Vec<ChatGroupMemberDto>,
+    pub ranks: Vec<ChatGroupRankDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddGroupMemberRequest {
+    pub username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateGroupInfoRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssignMemberRankRequest {
+    pub user_id: i64,
+    pub rank_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateGroupRankRequest {
+    pub name: String,
+    pub color: Option<String>,
+    pub can_send_messages: bool,
+    pub can_add_members: bool,
+    pub can_edit_group_info: bool,
+    pub can_delete_messages: bool,
+    pub can_remove_members: bool,
+    pub can_manage_ranks: bool,
+    pub can_assign_ranks: bool,
+    pub can_pin_messages: bool,
+    pub can_transfer_ownership: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferGroupOwnershipRequest {
+    pub new_owner_id: i64,
+}
+
+// ===================== Admin Extendido (Bans IP, Config, Suspensión) =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpBanDto {
+    pub id: i64,
+    pub ip: String,
+    pub reason: String,
+    pub banned_by_username: Option<String>,
+    pub created_at: String,
+    pub expires_at: String,
+    pub is_permanent: bool,
+    pub revoked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminIpBansPayload {
+    pub active: Vec<IpBanDto>,
+    pub history: Vec<IpBanDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateIpBanRequest {
+    pub ip: String,
+    pub reason: String,
+    pub permanent: bool,
+    pub duration_hours: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemConfigDto {
+    pub studio_name: String,
+    pub foundation_date: String,
+    pub allow_public_register: bool,
+    pub default_role: String,
+    pub maintenance_mode: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuspendUserRequest {
+    pub reason: String,
+    pub duration_hours: i64,
+}
+
+// ===================== aexTube Subida Nativa =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadVideoRequest {
+    pub title: String,
+    pub description: String,
+    pub is_short: bool,
+    pub filename: String,
+    pub content_type: String,
+    pub data_base64: String,
+}
+
+pub fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((n >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((n >> 12) & 0x3F) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            TABLE[((n >> 6) & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[(n & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    fn val(b: u8) -> Option<u8> {
+        match b {
+            b'A'..=b'Z' => Some(b - b'A'),
+            b'a'..=b'z' => Some(b - b'a' + 26),
+            b'0'..=b'9' => Some(b - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+
+    let clean: Vec<u8> = input
+        .bytes()
+        .filter(|b| !b.is_ascii_whitespace())
+        .collect();
+    if clean.len() % 4 != 0 {
+        return Err("Base64 con longitud inválida.".into());
+    }
+    let mut out = Vec::with_capacity((clean.len() / 4) * 3);
+    for chunk in clean.chunks_exact(4) {
+        let c0 = val(chunk[0]).ok_or_else(|| "Base64 inválido.".to_string())?;
+        let c1 = val(chunk[1]).ok_or_else(|| "Base64 inválido.".to_string())?;
+        let pad2 = chunk[2] == b'=';
+        let pad3 = chunk[3] == b'=';
+        if pad2 && !pad3 {
+            return Err("Padding base64 inválido.".into());
+        }
+        let c2 = if pad2 {
+            0
+        } else {
+            val(chunk[2]).ok_or_else(|| "Base64 inválido.".to_string())?
+        };
+        let c3 = if pad3 {
+            0
+        } else {
+            val(chunk[3]).ok_or_else(|| "Base64 inválido.".to_string())?
+        };
+        let n = ((c0 as u32) << 18) | ((c1 as u32) << 12) | ((c2 as u32) << 6) | (c3 as u32);
+        out.push(((n >> 16) & 0xFF) as u8);
+        if !pad2 {
+            out.push(((n >> 8) & 0xFF) as u8);
+        }
+        if !pad3 {
+            out.push((n & 0xFF) as u8);
+        }
+    }
+    Ok(out)
+}
+

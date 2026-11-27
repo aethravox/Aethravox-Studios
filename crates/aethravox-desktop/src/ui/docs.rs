@@ -1,10 +1,16 @@
-use crate::api::spawn_fetch_docs;
+use crate::api::{spawn_docs_delete, spawn_fetch_docs};
 use crate::app::AethravoxApp;
 use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palette};
 
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let ctx = ui.ctx().clone();
     let mut refresh = false;
+    let mut delete_doc_id: Option<i64> = None;
+    let is_admin = app
+        .hub
+        .as_ref()
+        .map(|h| h.user.can_access_admin)
+        .unwrap_or(false);
 
     egui::ScrollArea::vertical().id_salt("docs_scroll").show(ui, |ui| {
         card_frame(p).show(ui, |ui| {
@@ -90,6 +96,13 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         let url = format!("{base}/docs/{}/download", d.id);
                         ui.ctx().open_url(egui::OpenUrl::new_tab(url));
                     }
+                    if is_admin
+                        && ui
+                            .button(egui::RichText::new("🗑 Eliminar").color(p.danger))
+                            .clicked()
+                    {
+                        delete_doc_id = Some(d.id);
+                    }
                 });
             });
             ui.add_space(6.0);
@@ -100,9 +113,24 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
         spawn_fetch_docs(
             &app.rt,
             app.tx.clone(),
-            ctx,
+            ctx.clone(),
             app.server_url.clone(),
             app.token.clone(),
         );
     }
+    if let Some(doc_id) = delete_doc_id {
+        if app.offline_mode || app.token.is_none() {
+            app.docs.retain(|d| d.id != doc_id);
+        } else {
+            spawn_docs_delete(
+                &app.rt,
+                app.tx.clone(),
+                ctx,
+                app.server_url.clone(),
+                app.token.clone(),
+                doc_id,
+            );
+        }
+    }
 }
+

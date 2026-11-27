@@ -1,20 +1,24 @@
 use std::collections::HashMap;
 
 use aethravox_core::{
-    AdminAuditDto, AdminBanRequest, AdminOverviewDto, AdminRoleRequest, AdminUserDto,
-    AdminWebDto, AexosLinkRequest, AexosProfileDto, AexosSavePrefsRequest, AexosSwitchRequest,
-    ApiError, ArisChatDto, ArisCreateChatRequest, ArisCreditsDto, ArisMessageDto, ArisSendRequest,
-    ArisSendResponse, AuthSuccess, CategoryRowDto, ChangePasswordRequest, ChatConversationDto,
-    ChatMessageDto, CommunityDetailDto, CommunityDto, CommunityGroupDto, CreateCommunityGroupRequest,
-    CreateCommunityRequest, CreateGroupRequest, CreateTicketRequest, DocumentDto, DownloadAppDto,
-    DownloadFileDto, DownloadPlatformDto, EditMessageRequest, EmailIdBody, EmailRequestBody,
-    EmailVerifyBody, EmailsPayload, FriendDto, FriendRequestBody, FriendsPayload, HubPayload,
-    HubStatsDto, InviteCommunityRequest, LinkCodeDto, LinkConsumeRequest, LinkedDeviceDto,
-    LoginRequest, PendingFriendDto, PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload,
-    RecoverRequest, RecoverResponse, RegisterRequest, ReplyTicketRequest, ResetPasswordRequest,
-    SendMessageRequest, SessionDto, StartDmRequest, StartDmResponse, ThemeKind, ThemeSelectRequest,
-    TicketActionRequest, TicketDetailDto, TicketDto, TicketMessageDto, TitleDto,
-    UpdateProfileRequest, UpdateTitlesRequest, UserEmailDto, UserSearchDto, UserSummary, VideoDto,
+    base64_decode, AddGroupMemberRequest, AdminAuditDto, AdminBanRequest, AdminIpBansPayload,
+    AdminOverviewDto, AdminRoleRequest, AdminUserDto, AdminWebDto, AexosLinkRequest,
+    AexosProfileDto, AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto,
+    ArisCreateChatRequest, ArisCreditsDto, ArisMessageDto, ArisSendRequest, ArisSendResponse,
+    AssignMemberRankRequest, AuthSuccess, CategoryRowDto, ChangePasswordRequest,
+    ChatConversationDto, ChatGroupManageDto, ChatGroupMemberDto, ChatGroupRankDto, ChatMessageDto,
+    CommunityDetailDto, CommunityDto, CommunityGroupDto, CreateCommunityGroupRequest,
+    CreateCommunityRequest, CreateGroupRankRequest, CreateGroupRequest, CreateIpBanRequest,
+    CreateTicketRequest, DocumentDto, DownloadAppDto, DownloadFileDto, DownloadPlatformDto,
+    EditMessageRequest, EmailIdBody, EmailRequestBody, EmailVerifyBody, EmailsPayload, FriendDto,
+    FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest, IpBanDto,
+    LinkCodeDto, LinkConsumeRequest, LinkedDeviceDto, LoginRequest, PendingFriendDto,
+    PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload, RecoverRequest, RecoverResponse,
+    RegisterRequest, ReplyTicketRequest, ResetPasswordRequest, SendMessageRequest, SessionDto,
+    StartDmRequest, StartDmResponse, SuspendUserRequest, SystemConfigDto, ThemeKind,
+    ThemeSelectRequest, TicketActionRequest, TicketDetailDto, TicketDto, TicketMessageDto,
+    TitleDto, TransferGroupOwnershipRequest, UpdateGroupInfoRequest, UpdateProfileRequest,
+    UpdateTitlesRequest, UploadVideoRequest, UserEmailDto, UserSearchDto, UserSummary, VideoDto,
     VideoReactRequest, WebAppDto,
 };
 use axum::{
@@ -72,6 +76,42 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/chat/messages/:id/delete", post(chat_delete_message))
         .route("/api/v1/chat/dm", post(chat_start_dm))
         .route("/api/v1/chat/group", post(chat_create_group))
+        .route(
+            "/api/v1/chat/conversations/:id/manage",
+            get(chat_group_manage),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/info",
+            post(chat_group_update_info),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/leave",
+            post(chat_group_leave),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/members/add",
+            post(chat_group_add_member),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/members/:user_id/remove",
+            post(chat_group_remove_member),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/ranks/assign",
+            post(chat_group_assign_rank),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/ranks/create",
+            post(chat_group_create_rank),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/ranks/:rank_id",
+            delete(chat_group_delete_rank),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/transfer",
+            post(chat_group_transfer_ownership),
+        )
         // Aris IA
         .route("/api/v1/aris/credits", get(aris_credits))
         .route(
@@ -110,6 +150,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/communities/:id/invite", post(communities_invite))
         // Documentos & Descargas
         .route("/api/v1/docs", get(docs_list))
+        .route("/api/v1/docs/:id", delete(docs_delete))
         .route("/api/v1/downloads", get(downloads_list))
         // Asistencia / Tickets
         .route(
@@ -147,6 +188,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/emails/remove", post(emails_remove))
         // aexTube
         .route("/api/v1/aextube/videos", get(aextube_list))
+        .route("/api/v1/aextube/upload", post(aextube_upload))
         .route(
             "/api/v1/aextube/videos/:id/react",
             post(aextube_react),
@@ -167,12 +209,24 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/admin/overview", get(admin_overview))
         .route("/api/v1/admin/users/:id/role", post(admin_set_role))
         .route("/api/v1/admin/users/:id/ban", post(admin_ban_user))
+        .route("/api/v1/admin/users/:id/suspend", post(admin_suspend_user))
         .route("/api/v1/admin/users/:id/unban", post(admin_unban_user))
+        .route("/api/v1/admin/users/:id/delete", post(admin_delete_user))
         .route(
             "/api/v1/admin/users/:id/force_logout",
             post(admin_force_logout),
         )
         .route("/api/v1/admin/webs/:id/toggle", post(admin_toggle_web))
+        .route("/api/v1/admin/ip_bans", get(admin_ip_bans_list))
+        .route("/api/v1/admin/ip_bans/create", post(admin_ip_bans_create))
+        .route(
+            "/api/v1/admin/ip_bans/:id/revoke",
+            post(admin_ip_bans_revoke),
+        )
+        .route(
+            "/api/v1/admin/config",
+            get(admin_config_get).post(admin_config_set),
+        )
 }
 
 fn json_err(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -3245,4 +3299,922 @@ async fn emails_remove(
     };
     let _ = state.db.remove_user_email(user.id, req.email_id).await;
     Json(build_emails_payload(&state, user.id).await).into_response()
+}
+
+// ===================== Gestión de Grupos (Chat) =====================
+
+async fn build_group_manage_dto(
+    state: &AppState,
+    conv_id: i64,
+    viewer_id: i64,
+) -> Result<ChatGroupManageDto, Response> {
+    if !state.db.is_conversation_member(conv_id, viewer_id).await {
+        return Err(json_err(
+            StatusCode::FORBIDDEN,
+            "No eres miembro de esta conversación.",
+        ));
+    }
+    let Some(conv) = state.db.get_conversation(conv_id).await.ok().flatten() else {
+        return Err(json_err(StatusCode::NOT_FOUND, "Conversación no encontrada."));
+    };
+    if conv.conv_type == "dm" {
+        return Err(json_err(
+            StatusCode::BAD_REQUEST,
+            "Solo los grupos tienen administración de miembros y rangos.",
+        ));
+    }
+
+    let owner_id = conv.owner_id.unwrap_or(conv.created_by);
+    let mut ranks_raw = state
+        .db
+        .list_conversation_ranks(conv_id)
+        .await
+        .unwrap_or_default();
+    if ranks_raw.is_empty() {
+        let _ = state.db.create_default_ranks(conv_id, owner_id).await;
+        ranks_raw = state
+            .db
+            .list_conversation_ranks(conv_id)
+            .await
+            .unwrap_or_default();
+    }
+
+    let my_rank = state
+        .db
+        .get_member_rank(conv_id, viewer_id)
+        .await
+        .ok()
+        .flatten();
+    let is_owner =
+        owner_id == viewer_id || my_rank.as_ref().map(|r| r.is_owner_rank != 0).unwrap_or(false);
+
+    let ranks: Vec<ChatGroupRankDto> = ranks_raw
+        .into_iter()
+        .map(|r| ChatGroupRankDto {
+            id: r.id,
+            name: r.name,
+            color: r.color.unwrap_or_else(|| "#888888".into()),
+            position: r.position,
+            is_owner_rank: r.is_owner_rank != 0,
+            can_send_messages: r.can_send_messages != 0,
+            can_add_members: r.can_add_members != 0,
+            can_edit_group_info: r.can_edit_group_info != 0,
+            can_delete_messages: r.can_delete_messages != 0,
+            can_remove_members: r.can_remove_members != 0,
+            can_manage_ranks: r.can_manage_ranks != 0,
+            can_assign_ranks: r.can_assign_ranks != 0,
+            can_pin_messages: r.can_pin_messages != 0,
+            can_transfer_ownership: r.can_transfer_ownership != 0,
+        })
+        .collect();
+
+    let member_ids = state
+        .db
+        .get_conversation_members(conv_id)
+        .await
+        .unwrap_or_default();
+    let mut members = Vec::with_capacity(member_ids.len());
+    for mid in member_ids {
+        if let Ok(Some(u)) = state.db.find_user_by_id(mid).await {
+            let r = state.db.get_member_rank(conv_id, mid).await.ok().flatten();
+            let rank_id = r.as_ref().map(|x| x.id).unwrap_or(0);
+            let rank_name = r
+                .as_ref()
+                .map(|x| x.name.clone())
+                .unwrap_or_else(|| "Miembro".into());
+            let rank_color = r
+                .as_ref()
+                .and_then(|x| x.color.clone())
+                .unwrap_or_else(|| "#888888".into());
+            let member_is_owner =
+                mid == owner_id || r.as_ref().map(|x| x.is_owner_rank != 0).unwrap_or(false);
+            members.push(ChatGroupMemberDto {
+                user_id: u.id,
+                username: u.username.clone(),
+                display: u.display(),
+                rank_id,
+                rank_name,
+                rank_color,
+                is_owner: member_is_owner,
+            });
+        }
+    }
+
+    Ok(ChatGroupManageDto {
+        conversation_id: conv.id,
+        name: conv.name.unwrap_or_else(|| "Grupo".into()),
+        description: conv.description.unwrap_or_default(),
+        is_group: conv.conv_type != "dm",
+        owner_id,
+        my_user_id: viewer_id,
+        can_add_members: is_owner
+            || my_rank
+                .as_ref()
+                .map(|r| r.can_add_members != 0)
+                .unwrap_or(false),
+        can_edit_group_info: is_owner
+            || my_rank
+                .as_ref()
+                .map(|r| r.can_edit_group_info != 0)
+                .unwrap_or(false),
+        can_remove_members: is_owner
+            || my_rank
+                .as_ref()
+                .map(|r| r.can_remove_members != 0)
+                .unwrap_or(false),
+        can_manage_ranks: is_owner
+            || my_rank
+                .as_ref()
+                .map(|r| r.can_manage_ranks != 0)
+                .unwrap_or(false),
+        can_assign_ranks: is_owner
+            || my_rank
+                .as_ref()
+                .map(|r| r.can_assign_ranks != 0)
+                .unwrap_or(false),
+        can_transfer_ownership: is_owner
+            || my_rank
+                .as_ref()
+                .map(|r| r.can_transfer_ownership != 0)
+                .unwrap_or(false),
+        members,
+        ranks,
+    })
+}
+
+async fn chat_group_manage(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_group_update_info(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<UpdateGroupInfoRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_edit_group_info {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para editar la información del grupo.",
+        );
+    }
+    let name = req.name.trim();
+    if name.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El nombre del grupo es obligatorio.");
+    }
+    let desc = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let _ = sqlx::query("UPDATE conversations SET name = ?, description = ? WHERE id = ?")
+        .bind(name)
+        .bind(desc)
+        .bind(conv_id)
+        .execute(&state.db.pool)
+        .await;
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_group_leave(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if info.owner_id == user.id && info.members.len() > 1 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Eres el propietario del grupo. Transfiere el ownership antes de salir.",
+        );
+    }
+    let _ = sqlx::query("DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?")
+        .bind(conv_id)
+        .bind(user.id)
+        .execute(&state.db.pool)
+        .await;
+    Json(serde_json::json!({ "ok": true, "conversation_id": conv_id })).into_response()
+}
+
+async fn chat_group_add_member(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<AddGroupMemberRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_add_members {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para añadir miembros al grupo.",
+        );
+    }
+    let uname = req.username.trim().trim_start_matches('@');
+    let Some(target) = state.db.find_user_by_username(uname).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    };
+    if state.db.is_conversation_member(conv_id, target.id).await {
+        return json_err(StatusCode::CONFLICT, "Ese usuario ya pertenece al grupo.");
+    }
+    let _ = state.db.add_conversation_member(conv_id, target.id).await;
+    if let Some(default_rank) = info.ranks.iter().find(|r| !r.is_owner_rank && r.name == "Miembro")
+        .or_else(|| info.ranks.iter().find(|r| !r.is_owner_rank))
+    {
+        let _ = state
+            .db
+            .set_member_rank(conv_id, target.id, default_rank.id)
+            .await;
+    }
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_group_remove_member(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((conv_id, target_id)): Path<(i64, i64)>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_remove_members {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para expulsar miembros.",
+        );
+    }
+    if target_id == info.owner_id {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "No puedes expulsar al propietario del grupo.",
+        );
+    }
+    let _ = sqlx::query("DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?")
+        .bind(conv_id)
+        .bind(target_id)
+        .execute(&state.db.pool)
+        .await;
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_group_assign_rank(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<AssignMemberRankRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_assign_ranks {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para asignar rangos.",
+        );
+    }
+    if !state.db.is_conversation_member(conv_id, req.user_id).await {
+        return json_err(StatusCode::NOT_FOUND, "Miembro no encontrado en el grupo.");
+    }
+    if !info.ranks.iter().any(|r| r.id == req.rank_id) {
+        return json_err(StatusCode::BAD_REQUEST, "Rango inválido para este grupo.");
+    }
+    let _ = state
+        .db
+        .set_member_rank(conv_id, req.user_id, req.rank_id)
+        .await;
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_group_create_rank(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<CreateGroupRankRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_manage_ranks {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para gestionar rangos.",
+        );
+    }
+    let name = req.name.trim();
+    if name.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El nombre del rango es obligatorio.");
+    }
+    let color = req
+        .color
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let _ = state
+        .db
+        .create_rank(
+            conv_id,
+            name,
+            color,
+            req.can_send_messages,
+            req.can_add_members,
+            req.can_edit_group_info,
+            req.can_delete_messages,
+            req.can_remove_members,
+            req.can_manage_ranks,
+            req.can_assign_ranks,
+            req.can_pin_messages,
+            req.can_transfer_ownership,
+        )
+        .await;
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_group_delete_rank(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((conv_id, rank_id)): Path<(i64, i64)>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_manage_ranks {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para eliminar rangos.",
+        );
+    }
+    if !info.ranks.iter().any(|r| r.id == rank_id) {
+        return json_err(StatusCode::NOT_FOUND, "Rango no encontrado.");
+    }
+    match state.db.delete_rank(rank_id).await {
+        Ok(true) => match build_group_manage_dto(&state, conv_id, user.id).await {
+            Ok(dto) => Json(dto).into_response(),
+            Err(resp) => resp,
+        },
+        Ok(false) => json_err(
+            StatusCode::BAD_REQUEST,
+            "No se puede eliminar: miembros lo usan o es el rango Owner.",
+        ),
+        Err(_) => json_err(StatusCode::INTERNAL_SERVER_ERROR, "Error eliminando rango."),
+    }
+}
+
+async fn chat_group_transfer_ownership(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<TransferGroupOwnershipRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.can_transfer_ownership {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para transferir el ownership.",
+        );
+    }
+    if !state
+        .db
+        .is_conversation_member(conv_id, req.new_owner_id)
+        .await
+    {
+        return json_err(StatusCode::NOT_FOUND, "El nuevo propietario debe ser miembro.");
+    }
+    let _ = state.db.transfer_ownership(conv_id, req.new_owner_id).await;
+    if req.new_owner_id != user.id {
+        if let Some(fallback_rank) = info
+            .ranks
+            .iter()
+            .find(|r| !r.is_owner_rank && r.name == "Admin")
+            .or_else(|| info.ranks.iter().find(|r| !r.is_owner_rank))
+        {
+            let _ = state
+                .db
+                .set_member_rank(conv_id, user.id, fallback_rank.id)
+                .await;
+        }
+    }
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+// ===================== Admin Extendido (Bans IP, Config, Suspensión, Eliminar) =====================
+
+async fn admin_suspend_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<SuspendUserRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let Some(target) = state.db.find_user_by_id(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    };
+    if !state.db.user_has_perm(&actor, "users.suspend").await
+        || !actor.can_act_on(&target, ActionOnUser::Suspend)
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let hours = req.duration_hours.max(1);
+    let reason = if req.reason.trim().is_empty() {
+        None
+    } else {
+        Some(req.reason.trim())
+    };
+    let _ = state
+        .db
+        .create_suspension(id, actor.id, reason, hours)
+        .await;
+    let _ = state.db.set_user_status(id, "suspended").await;
+    let _ = state.db.revoke_all_user_sessions(id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "user_suspend",
+            Some(&format!("{} (id={id}) {}h", target.username, hours)),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn admin_delete_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let Some(target) = state.db.find_user_by_id(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    };
+    if target.role == "owner" {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No se puede eliminar la cuenta del Owner.",
+        );
+    }
+    if !state.db.user_has_perm(&actor, "users.delete").await
+        || !actor.can_act_on(&target, ActionOnUser::Delete)
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.delete_user(id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "user_delete",
+            Some(&format!("{} (id={id})", target.username)),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn admin_ip_bans_list(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "ip_bans.view").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado para ver bans de IP.");
+    }
+
+    let active_raw = state.db.list_active_ip_bans().await.unwrap_or_default();
+    let history_raw = state.db.list_ip_bans_history(50).await.unwrap_or_default();
+
+    let mut admin_names: HashMap<i64, String> = HashMap::new();
+    for b in active_raw.iter().chain(history_raw.iter()) {
+        if let Some(uid) = b.banned_by {
+            if !admin_names.contains_key(&uid) {
+                if let Ok(Some(u)) = state.db.find_user_by_id(uid).await {
+                    admin_names.insert(uid, u.username);
+                }
+            }
+        }
+    }
+
+    let map_ban = |b: crate::models::IpBan| IpBanDto {
+        id: b.id,
+        ip: b.ip,
+        reason: b.reason,
+        banned_by_username: b.banned_by.and_then(|id| admin_names.get(&id).cloned()),
+        created_at: b.created_at.format("%d/%m/%Y %H:%M").to_string(),
+        expires_at: b
+            .expires_at
+            .map(|dt| dt.format("%d/%m/%Y %H:%M").to_string())
+            .unwrap_or_else(|| "Permanente".into()),
+        is_permanent: b.expires_at.is_none(),
+        revoked: b.revoked_at.is_some(),
+    };
+
+    Json(AdminIpBansPayload {
+        active: active_raw.into_iter().map(&map_ban).collect(),
+        history: history_raw.into_iter().map(map_ban).collect(),
+    })
+    .into_response()
+}
+
+async fn admin_ip_bans_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateIpBanRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "ip_bans.create").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado para crear bans de IP.");
+    }
+    let ip = req.ip.trim().to_string();
+    let reason = req.reason.trim().to_string();
+    if ip.is_empty() || reason.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "La IP y el motivo son obligatorios.");
+    }
+    let expires_at = if req.permanent {
+        None
+    } else {
+        let hours = req.duration_hours.unwrap_or(24).max(1);
+        Some(chrono::Utc::now() + chrono::Duration::hours(hours))
+    };
+    let _ = state
+        .db
+        .ban_ip(&ip, &reason, Some(actor.id), expires_at)
+        .await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "ip_ban_created",
+            Some(&format!("ip={ip} reason={reason}")),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn admin_ip_bans_revoke(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(ban_id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "ip_bans.revoke").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado para revocar bans de IP.");
+    }
+    let _ = state.db.revoke_ip_ban(ban_id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "ip_ban_revoked",
+            Some(&format!("ban_id={ban_id}")),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn build_system_config_dto(state: &AppState) -> SystemConfigDto {
+    let entries = state.db.list_config().await.unwrap_or_default();
+    let map: HashMap<String, String> = entries
+        .into_iter()
+        .map(|c| (c.key, c.value))
+        .collect();
+    SystemConfigDto {
+        studio_name: map.get("studio_name").cloned().unwrap_or_default(),
+        foundation_date: map.get("foundation_date").cloned().unwrap_or_default(),
+        allow_public_register: map
+            .get("allow_public_register")
+            .map(|s| s == "1")
+            .unwrap_or(true),
+        default_role: map
+            .get("default_role")
+            .cloned()
+            .unwrap_or_else(|| "usuario".into()),
+        maintenance_mode: map
+            .get("maintenance_mode")
+            .map(|s| s == "1")
+            .unwrap_or(false),
+    }
+}
+
+async fn admin_config_get(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "config.edit").await {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No autorizado para editar la configuración del sistema.",
+        );
+    }
+    Json(build_system_config_dto(&state).await).into_response()
+}
+
+async fn admin_config_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SystemConfigDto>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "config.edit").await {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No autorizado para editar la configuración del sistema.",
+        );
+    }
+    let studio_name = if req.studio_name.trim().is_empty() {
+        "Aethravox Studios"
+    } else {
+        req.studio_name.trim()
+    };
+    let _ = state
+        .db
+        .set_config("studio_name", studio_name, actor.id)
+        .await;
+    let _ = state
+        .db
+        .set_config("foundation_date", req.foundation_date.trim(), actor.id)
+        .await;
+    let _ = state
+        .db
+        .set_config(
+            "allow_public_register",
+            if req.allow_public_register { "1" } else { "0" },
+            actor.id,
+        )
+        .await;
+    if is_role(req.default_role.trim()) {
+        let _ = state
+            .db
+            .set_config("default_role", req.default_role.trim(), actor.id)
+            .await;
+    }
+    let _ = state
+        .db
+        .set_config(
+            "maintenance_mode",
+            if req.maintenance_mode { "1" } else { "0" },
+            actor.id,
+        )
+        .await;
+    let _ = state
+        .db
+        .audit(Some(actor.id), "config_update", Some("system_config"), None)
+        .await;
+    Json(build_system_config_dto(&state).await).into_response()
+}
+
+async fn docs_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "docs.delete").await
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para eliminar documentos.",
+        );
+    }
+    let Some(doc) = state.db.get_document(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Documento no encontrado.");
+    };
+    let _ = std::fs::remove_file(&doc.file_path);
+    if let Some(p) = &doc.preview_path {
+        if !p.is_empty() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    let _ = state.db.delete_document(id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "doc_delete",
+            Some(&format!("id={} {}", id, doc.title)),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+// ===================== aexTube Subida Nativa (JSON + Base64) =====================
+
+async fn aextube_upload(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UploadVideoRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let title = req.title.trim().to_string();
+    if title.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El título es obligatorio.");
+    }
+    let bytes = match base64_decode(&req.data_base64) {
+        Ok(b) => b,
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, e),
+    };
+    if bytes.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El archivo de vídeo está vacío.");
+    }
+    if bytes.len() > 20 * 1024 * 1024 {
+        return json_err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "El vídeo supera el límite de 20 MB.",
+        );
+    }
+
+    let lower_name = req.filename.to_lowercase();
+    let ct_lower = req.content_type.to_lowercase();
+    let ext = if ct_lower.contains("webm") || lower_name.ends_with(".webm") {
+        "webm"
+    } else if ct_lower.contains("quicktime") || lower_name.ends_with(".mov") {
+        "mov"
+    } else if ct_lower.contains("ogg") || lower_name.ends_with(".ogv") || lower_name.ends_with(".ogg")
+    {
+        "ogv"
+    } else {
+        "mp4"
+    };
+    let mime_type = if req.content_type.trim().is_empty() {
+        match ext {
+            "webm" => "video/webm".to_string(),
+            "mov" => "video/quicktime".to_string(),
+            "ogv" => "video/ogg".to_string(),
+            _ => "video/mp4".to_string(),
+        }
+    } else {
+        req.content_type.clone()
+    };
+
+    if std::fs::create_dir_all("data/aextube").is_err() {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "No se pudo preparar la carpeta multimedia.",
+        );
+    }
+    let filename = format!("{}.{}", crate::db::random_hex(12), ext);
+    let disk_path = format!("data/aextube/{filename}");
+    if std::fs::write(&disk_path, &bytes).is_err() {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "No se pudo guardar el vídeo en el servidor.",
+        );
+    }
+
+    let public_url = format!("/aextube/media/{filename}");
+    let author = user.display();
+    let size_bytes = bytes.len() as i64;
+    let desc = req.description.trim().to_string();
+
+    let res = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO aextube_videos (user_id, author, title, description, is_short, file_path, mime_type, size_bytes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING id",
+    )
+    .bind(user.id)
+    .bind(&author)
+    .bind(&title)
+    .bind(&desc)
+    .bind(req.is_short as i64)
+    .bind(&public_url)
+    .bind(&mime_type)
+    .bind(size_bytes)
+    .fetch_one(&state.db.pool)
+    .await;
+
+    match res {
+        Ok(_) => {
+            let rows = crate::handlers::aextube::list_videos_for_user(&state, user.id).await;
+            let out: Vec<VideoDto> = rows
+                .into_iter()
+                .map(|v| VideoDto {
+                    id: v.id,
+                    user_id: v.user_id,
+                    author: v.author,
+                    title: v.title,
+                    description: v.description,
+                    is_short: v.is_short,
+                    file_path: v.file_path,
+                    mime_type: v.mime_type,
+                    size_bytes: v.size_bytes,
+                    likes: v.likes,
+                    dislikes: v.dislikes,
+                    views: v.views,
+                    created_at: v.created_at,
+                    user_reaction: v.user_reaction,
+                    subscribed: v.subscribed,
+                    channel_subscribers: v.channel_subscribers,
+                })
+                .collect();
+            Json(out).into_response()
+        }
+        Err(_) => {
+            let _ = std::fs::remove_file(&disk_path);
+            json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error registrando el vídeo en la base de datos.",
+            )
+        }
+    }
 }

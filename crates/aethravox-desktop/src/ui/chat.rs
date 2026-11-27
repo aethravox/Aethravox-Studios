@@ -1,9 +1,50 @@
-use aethravox_core::CreateGroupRequest;
+use aethravox_core::{
+    ChatGroupManageDto, CreateGroupRankRequest, CreateGroupRequest, UpdateGroupInfoRequest,
+};
 use egui::Rounding;
 
-use crate::api::{spawn_create_group, spawn_delete_message, spawn_edit_message, spawn_start_dm};
+use crate::api::{
+    spawn_chat_group_add_member, spawn_chat_group_assign_rank, spawn_chat_group_create_rank,
+    spawn_chat_group_delete_rank, spawn_chat_group_leave, spawn_chat_group_manage,
+    spawn_chat_group_remove_member, spawn_chat_group_transfer, spawn_chat_group_update_info,
+    spawn_create_group, spawn_delete_message, spawn_edit_message, spawn_start_dm,
+};
 use crate::app::AethravoxApp;
-use crate::theme::{card_frame, elevated_frame, primary_button, Palette};
+use crate::theme::{badge_pill, card_frame, elevated_frame, parse_hex_color, primary_button, Palette};
+
+enum GroupAction {
+    FetchManage(i64),
+    UpdateInfo {
+        conv_id: i64,
+        req: UpdateGroupInfoRequest,
+    },
+    AddMember {
+        conv_id: i64,
+        username: String,
+    },
+    RemoveMember {
+        conv_id: i64,
+        user_id: i64,
+    },
+    AssignRank {
+        conv_id: i64,
+        user_id: i64,
+        rank_id: i64,
+    },
+    CreateRank {
+        conv_id: i64,
+        req: CreateGroupRankRequest,
+    },
+    DeleteRank {
+        conv_id: i64,
+        rank_id: i64,
+    },
+    TransferOwner {
+        conv_id: i64,
+        new_owner_id: i64,
+    },
+    LeaveGroup(i64),
+}
 
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let ctx = ui.ctx().clone();
@@ -13,6 +54,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let mut create_group: Option<CreateGroupRequest> = None;
     let mut edit_msg: Option<(i64, String)> = None;
     let mut delete_msg: Option<i64> = None;
+    let mut group_action: Option<GroupAction> = None;
 
     let mobile = app.is_mobile_layout(&ctx);
 
@@ -36,6 +78,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 &mut send_requested,
                 &mut edit_msg,
                 &mut delete_msg,
+                &mut group_action,
             );
         }
     } else {
@@ -58,6 +101,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 &mut send_requested,
                 &mut edit_msg,
                 &mut delete_msg,
+                &mut group_action,
             );
         });
     }
@@ -121,11 +165,125 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
             spawn_create_group(
                 &app.rt,
                 app.tx.clone(),
-                ctx,
+                ctx.clone(),
                 app.server_url.clone(),
                 app.token.clone(),
                 req,
             );
+        }
+    }
+    if let Some(act) = group_action {
+        if app.offline_mode || app.token.is_none() {
+            app.status_banner =
+                Some("Gestión completa de grupos disponible en modo conectado.".into());
+        } else {
+            match act {
+                GroupAction::FetchManage(cid) => {
+                    spawn_chat_group_manage(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        cid,
+                    );
+                }
+                GroupAction::UpdateInfo { conv_id, req } => {
+                    spawn_chat_group_update_info(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        req,
+                    );
+                }
+                GroupAction::AddMember { conv_id, username } => {
+                    spawn_chat_group_add_member(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        username,
+                    );
+                }
+                GroupAction::RemoveMember { conv_id, user_id } => {
+                    spawn_chat_group_remove_member(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        user_id,
+                    );
+                }
+                GroupAction::AssignRank {
+                    conv_id,
+                    user_id,
+                    rank_id,
+                } => {
+                    spawn_chat_group_assign_rank(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        user_id,
+                        rank_id,
+                    );
+                }
+                GroupAction::CreateRank { conv_id, req } => {
+                    spawn_chat_group_create_rank(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        req,
+                    );
+                }
+                GroupAction::DeleteRank { conv_id, rank_id } => {
+                    spawn_chat_group_delete_rank(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        rank_id,
+                    );
+                }
+                GroupAction::TransferOwner {
+                    conv_id,
+                    new_owner_id,
+                } => {
+                    spawn_chat_group_transfer(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        new_owner_id,
+                    );
+                }
+                GroupAction::LeaveGroup(cid) => {
+                    spawn_chat_group_leave(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        cid,
+                    );
+                }
+            }
         }
     }
 }
@@ -269,28 +427,51 @@ fn show_chat_pane(
     send_requested: &mut bool,
     edit_msg: &mut Option<(i64, String)>,
     delete_msg: &mut Option<i64>,
+    group_action: &mut Option<GroupAction>,
 ) {
     card_frame(p).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.set_min_height(ui.available_height());
 
-        let active_title = app
+        let active_conv = app
             .conversations
             .iter()
             .find(|c| c.id == app.active_conv_id)
+            .cloned();
+        let active_title = active_conv
+            .as_ref()
             .map(|c| c.title.clone())
             .unwrap_or_else(|| "Conversación".to_string());
+        let is_group = active_conv.as_ref().map(|c| c.is_group).unwrap_or(false);
 
         ui.horizontal_wrapped(|ui| {
             if show_back && ui.button("← Chats").clicked() {
                 app.mobile_detail_open = false;
             }
             ui.heading(&active_title);
+            if is_group {
+                let grp_lbl = if app.chat_group_panel {
+                    "✕ Cerrar gestión"
+                } else {
+                    "⚙ Grupo"
+                };
+                if ui.selectable_label(app.chat_group_panel, grp_lbl).clicked() {
+                    app.chat_group_panel = !app.chat_group_panel;
+                    if app.chat_group_panel {
+                        *group_action = Some(GroupAction::FetchManage(app.active_conv_id));
+                    }
+                }
+            }
         });
         ui.separator();
 
         if let Some(err) = &app.chat_error {
             ui.label(egui::RichText::new(err).small().color(p.danger));
+        }
+
+        if is_group && app.chat_group_panel {
+            show_group_manage_panel(app, ui, p, group_action);
+            return;
         }
 
         let msgs: Vec<_> = app
@@ -403,3 +584,274 @@ fn show_chat_pane(
         });
     });
 }
+
+fn show_group_manage_panel(
+    app: &mut AethravoxApp,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    group_action: &mut Option<GroupAction>,
+) {
+    let dto: ChatGroupManageDto = match &app.chat_group_manage {
+        Some(d) => d.clone(),
+        None => {
+            ui.add_space(8.0);
+            ui.label(
+                egui::RichText::new(if app.offline_mode || app.token.is_none() {
+                    "La gestión de miembros, rangos y ownership requiere conexión con el servidor."
+                } else {
+                    "Cargando gestión del grupo…"
+                })
+                .small()
+                .color(p.text_muted),
+            );
+            return;
+        }
+    };
+
+    egui::ScrollArea::vertical()
+        .id_salt("chat_group_manage_scroll")
+        .show(ui, |ui| {
+            // Información del grupo
+            elevated_frame(p).show(ui, |ui| {
+                ui.label(egui::RichText::new("Información del grupo").strong());
+                if dto.can_edit_group_info {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut app.chat_group_edit_name)
+                            .desired_width(ui.available_width().min(320.0))
+                            .hint_text("Nombre del grupo"),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut app.chat_group_edit_desc)
+                            .desired_width(ui.available_width().min(420.0))
+                            .hint_text("Descripción del grupo"),
+                    );
+                    if primary_button(ui, p, "💾 Guardar info").clicked()
+                        && !app.chat_group_edit_name.trim().is_empty()
+                    {
+                        *group_action = Some(GroupAction::UpdateInfo {
+                            conv_id: dto.conversation_id,
+                            req: UpdateGroupInfoRequest {
+                                name: app.chat_group_edit_name.trim().to_string(),
+                                description: Some(app.chat_group_edit_desc.trim().to_string()),
+                            },
+                        });
+                    }
+                } else {
+                    ui.label(egui::RichText::new(&dto.name).strong());
+                    if !dto.description.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&dto.description)
+                                .small()
+                                .color(p.text_muted),
+                        );
+                    }
+                }
+            });
+
+            ui.add_space(8.0);
+
+            // Miembros
+            elevated_frame(p).show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(format!("Miembros ({})", dto.members.len())).strong(),
+                );
+                if dto.can_add_members {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.chat_group_add_user)
+                                .desired_width(ui.available_width().min(220.0))
+                                .hint_text("@usuario a añadir"),
+                        );
+                        if primary_button(ui, p, "➕ Añadir").clicked()
+                            && !app.chat_group_add_user.trim().is_empty()
+                        {
+                            *group_action = Some(GroupAction::AddMember {
+                                conv_id: dto.conversation_id,
+                                username: app.chat_group_add_user.trim().to_string(),
+                            });
+                            app.chat_group_add_user.clear();
+                        }
+                    });
+                    ui.add_space(4.0);
+                }
+
+                for m in &dto.members {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new(&m.display).strong().small());
+                        ui.label(
+                            egui::RichText::new(format!("@{}", m.username))
+                                .small()
+                                .color(p.text_muted),
+                        );
+                        let rcol = parse_hex_color(&m.rank_color, p.accent_secondary);
+                        badge_pill(ui, &m.rank_name, rcol.gamma_multiply(0.18), rcol);
+                        if m.is_owner {
+                            badge_pill(
+                                ui,
+                                "👑 Owner",
+                                p.accent_primary.gamma_multiply(0.20),
+                                p.accent_primary,
+                            );
+                        }
+
+                        if dto.can_assign_ranks && !m.is_owner {
+                            let mut chosen = m.rank_id;
+                            egui::ComboBox::from_id_salt(("grp_rank_cb", m.user_id))
+                                .selected_text(&m.rank_name)
+                                .show_ui(ui, |ui| {
+                                    for r in dto.ranks.iter().filter(|r| !r.is_owner_rank) {
+                                        if ui
+                                            .selectable_value(&mut chosen, r.id, &r.name)
+                                            .clicked()
+                                            && r.id != m.rank_id
+                                        {
+                                            *group_action = Some(GroupAction::AssignRank {
+                                                conv_id: dto.conversation_id,
+                                                user_id: m.user_id,
+                                                rank_id: r.id,
+                                            });
+                                        }
+                                    }
+                                });
+                        }
+
+                        if dto.can_transfer_ownership
+                            && !m.is_owner
+                            && ui
+                                .small_button("👑 Ceder")
+                                .on_hover_text("Transferir ownership")
+                                .clicked()
+                        {
+                            *group_action = Some(GroupAction::TransferOwner {
+                                conv_id: dto.conversation_id,
+                                new_owner_id: m.user_id,
+                            });
+                        }
+
+                        if dto.can_remove_members
+                            && !m.is_owner
+                            && ui
+                                .small_button(egui::RichText::new("✕").color(p.danger))
+                                .on_hover_text("Expulsar del grupo")
+                                .clicked()
+                        {
+                            *group_action = Some(GroupAction::RemoveMember {
+                                conv_id: dto.conversation_id,
+                                user_id: m.user_id,
+                            });
+                        }
+                    });
+                }
+            });
+
+            ui.add_space(8.0);
+
+            // Rangos
+            elevated_frame(p).show(ui, |ui| {
+                ui.label(egui::RichText::new(format!("Rangos ({})", dto.ranks.len())).strong());
+                for r in &dto.ranks {
+                    ui.horizontal_wrapped(|ui| {
+                        let rcol = parse_hex_color(&r.color, p.accent_primary);
+                        badge_pill(ui, &r.name, rcol.gamma_multiply(0.18), rcol);
+                        let mut perms = Vec::new();
+                        if r.can_send_messages {
+                            perms.push("enviar");
+                        }
+                        if r.can_add_members {
+                            perms.push("añadir");
+                        }
+                        if r.can_edit_group_info {
+                            perms.push("editar");
+                        }
+                        if r.can_remove_members {
+                            perms.push("expulsar");
+                        }
+                        if r.can_manage_ranks {
+                            perms.push("rangos");
+                        }
+                        if r.can_assign_ranks {
+                            perms.push("asignar");
+                        }
+                        if r.can_transfer_ownership {
+                            perms.push("transferir");
+                        }
+                        ui.label(
+                            egui::RichText::new(perms.join(" · "))
+                                .small()
+                                .color(p.text_muted),
+                        );
+                        if dto.can_manage_ranks
+                            && !r.is_owner_rank
+                            && ui
+                                .small_button(egui::RichText::new("🗑").color(p.danger))
+                                .on_hover_text("Eliminar rango")
+                                .clicked()
+                        {
+                            *group_action = Some(GroupAction::DeleteRank {
+                                conv_id: dto.conversation_id,
+                                rank_id: r.id,
+                            });
+                        }
+                    });
+                }
+
+                if dto.can_manage_ranks {
+                    ui.separator();
+                    ui.label(egui::RichText::new("Crear nuevo rango").strong().small());
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.chat_rank_name)
+                                .desired_width(160.0)
+                                .hint_text("Nombre del rango"),
+                        );
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.chat_rank_color)
+                                .desired_width(90.0)
+                                .hint_text("#00d4ff"),
+                        );
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.checkbox(&mut app.chat_rank_can_send, "Enviar");
+                        ui.checkbox(&mut app.chat_rank_can_add, "Añadir");
+                        ui.checkbox(&mut app.chat_rank_can_edit_info, "Editar info");
+                        ui.checkbox(&mut app.chat_rank_can_delete, "Borrar msgs");
+                        ui.checkbox(&mut app.chat_rank_can_remove, "Expulsar");
+                        ui.checkbox(&mut app.chat_rank_can_manage, "Gestionar rangos");
+                        ui.checkbox(&mut app.chat_rank_can_assign, "Asignar rangos");
+                        ui.checkbox(&mut app.chat_rank_can_pin, "Fijar msgs");
+                        ui.checkbox(&mut app.chat_rank_can_transfer, "Transferir");
+                    });
+                    if primary_button(ui, p, "➕ Crear rango").clicked()
+                        && !app.chat_rank_name.trim().is_empty()
+                    {
+                        *group_action = Some(GroupAction::CreateRank {
+                            conv_id: dto.conversation_id,
+                            req: CreateGroupRankRequest {
+                                name: app.chat_rank_name.trim().to_string(),
+                                color: Some(app.chat_rank_color.trim().to_string()),
+                                can_send_messages: app.chat_rank_can_send,
+                                can_add_members: app.chat_rank_can_add,
+                                can_edit_group_info: app.chat_rank_can_edit_info,
+                                can_delete_messages: app.chat_rank_can_delete,
+                                can_remove_members: app.chat_rank_can_remove,
+                                can_manage_ranks: app.chat_rank_can_manage,
+                                can_assign_ranks: app.chat_rank_can_assign,
+                                can_pin_messages: app.chat_rank_can_pin,
+                                can_transfer_ownership: app.chat_rank_can_transfer,
+                            },
+                        });
+                        app.chat_rank_name.clear();
+                    }
+                }
+            });
+
+            ui.add_space(8.0);
+            if ui
+                .button(egui::RichText::new("🚪 Salir del grupo").color(p.danger))
+                .clicked()
+            {
+                *group_action = Some(GroupAction::LeaveGroup(dto.conversation_id));
+            }
+        });
+}
+

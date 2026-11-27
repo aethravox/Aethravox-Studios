@@ -1,7 +1,10 @@
-use aethravox_core::AdminBanRequest;
+use aethravox_core::{AdminBanRequest, CreateIpBanRequest, SuspendUserRequest, SystemConfigDto};
 
 use crate::api::{
-    spawn_admin_ban_user, spawn_admin_overview, spawn_admin_set_role, spawn_admin_simple_action,
+    spawn_admin_ban_user, spawn_admin_config_get, spawn_admin_config_save,
+    spawn_admin_create_ip_ban, spawn_admin_delete_user, spawn_admin_ip_bans, spawn_admin_overview,
+    spawn_admin_revoke_ip_ban, spawn_admin_set_role, spawn_admin_simple_action,
+    spawn_admin_suspend_user,
 };
 use crate::app::AethravoxApp;
 use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palette};
@@ -9,9 +12,16 @@ use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palet
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let ctx = ui.ctx().clone();
     let mut refresh = false;
+    let mut fetch_ip_bans = false;
+    let mut fetch_config = false;
     let mut role_change: Option<(i64, String)> = None;
     let mut simple_action: Option<(String, &'static str)> = None;
     let mut submit_ban: Option<(i64, AdminBanRequest)> = None;
+    let mut submit_suspend: Option<(i64, SuspendUserRequest)> = None;
+    let mut submit_delete: Option<i64> = None;
+    let mut create_ip_ban: Option<CreateIpBanRequest> = None;
+    let mut revoke_ip_ban: Option<i64> = None;
+    let mut save_config: Option<SystemConfigDto> = None;
 
     ui.horizontal(|ui| {
         ui.heading("🛡 Panel de Administración");
@@ -40,10 +50,21 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
         });
 
         ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            for (idx, label) in [(0usize, "Usuarios"), (1, "Secciones / Webs"), (2, "Auditoría")] {
+        ui.horizontal_wrapped(|ui| {
+            for (idx, label) in [
+                (0usize, "Usuarios"),
+                (1, "Secciones / Webs"),
+                (2, "Auditoría"),
+                (3, "🌐 Bans IP"),
+                (4, "⚙ Sistema"),
+            ] {
                 if ui.selectable_label(app.admin_tab == idx, label).clicked() {
                     app.admin_tab = idx;
+                    if idx == 3 && app.admin_ip_bans.is_none() {
+                        fetch_ip_bans = true;
+                    } else if idx == 4 && app.admin_config.is_none() {
+                        fetch_config = true;
+                    }
                 }
             }
         });
@@ -86,6 +107,73 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                     }
                     if ui.button("Cancelar").clicked() {
                         app.admin_ban_target = None;
+                    }
+                });
+            });
+            ui.add_space(8.0);
+        }
+
+        // Modal / barra rápida de suspensión
+        if let Some((uid, uname)) = app.admin_suspend_target.clone() {
+            elevated_frame(p).show(ui, |ui| {
+                ui.heading(format!("Suspender a @{uname}"));
+                ui.horizontal_wrapped(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut app.admin_suspend_reason)
+                            .desired_width(ui.available_width().min(240.0))
+                            .hint_text("Motivo de la suspensión…"),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut app.admin_suspend_hours)
+                            .desired_width(70.0)
+                            .hint_text("Horas"),
+                    );
+                    if primary_button(ui, p, "Confirmar suspensión").clicked() {
+                        let hours = app
+                            .admin_suspend_hours
+                            .trim()
+                            .parse::<i64>()
+                            .ok()
+                            .unwrap_or(24)
+                            .max(1);
+                        submit_suspend = Some((
+                            uid,
+                            SuspendUserRequest {
+                                reason: app.admin_suspend_reason.trim().to_string(),
+                                duration_hours: hours,
+                            },
+                        ));
+                        app.admin_suspend_target = None;
+                        app.admin_suspend_reason.clear();
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        app.admin_suspend_target = None;
+                    }
+                });
+            });
+            ui.add_space(8.0);
+        }
+
+        // Confirmación rápida para eliminar usuario
+        if let Some((uid, uname)) = app.admin_delete_confirm.clone() {
+            elevated_frame(p).show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "¿Eliminar definitivamente la cuenta @{uname}? Esta acción no se puede deshacer."
+                    ))
+                    .strong()
+                    .color(p.danger),
+                );
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .button(egui::RichText::new("Confirmar eliminación").color(p.danger))
+                        .clicked()
+                    {
+                        submit_delete = Some(uid);
+                        app.admin_delete_confirm = None;
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        app.admin_delete_confirm = None;
                     }
                 });
             });
@@ -153,11 +241,17 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                                             "Usuario desbaneado.",
                                         ));
                                     }
-                                } else if ui
-                                    .button(egui::RichText::new("Banear").color(p.danger))
-                                    .clicked()
-                                {
-                                    app.admin_ban_target = Some((u.id, u.username.clone()));
+                                } else {
+                                    if ui.button("Suspender").clicked() {
+                                        app.admin_suspend_target =
+                                            Some((u.id, u.username.clone()));
+                                    }
+                                    if ui
+                                        .button(egui::RichText::new("Banear").color(p.danger))
+                                        .clicked()
+                                    {
+                                        app.admin_ban_target = Some((u.id, u.username.clone()));
+                                    }
                                 }
 
                                 if ui.button("Forzar logout").clicked() {
@@ -165,6 +259,15 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                                         format!("/api/v1/admin/users/{}/force_logout", u.id),
                                         "Sesiones revocadas.",
                                     ));
+                                }
+
+                                if u.role != "owner"
+                                    && ui
+                                        .button(egui::RichText::new("🗑").color(p.danger))
+                                        .on_hover_text("Eliminar cuenta")
+                                        .clicked()
+                                {
+                                    app.admin_delete_confirm = Some((u.id, u.username.clone()));
                                 }
                             });
                         });
@@ -208,7 +311,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         ui.add_space(5.0);
                     }
                 }
-                _ => {
+                2 => {
                     for a in &ov.audit {
                         elevated_frame(p).show(ui, |ui| {
                             ui.horizontal_wrapped(|ui| {
@@ -230,6 +333,188 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         ui.add_space(4.0);
                     }
                 }
+                3 => {
+                    elevated_frame(p).show(ui, |ui| {
+                        ui.label(egui::RichText::new("Crear ban de IP").strong());
+                        ui.horizontal_wrapped(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.admin_ip_ban_ip)
+                                    .desired_width(160.0)
+                                    .hint_text("Dirección IP (ej. 1.2.3.4)"),
+                            );
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.admin_ip_ban_reason)
+                                    .desired_width(220.0)
+                                    .hint_text("Motivo del ban…"),
+                            );
+                            ui.checkbox(&mut app.admin_ip_ban_perm, "Permanente");
+                            if !app.admin_ip_ban_perm {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut app.admin_ip_ban_hours)
+                                        .desired_width(70.0)
+                                        .hint_text("Horas"),
+                                );
+                            }
+                            if primary_button(ui, p, "Banear IP").clicked()
+                                && !app.admin_ip_ban_ip.trim().is_empty()
+                                && !app.admin_ip_ban_reason.trim().is_empty()
+                            {
+                                let hours = if app.admin_ip_ban_perm {
+                                    None
+                                } else {
+                                    Some(
+                                        app.admin_ip_ban_hours
+                                            .trim()
+                                            .parse::<i64>()
+                                            .ok()
+                                            .unwrap_or(24)
+                                            .max(1),
+                                    )
+                                };
+                                create_ip_ban = Some(CreateIpBanRequest {
+                                    ip: app.admin_ip_ban_ip.trim().to_string(),
+                                    reason: app.admin_ip_ban_reason.trim().to_string(),
+                                    permanent: app.admin_ip_ban_perm,
+                                    duration_hours: hours,
+                                });
+                                app.admin_ip_ban_ip.clear();
+                                app.admin_ip_ban_reason.clear();
+                            }
+                        });
+                    });
+                    ui.add_space(8.0);
+
+                    if let Some(bans) = app.admin_ip_bans.clone() {
+                        ui.label(
+                            egui::RichText::new(format!("Bans activos ({})", bans.active.len()))
+                                .strong(),
+                        );
+                        ui.add_space(4.0);
+                        for b in &bans.active {
+                            elevated_frame(p).show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(egui::RichText::new(&b.ip).strong());
+                                    badge_pill(
+                                        ui,
+                                        &b.expires_at,
+                                        p.danger.gamma_multiply(0.18),
+                                        p.danger,
+                                    );
+                                    ui.label(egui::RichText::new(&b.reason).small());
+                                    if let Some(by) = &b.banned_by_username {
+                                        ui.label(
+                                            egui::RichText::new(format!("por @{by}"))
+                                                .small()
+                                                .color(p.text_muted),
+                                        );
+                                    }
+                                    if ui.button("Revocar").clicked() {
+                                        revoke_ip_ban = Some(b.id);
+                                    }
+                                });
+                            });
+                            ui.add_space(4.0);
+                        }
+
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new(format!("Historial ({})", bans.history.len()))
+                                .strong(),
+                        );
+                        ui.add_space(4.0);
+                        for b in &bans.history {
+                            elevated_frame(p).show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(egui::RichText::new(&b.ip).strong().small());
+                                    ui.label(egui::RichText::new(&b.reason).small());
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "{} · {}{}",
+                                            b.created_at,
+                                            b.expires_at,
+                                            if b.revoked { " · Revocado" } else { "" }
+                                        ))
+                                        .small()
+                                        .color(p.text_muted),
+                                    );
+                                });
+                            });
+                            ui.add_space(3.0);
+                        }
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("Bans de IP sin cargar.")
+                                    .small()
+                                    .color(p.text_muted),
+                            );
+                            if ui.button("Cargar bans IP").clicked() {
+                                fetch_ip_bans = true;
+                            }
+                        });
+                    }
+                }
+                _ => {
+                    if app.admin_config.is_some() {
+                        elevated_frame(p).show(ui, |ui| {
+                            ui.label(egui::RichText::new("Configuración global del sistema").strong());
+                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new("Nombre del estudio").small());
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.admin_cfg_studio)
+                                    .desired_width(ui.available_width().min(320.0)),
+                            );
+                            ui.label(egui::RichText::new("Fecha de fundación").small());
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.admin_cfg_date)
+                                    .desired_width(ui.available_width().min(220.0)),
+                            );
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Rol por defecto al registrarse:").small());
+                                egui::ComboBox::from_id_salt("cfg_default_role_cb")
+                                    .selected_text(&app.admin_cfg_default_role)
+                                    .show_ui(ui, |ui| {
+                                        for r in ["usuario", "staff", "admin"] {
+                                            ui.selectable_value(
+                                                &mut app.admin_cfg_default_role,
+                                                r.to_string(),
+                                                r,
+                                            );
+                                        }
+                                    });
+                            });
+                            ui.checkbox(
+                                &mut app.admin_cfg_register,
+                                "Permitir registro público de cuentas",
+                            );
+                            ui.checkbox(
+                                &mut app.admin_cfg_maintenance,
+                                "Modo mantenimiento activo",
+                            );
+                            ui.add_space(6.0);
+                            if primary_button(ui, p, "💾 Guardar configuración").clicked() {
+                                save_config = Some(SystemConfigDto {
+                                    studio_name: app.admin_cfg_studio.trim().to_string(),
+                                    foundation_date: app.admin_cfg_date.trim().to_string(),
+                                    allow_public_register: app.admin_cfg_register,
+                                    default_role: app.admin_cfg_default_role.clone(),
+                                    maintenance_mode: app.admin_cfg_maintenance,
+                                });
+                            }
+                        });
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("Configuración del sistema sin cargar.")
+                                    .small()
+                                    .color(p.text_muted),
+                            );
+                            if ui.button("Cargar configuración").clicked() {
+                                fetch_config = true;
+                            }
+                        });
+                    }
+                }
             });
     } else {
         card_frame(p).show(ui, |ui| {
@@ -246,6 +531,29 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
 
     if refresh && !app.offline_mode && app.token.is_some() {
         spawn_admin_overview(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+        );
+        if app.admin_tab == 3 {
+            fetch_ip_bans = true;
+        } else if app.admin_tab == 4 {
+            fetch_config = true;
+        }
+    }
+    if fetch_ip_bans && !app.offline_mode && app.token.is_some() {
+        spawn_admin_ip_bans(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+        );
+    }
+    if fetch_config && !app.offline_mode && app.token.is_some() {
+        spawn_admin_config_get(
             &app.rt,
             app.tx.clone(),
             ctx.clone(),
@@ -279,6 +587,67 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
             );
         }
     }
+    if let Some((uid, req)) = submit_suspend {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_admin_suspend_user(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                uid,
+                req,
+            );
+        }
+    }
+    if let Some(uid) = submit_delete {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_admin_delete_user(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                uid,
+            );
+        }
+    }
+    if let Some(req) = create_ip_ban {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_admin_create_ip_ban(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                req,
+            );
+        }
+    }
+    if let Some(ban_id) = revoke_ip_ban {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_admin_revoke_ip_ban(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                ban_id,
+            );
+        }
+    }
+    if let Some(cfg) = save_config {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_admin_config_save(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                cfg,
+            );
+        }
+    }
     if let Some((path, ok_msg)) = simple_action {
         if !app.offline_mode && app.token.is_some() {
             spawn_admin_simple_action(
@@ -307,3 +676,4 @@ fn stat_chip(ui: &mut egui::Ui, p: &Palette, label: &str, value: i64) {
         });
     });
 }
+
