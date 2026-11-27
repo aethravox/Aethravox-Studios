@@ -266,7 +266,7 @@ jobs:
         working-directory: crates/aethravox-desktop
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: cargo apk build --release
+        run: cargo apk build --release --lib
 
       - name: Align and Verify/Sign APK
         env:
