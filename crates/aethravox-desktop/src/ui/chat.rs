@@ -1,7 +1,7 @@
 use aethravox_core::CreateGroupRequest;
 use egui::Rounding;
 
-use crate::api::{spawn_create_group, spawn_start_dm};
+use crate::api::{spawn_create_group, spawn_delete_message, spawn_edit_message, spawn_start_dm};
 use crate::app::AethravoxApp;
 use crate::theme::{card_frame, elevated_frame, primary_button, Palette};
 
@@ -11,6 +11,8 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let mut send_requested = false;
     let mut start_dm: Option<String> = None;
     let mut create_group: Option<CreateGroupRequest> = None;
+    let mut edit_msg: Option<(i64, String)> = None;
+    let mut delete_msg: Option<i64> = None;
 
     let mobile = app.is_mobile_layout(&ctx);
 
@@ -26,7 +28,15 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 &mut create_group,
             );
         } else {
-            show_chat_pane(app, ui, p, true, &mut send_requested);
+            show_chat_pane(
+                app,
+                ui,
+                p,
+                true,
+                &mut send_requested,
+                &mut edit_msg,
+                &mut delete_msg,
+            );
         }
     } else {
         ui.horizontal(|ui| {
@@ -40,7 +50,15 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 &mut create_group,
             );
             ui.add_space(8.0);
-            show_chat_pane(app, ui, p, false, &mut send_requested);
+            show_chat_pane(
+                app,
+                ui,
+                p,
+                false,
+                &mut send_requested,
+                &mut edit_msg,
+                &mut delete_msg,
+            );
         });
     }
 
@@ -50,6 +68,41 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     }
     if send_requested {
         app.chat_send_draft(&ctx);
+    }
+    if let Some((msg_id, new_body)) = edit_msg {
+        if app.offline_mode || app.token.is_none() {
+            if let Some(m) = app.chat_messages.iter_mut().find(|m| m.id == msg_id) {
+                m.content = format!("{new_body} (editado)");
+            }
+        } else {
+            spawn_edit_message(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                app.active_conv_id,
+                msg_id,
+                new_body,
+            );
+        }
+    }
+    if let Some(msg_id) = delete_msg {
+        if app.offline_mode || app.token.is_none() {
+            if let Some(m) = app.chat_messages.iter_mut().find(|m| m.id == msg_id) {
+                m.content = "🚫 Mensaje eliminado".to_string();
+            }
+        } else {
+            spawn_delete_message(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                app.active_conv_id,
+                msg_id,
+            );
+        }
     }
     if let Some(username) = start_dm {
         if !app.offline_mode && app.token.is_some() {
@@ -214,6 +267,8 @@ fn show_chat_pane(
     p: &Palette,
     show_back: bool,
     send_requested: &mut bool,
+    edit_msg: &mut Option<(i64, String)>,
+    delete_msg: &mut Option<i64>,
 ) {
     card_frame(p).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -238,16 +293,20 @@ fn show_chat_pane(
             ui.label(egui::RichText::new(err).small().color(p.danger));
         }
 
+        let msgs: Vec<_> = app
+            .chat_messages
+            .iter()
+            .filter(|m| m.conversation_id == app.active_conv_id)
+            .cloned()
+            .collect();
+
         let msg_height = (ui.available_height() - 56.0).max(160.0);
         egui::ScrollArea::vertical()
             .id_salt("chat_msgs")
             .max_height(msg_height)
             .stick_to_bottom(true)
             .show(ui, |ui| {
-                for m in &app.chat_messages {
-                    if m.conversation_id != app.active_conv_id {
-                        continue;
-                    }
+                for m in msgs {
                     let bg = if m.is_mine {
                         p.accent_primary.gamma_multiply(0.16)
                     } else {
@@ -266,8 +325,59 @@ fn show_chat_pane(
                                         .small()
                                         .color(p.text_muted),
                                 );
+                                if m.is_mine && m.content != "🚫 Mensaje eliminado" {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui
+                                                .small_button(
+                                                    egui::RichText::new("🗑").color(p.danger),
+                                                )
+                                                .on_hover_text("Eliminar mensaje")
+                                                .clicked()
+                                            {
+                                                *delete_msg = Some(m.id);
+                                                if app.chat_editing_id == Some(m.id) {
+                                                    app.chat_editing_id = None;
+                                                    app.chat_edit_draft.clear();
+                                                }
+                                            }
+                                            if ui
+                                                .small_button("✏")
+                                                .on_hover_text("Editar mensaje")
+                                                .clicked()
+                                            {
+                                                app.chat_editing_id = Some(m.id);
+                                                app.chat_edit_draft = m.content.clone();
+                                            }
+                                        },
+                                    );
+                                }
                             });
-                            ui.label(&m.content);
+
+                            if app.chat_editing_id == Some(m.id) {
+                                ui.add_space(4.0);
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut app.chat_edit_draft)
+                                            .desired_width((ui.available_width() - 150.0).max(120.0)),
+                                    );
+                                    if primary_button(ui, p, "Guardar").clicked()
+                                        && !app.chat_edit_draft.trim().is_empty()
+                                    {
+                                        *edit_msg =
+                                            Some((m.id, app.chat_edit_draft.trim().to_string()));
+                                        app.chat_editing_id = None;
+                                        app.chat_edit_draft.clear();
+                                    }
+                                    if ui.button("Cancelar").clicked() {
+                                        app.chat_editing_id = None;
+                                        app.chat_edit_draft.clear();
+                                    }
+                                });
+                            } else {
+                                ui.label(&m.content);
+                            }
                         });
                     ui.add_space(6.0);
                 }

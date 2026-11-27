@@ -667,3 +667,72 @@ pub struct AdminBanRequest {
     pub permanent: bool,
     pub duration_hours: Option<i64>,
 }
+
+// ===================== Recuperación, Vinculación y Correo =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoverRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoverResponse {
+    pub ok: bool,
+    pub info: String,
+    pub dev_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkCodeDto {
+    pub code: String,
+    pub numeric_code: String,
+    pub expires_at: String,
+    pub target_username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkConsumeRequest {
+    pub code: String,
+    pub device_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserEmailDto {
+    pub id: i64,
+    pub email: String,
+    pub verified: bool,
+    pub is_primary: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailsPayload {
+    pub emails: Vec<UserEmailDto>,
+    pub aethramail_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailRequestBody {
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailVerifyBody {
+    pub email: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailIdBody {
+    pub email_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditMessageRequest {
+    pub body: String,
+}

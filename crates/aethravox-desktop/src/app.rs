@@ -1,8 +1,9 @@
 use aethravox_core::{
     AdminOverviewDto, AexosProfileDto, ArisChatDto, ArisCreditsDto, ArisMessageDto, ArisMode,
     ChatConversationDto, ChatMessageDto, ColorMode, CommunityDetailDto, CommunityDto,
-    DeviceProfile, DocumentDto, DownloadPlatformDto, FriendsPayload, HubPayload, ProfilePayload,
-    ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto, WebAppDto,
+    DeviceProfile, DocumentDto, DownloadPlatformDto, EmailsPayload, FriendsPayload, HubPayload,
+    LinkCodeDto, ProfilePayload, ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto,
+    WebAppDto,
 };
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -13,9 +14,9 @@ use crate::api::{
     offline_demo_hub, spawn_admin_overview, spawn_aexos_profiles, spawn_aris_chats,
     spawn_aris_credits, spawn_aris_messages, spawn_community_detail, spawn_community_inviteable,
     spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
-    spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages, spawn_fetch_profile,
-    spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read, spawn_save_theme,
-    spawn_send_message, spawn_ticket_detail, ApiEvent, AsyncRt,
+    spawn_fetch_emails, spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages,
+    spawn_fetch_profile, spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read,
+    spawn_save_theme, spawn_send_message, spawn_ticket_detail, ApiEvent, AsyncRt,
 };
 use crate::theme::{apply_theme_for_device, Palette};
 use crate::ui;
@@ -68,13 +69,21 @@ pub struct AethravoxApp {
     pub mobile_detail_open: bool,
     pub fullscreen: bool,
 
-    // Login / Register state
+    // Login / Register / Recover / Link state
     pub auth_tab_register: bool,
+    pub auth_mode: u8, // 0=login, 1=register, 2=recover/reset, 3=link
     pub login_username: String,
     pub login_password: String,
     pub register_email: String,
+    pub recover_email: String,
+    pub reset_token: String,
+    pub reset_new_password: String,
+    pub link_code_input: String,
+    pub link_device_name: String,
+    pub auth_info: Option<String>,
     pub auth_error: Option<String>,
     pub auth_busy: bool,
+    pub legal_modal: Option<&'static str>,
 
     // Hub state
     pub hub: Option<HubPayload>,
@@ -96,6 +105,8 @@ pub struct AethravoxApp {
     pub chat_group_name: String,
     pub chat_group_desc: String,
     pub chat_group_members: String,
+    pub chat_editing_id: Option<i64>,
+    pub chat_edit_draft: String,
 
     // Aris state
     pub aris_chats: Vec<ArisChatDto>,
@@ -152,6 +163,13 @@ pub struct AethravoxApp {
     pub pw_current: String,
     pub pw_new: String,
     pub profile_error: Option<String>,
+    pub link_code_generated: Option<LinkCodeDto>,
+    pub emails_payload: Option<EmailsPayload>,
+    pub email_input: String,
+    pub email_pending_verify: Option<String>,
+    pub email_verify_code: String,
+    pub email_info: Option<String>,
+    pub email_error: Option<String>,
 
     // aexTube state
     pub videos: Vec<VideoDto>,
@@ -200,6 +218,18 @@ pub struct AethravoxApp {
 
     // Status toast
     pub status_banner: Option<String>,
+
+    // Android IME & Teclado virtual integrado
+    #[cfg(target_os = "android")]
+    pub android_app: Option<winit::platform::android::activity::AndroidApp>,
+    pub vk_manual_open: bool,
+    pub vk_dismissed: bool,
+    pub vk_shift: bool,
+    pub vk_symbols: bool,
+    pub vk_last_focus: Option<egui::Id>,
+    pub vk_panel_rect: Option<egui::Rect>,
+    pub was_wanting_keyboard: bool,
+    pub vk_pending_events: Vec<egui::Event>,
 }
 
 impl AethravoxApp {
@@ -255,11 +285,23 @@ impl AethravoxApp {
             mobile_detail_open: false,
             fullscreen: matches!(initial_profile, DeviceProfile::Tv | DeviceProfile::Pdi),
             auth_tab_register: false,
+            auth_mode: 0,
             login_username: String::new(),
             login_password: String::new(),
             register_email: String::new(),
+            recover_email: String::new(),
+            reset_token: String::new(),
+            reset_new_password: String::new(),
+            link_code_input: String::new(),
+            link_device_name: if cfg!(target_os = "android") {
+                "Android".into()
+            } else {
+                "Desktop".into()
+            },
+            auth_info: None,
             auth_error: None,
             auth_busy: false,
+            legal_modal: None,
             hub: None,
             hub_search: String::new(),
             hub_cat_filter: "all".to_string(),
@@ -277,6 +319,8 @@ impl AethravoxApp {
             chat_group_name: String::new(),
             chat_group_desc: String::new(),
             chat_group_members: String::new(),
+            chat_editing_id: None,
+            chat_edit_draft: String::new(),
             aris_chats,
             active_aris_chat_id: 1,
             aris_messages,
@@ -325,6 +369,13 @@ impl AethravoxApp {
             pw_current: String::new(),
             pw_new: String::new(),
             profile_error: None,
+            link_code_generated: None,
+            emails_payload: None,
+            email_input: String::new(),
+            email_pending_verify: None,
+            email_verify_code: String::new(),
+            email_info: None,
+            email_error: None,
             videos: demo_videos(),
             aextube_filter: "all".to_string(),
             aextube_error: None,
@@ -359,6 +410,16 @@ impl AethravoxApp {
             neon_width: 4.0,
             neon_board_mode: 0,
             status_banner: None,
+            #[cfg(target_os = "android")]
+            android_app: None,
+            vk_manual_open: false,
+            vk_dismissed: false,
+            vk_shift: false,
+            vk_symbols: false,
+            vk_last_focus: None,
+            vk_panel_rect: None,
+            was_wanting_keyboard: false,
+            vk_pending_events: Vec::new(),
         }
     }
 
@@ -561,6 +622,13 @@ impl AethravoxApp {
                     self.server_url.clone(),
                     self.token.clone(),
                 );
+                spawn_fetch_emails(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
             }
             Route::Admin if has_tok => {
                 spawn_admin_overview(
@@ -612,6 +680,8 @@ impl AethravoxApp {
         self.offline_mode = false;
         self.login_password.clear();
         self.profile = None;
+        self.emails_payload = None;
+        self.link_code_generated = None;
         self.admin_overview = None;
         self.active_community = None;
         self.active_ticket = None;
@@ -752,6 +822,7 @@ impl AethravoxApp {
                 ApiEvent::AuthOk(auth) => {
                     self.auth_busy = false;
                     self.auth_error = None;
+                    self.auth_info = None;
                     self.offline_mode = false;
                     self.token = Some(auth.token.clone());
                     self.reset_chat_state();
@@ -1157,6 +1228,47 @@ impl AethravoxApp {
                 ApiEvent::AdminErr(e) => {
                     self.admin_error = Some(e);
                 }
+
+                // Recuperación, Vinculación y Correo interno
+                ApiEvent::RecoverOk(res) => {
+                    self.auth_busy = false;
+                    self.auth_error = None;
+                    self.auth_info = Some(res.info);
+                    if let Some(tok) = res.dev_token {
+                        self.reset_token = tok;
+                    }
+                }
+                ApiEvent::ResetOk => {
+                    self.auth_busy = false;
+                    self.auth_error = None;
+                    self.auth_info = Some("Contraseña restablecida. Ya puedes iniciar sesión.".into());
+                    self.reset_token.clear();
+                    self.reset_new_password.clear();
+                    self.auth_mode = 0;
+                    self.auth_tab_register = false;
+                }
+                ApiEvent::LinkCodeLoaded(dto) => {
+                    self.profile_error = None;
+                    self.link_code_generated = Some(dto);
+                }
+                ApiEvent::EmailsLoaded(p) => {
+                    self.email_error = None;
+                    self.emails_payload = Some(p);
+                    self.email_pending_verify = None;
+                    self.email_verify_code.clear();
+                }
+                ApiEvent::EmailRequestOk(msg) => {
+                    self.email_error = None;
+                    self.email_info = Some(msg);
+                    self.email_pending_verify = Some(self.email_input.trim().to_string());
+                }
+                ApiEvent::EmailErr(e) => {
+                    self.email_error = Some(e);
+                }
+                ApiEvent::LogoutAllOk => {
+                    self.logout();
+                    self.auth_info = Some("Todas tus sesiones fueron cerradas.".into());
+                }
             }
         }
     }
@@ -1164,6 +1276,13 @@ impl AethravoxApp {
 
 impl eframe::App for AethravoxApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.vk_pending_events.is_empty() {
+            if let Some(fid) = self.vk_last_focus {
+                ctx.memory_mut(|m| m.request_focus(fid));
+            }
+            let pending = std::mem::take(&mut self.vk_pending_events);
+            ctx.input_mut(|i| i.events.extend(pending));
+        }
         self.drain_events(ctx);
         self.chat_poll(ctx);
 
@@ -1189,6 +1308,51 @@ impl eframe::App for AethravoxApp {
         }
 
         let p: Palette = Palette::from(self.theme, self.color_mode);
+
+        // Gestión del teclado Android / IME + teclado virtual integrado
+        let wants_kb = ctx.wants_keyboard_input();
+        let pointer_in_vk = self
+            .vk_panel_rect
+            .map(|r| {
+                ctx.input(|i| {
+                    i.pointer
+                        .latest_pos()
+                        .map(|pos| r.contains(pos))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false);
+
+        if wants_kb {
+            if let Some(fid) = ctx.memory(|m| m.focused()) {
+                self.vk_last_focus = Some(fid);
+            }
+            if !self.was_wanting_keyboard {
+                self.vk_dismissed = false;
+                #[cfg(target_os = "android")]
+                if let Some(aa) = &self.android_app {
+                    aa.show_soft_input(true);
+                }
+            }
+        } else if !pointer_in_vk && self.was_wanting_keyboard {
+            self.vk_dismissed = false;
+            #[cfg(target_os = "android")]
+            if let Some(aa) = &self.android_app {
+                aa.hide_soft_input(true);
+            }
+        }
+        self.was_wanting_keyboard = wants_kb;
+
+        let show_vk = self.vk_manual_open
+            || ((cfg!(target_os = "android") || resolved == DeviceProfile::Pdi)
+                && !self.vk_dismissed
+                && (wants_kb || (pointer_in_vk && self.vk_last_focus.is_some())));
+
+        if show_vk {
+            ui::virtual_keyboard::show(self, ctx, &p);
+        } else {
+            self.vk_panel_rect = None;
+        }
 
         if self.route == Route::Login {
             egui::CentralPanel::default()
@@ -1231,7 +1395,7 @@ impl eframe::App for AethravoxApp {
                 ui::sidebar::show_topbar(self, ui, ctx, &p);
             });
 
-        if mobile {
+        if mobile && !show_vk {
             let safe_bottom = if cfg!(any(target_os = "android", target_os = "ios")) {
                 14.0
             } else {

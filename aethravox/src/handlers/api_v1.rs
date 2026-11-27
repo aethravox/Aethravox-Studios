@@ -7,12 +7,14 @@ use aethravox_core::{
     ArisSendResponse, AuthSuccess, CategoryRowDto, ChangePasswordRequest, ChatConversationDto,
     ChatMessageDto, CommunityDetailDto, CommunityDto, CommunityGroupDto, CreateCommunityGroupRequest,
     CreateCommunityRequest, CreateGroupRequest, CreateTicketRequest, DocumentDto, DownloadAppDto,
-    DownloadFileDto, DownloadPlatformDto, FriendDto, FriendRequestBody, FriendsPayload, HubPayload,
-    HubStatsDto, InviteCommunityRequest, LinkedDeviceDto, LoginRequest, PendingFriendDto,
-    PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload, RegisterRequest, ReplyTicketRequest,
+    DownloadFileDto, DownloadPlatformDto, EditMessageRequest, EmailIdBody, EmailRequestBody,
+    EmailVerifyBody, EmailsPayload, FriendDto, FriendRequestBody, FriendsPayload, HubPayload,
+    HubStatsDto, InviteCommunityRequest, LinkCodeDto, LinkConsumeRequest, LinkedDeviceDto,
+    LoginRequest, PendingFriendDto, PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload,
+    RecoverRequest, RecoverResponse, RegisterRequest, ReplyTicketRequest, ResetPasswordRequest,
     SendMessageRequest, SessionDto, StartDmRequest, StartDmResponse, ThemeKind, ThemeSelectRequest,
     TicketActionRequest, TicketDetailDto, TicketDto, TicketMessageDto, TitleDto,
-    UpdateProfileRequest, UpdateTitlesRequest, UserSearchDto, UserSummary, VideoDto,
+    UpdateProfileRequest, UpdateTitlesRequest, UserEmailDto, UserSearchDto, UserSummary, VideoDto,
     VideoReactRequest, WebAppDto,
 };
 use axum::{
@@ -52,6 +54,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/register", post(register))
         .route("/api/v1/auth/logout", post(logout))
+        .route("/api/v1/auth/recover", post(auth_recover))
+        .route("/api/v1/auth/reset", post(auth_reset))
+        .route("/api/v1/link/code", get(link_code))
+        .route("/api/v1/link/consume", post(link_consume))
         .route("/api/v1/me", get(me))
         .route("/api/v1/hub", get(hub))
         .route("/api/v1/theme", post(select_theme))
@@ -62,6 +68,8 @@ pub fn router() -> Router<AppState> {
             get(chat_messages).post(chat_send),
         )
         .route("/api/v1/chat/conversations/:id/read", post(chat_mark_read))
+        .route("/api/v1/chat/messages/:id/edit", post(chat_edit_message))
+        .route("/api/v1/chat/messages/:id/delete", post(chat_delete_message))
         .route("/api/v1/chat/dm", post(chat_start_dm))
         .route("/api/v1/chat/group", post(chat_create_group))
         // Aris IA
@@ -122,6 +130,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/profile/update", post(profile_update))
         .route("/api/v1/profile/titles", post(profile_titles))
         .route("/api/v1/profile/password", post(profile_password))
+        .route("/api/v1/profile/logout_all", post(profile_logout_all))
         .route(
             "/api/v1/profile/sessions/:token/revoke",
             post(profile_revoke_session),
@@ -130,6 +139,12 @@ pub fn router() -> Router<AppState> {
             "/api/v1/profile/devices/:token/revoke",
             post(profile_revoke_device),
         )
+        // Correo interno (AethraMail)
+        .route("/api/v1/emails", get(emails_list))
+        .route("/api/v1/emails/request", post(emails_request))
+        .route("/api/v1/emails/verify", post(emails_verify))
+        .route("/api/v1/emails/primary", post(emails_set_primary))
+        .route("/api/v1/emails/remove", post(emails_remove))
         // aexTube
         .route("/api/v1/aextube/videos", get(aextube_list))
         .route(
@@ -2797,4 +2812,437 @@ async fn admin_toggle_web(
     let next = w.is_active == 0;
     let _ = state.db.set_web_active(id, next).await;
     Json(serde_json::json!({ "ok": true, "is_active": next })).into_response()
+}
+
+// ===================== Recuperación, Vinculación, Correo y Chat Edit/Delete =====================
+
+async fn auth_recover(
+    State(state): State<AppState>,
+    Json(req): Json<RecoverRequest>,
+) -> Response {
+    let email = req.email.trim().to_string();
+    if let Err(e) = validate_email(&email) {
+        return json_err(StatusCode::BAD_REQUEST, e);
+    }
+    let info_msg = "Si el email existe, recibirás instrucciones de recuperación.";
+    let Some(user) = state.db.find_user_by_email(&email).await.ok().flatten() else {
+        return Json(RecoverResponse {
+            ok: true,
+            info: info_msg.to_string(),
+            dev_token: None,
+        })
+        .into_response();
+    };
+
+    let Ok(token) = state.db.create_recovery_token(user.id).await else {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "No se pudo generar el token de recuperación.",
+        );
+    };
+
+    let base = state.cfg.public_url.trim_end_matches('/');
+    let link = format!("{base}/reset?token={token}");
+    let cancel_link = format!("{base}/reset/cancel?token={token}");
+    let internal_email = state.db.primary_verified_email(user.id).await.ok().flatten();
+
+    if let (Some(client), Some(to)) = (state.aethramail.as_ref().as_ref(), &internal_email) {
+        let body = format!(
+            "Recuperación de contraseña — Aethravox Studios\n\n\
+             Recibimos una solicitud para cambiar la contraseña de tu cuenta.\n\n\
+             ➜ Token de recuperación: {token}\n\
+             ➜ Enlace web: {link}\n\
+             ➜ ¿No fuiste tú? Anula el enlace: {cancel_link}\n\n\
+             El token expira en 30 minutos.\n\n— Aethravox Studios"
+        );
+        let _ = client
+            .send_email(to.as_str(), "Recuperación de contraseña — Aethravox", &body)
+            .await;
+        return Json(RecoverResponse {
+            ok: true,
+            info: format!("{info_msg} Enviado a tu correo interno {to}."),
+            dev_token: None,
+        })
+        .into_response();
+    }
+
+    Json(RecoverResponse {
+        ok: true,
+        info: format!("{info_msg} (Modo dev: usa el token mostrado abajo)"),
+        dev_token: Some(token),
+    })
+    .into_response()
+}
+
+async fn auth_reset(
+    State(state): State<AppState>,
+    Json(req): Json<ResetPasswordRequest>,
+) -> Response {
+    let tok = req.token.trim();
+    if tok.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "Token de recuperación requerido.");
+    }
+    if let Err(e) = validate_password(&req.new_password) {
+        return json_err(StatusCode::BAD_REQUEST, e);
+    }
+    match state.db.consume_recovery_token(tok).await {
+        Ok(Some(user_id)) => {
+            if state
+                .db
+                .update_password(user_id, &req.new_password)
+                .await
+                .is_err()
+            {
+                return json_err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error al actualizar la contraseña.",
+                );
+            }
+            let _ = state
+                .db
+                .audit(Some(user_id), "password_reset", Some("desktop"), None)
+                .await;
+            Json(serde_json::json!({ "ok": true })).into_response()
+        }
+        _ => json_err(
+            StatusCode::BAD_REQUEST,
+            "Token inválido, expirado o ya utilizado.",
+        ),
+    }
+}
+
+async fn link_code(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let _ = state.db.cleanup_link_codes().await;
+    match state.db.create_link_code(user.id).await {
+        Ok((code, numeric_code, expires)) => Json(LinkCodeDto {
+            code,
+            numeric_code,
+            expires_at: expires.format("%H:%M:%S UTC").to_string(),
+            target_username: user.username,
+        })
+        .into_response(),
+        Err(_) => json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "No se pudo generar el código de vinculación.",
+        ),
+    }
+}
+
+async fn link_consume(
+    State(state): State<AppState>,
+    Json(req): Json<LinkConsumeRequest>,
+) -> Response {
+    let normalized: String = req
+        .code
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_uppercase();
+    if normalized.is_empty() {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Introduce el código de 6 dígitos o token de vinculación.",
+        );
+    }
+    let Some(link) = state
+        .db
+        .find_active_link_code(&normalized)
+        .await
+        .ok()
+        .flatten()
+    else {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Código inválido, usado o expirado (dura 60 s).",
+        );
+    };
+
+    let device_name = req
+        .device_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(80).collect::<String>())
+        .unwrap_or_else(|| "Cliente Nativo".to_string());
+
+    let Ok((token, _)) = state
+        .db
+        .create_linked_session(link.user_id, link.user_id, Some(&device_name))
+        .await
+    else {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error creando la sesión vinculada.",
+        );
+    };
+
+    let won = state
+        .db
+        .consume_link_code(&link.code, &token)
+        .await
+        .unwrap_or(false);
+    if !won {
+        let _ = state.db.revoke_session_by_token(&token).await;
+        return json_err(
+            StatusCode::CONFLICT,
+            "Ese código ya fue usado por otro dispositivo.",
+        );
+    }
+
+    let Some(user) = state.db.find_user_by_id(link.user_id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    };
+    let _ = state
+        .db
+        .audit(
+            Some(user.id),
+            "device_linked",
+            Some(&format!("desktop device={device_name}")),
+            None,
+        )
+        .await;
+    let summary = build_user_summary(&state, &user).await;
+    Json(AuthSuccess {
+        token,
+        user: summary,
+    })
+    .into_response()
+}
+
+async fn chat_edit_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(msg_id): Path<i64>,
+    Json(req): Json<EditMessageRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let new_body = req.body.trim();
+    if new_body.is_empty() || new_body.chars().count() > 4000 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "El mensaje debe tener entre 1 y 4000 caracteres.",
+        );
+    }
+    match state.db.edit_message(msg_id, user.id, new_body).await {
+        Ok(true) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Ok(false) => json_err(
+            StatusCode::FORBIDDEN,
+            "No puedes editar este mensaje (solo autor y máx. 15 min).",
+        ),
+        Err(_) => json_err(StatusCode::INTERNAL_SERVER_ERROR, "Error editando mensaje."),
+    }
+}
+
+async fn chat_delete_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(msg_id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    match state.db.soft_delete_message(msg_id, user.id).await {
+        Ok(true) => Json(serde_json::json!({ "ok": true })).into_response(),
+        Ok(false) => json_err(
+            StatusCode::FORBIDDEN,
+            "No puedes borrar este mensaje (solo autor y máx. 30 min).",
+        ),
+        Err(_) => json_err(StatusCode::INTERNAL_SERVER_ERROR, "Error borrando mensaje."),
+    }
+}
+
+async fn profile_logout_all(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let _ = state.db.revoke_all_user_sessions(user.id).await;
+    let _ = state
+        .db
+        .audit(Some(user.id), "logout_all", Some("desktop"), None)
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn build_emails_payload(state: &AppState, user_id: i64) -> EmailsPayload {
+    let rows = state.db.list_user_emails(user_id).await.unwrap_or_default();
+    let emails = rows
+        .into_iter()
+        .map(|e| UserEmailDto {
+            id: e.id,
+            email: e.email.clone(),
+            verified: e.is_verified(),
+            is_primary: e.is_primary != 0,
+        })
+        .collect();
+    let aethramail_url = crate::handlers::correo::resolve_aethramail_url(state).await;
+    EmailsPayload {
+        emails,
+        aethramail_url,
+    }
+}
+
+async fn emails_list(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    Json(build_emails_payload(&state, user.id).await).into_response()
+}
+
+async fn emails_request(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<EmailRequestBody>,
+) -> Response {
+    use rand::RngCore;
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let email = req.email.trim().to_string();
+    if let Err(err) = validate_email(&email) {
+        return json_err(StatusCode::BAD_REQUEST, err);
+    }
+    if state
+        .db
+        .user_email_exists(user.id, &email)
+        .await
+        .unwrap_or(false)
+        && state
+            .db
+            .user_email_is_verified(user.id, &email)
+            .await
+            .unwrap_or(false)
+    {
+        return json_err(
+            StatusCode::CONFLICT,
+            "Ese correo ya está vinculado y verificado.",
+        );
+    }
+    let Some(client) = state.aethramail.as_ref().as_ref() else {
+        return json_err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "El servicio AethraMail no está disponible en este servidor.",
+        );
+    };
+
+    let mut buf = [0u8; 4];
+    rand::rngs::OsRng.fill_bytes(&mut buf);
+    let code = format!("{:08}", u32::from_le_bytes(buf) % 100_000_000);
+    let expires = chrono::Utc::now() + chrono::Duration::minutes(15);
+
+    if state
+        .db
+        .create_email_change_request(user.id, &email, &code, expires)
+        .await
+        .is_err()
+    {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error guardando solicitud de verificación.",
+        );
+    }
+
+    let body = format!(
+        "Verificación de correo — Aethravox Studios\n\n\
+         Tu código de verificación (8 dígitos): {code}\n\n\
+         Introdúcelo en Ajustes → Correo Interno. Expira en 15 minutos.\n\n— Aethravox Studios"
+    );
+    match client
+        .send_email(&email, "Código de verificación — Aethravox", &body)
+        .await
+    {
+        Ok(_) => Json(serde_json::json!({
+            "ok": true,
+            "message": format!("Código de 8 dígitos enviado a {email}.")
+        }))
+        .into_response(),
+        Err(_) => json_err(
+            StatusCode::BAD_REQUEST,
+            "No se pudo enviar el código. ¿Existe ese correo en AethraMail?",
+        ),
+    }
+}
+
+async fn emails_verify(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<EmailVerifyBody>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let email = req.email.trim().to_string();
+    let code = req.code.trim().to_string();
+    if code.len() != 8 || !code.chars().all(|c| c.is_ascii_digit()) {
+        return json_err(StatusCode::BAD_REQUEST, "El código debe ser de 8 dígitos.");
+    }
+    match state.db.find_valid_email_change(user.id, &code).await {
+        Ok(Some((req_id, new_email))) => {
+            if new_email != email {
+                return json_err(
+                    StatusCode::BAD_REQUEST,
+                    "Ese código no corresponde a ese correo.",
+                );
+            }
+            let _ = state.db.consume_email_change(req_id).await;
+            if state
+                .db
+                .add_verified_user_email(user.id, &email)
+                .await
+                .is_err()
+            {
+                return json_err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error al vincular el correo.",
+                );
+            }
+            let _ = state
+                .db
+                .audit(Some(user.id), "email_linked", Some(&email), None)
+                .await;
+            Json(build_emails_payload(&state, user.id).await).into_response()
+        }
+        _ => json_err(
+            StatusCode::BAD_REQUEST,
+            "Código incorrecto, expirado o ya utilizado.",
+        ),
+    }
+}
+
+async fn emails_set_primary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<EmailIdBody>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let _ = state.db.set_primary_user_email(user.id, req.email_id).await;
+    Json(build_emails_payload(&state, user.id).await).into_response()
+}
+
+async fn emails_remove(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<EmailIdBody>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let _ = state.db.remove_user_email(user.id, req.email_id).await;
+    Json(build_emails_payload(&state, user.id).await).into_response()
 }

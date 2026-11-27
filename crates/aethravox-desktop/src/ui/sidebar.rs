@@ -104,6 +104,18 @@ pub fn show_topbar(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Contex
                 }
             }
 
+            let vk_active = app.vk_manual_open;
+            if ui
+                .selectable_label(vk_active, "⌨")
+                .on_hover_text("Mostrar / ocultar teclado en pantalla")
+                .clicked()
+            {
+                app.vk_manual_open = !app.vk_manual_open;
+                if app.vk_manual_open {
+                    app.vk_dismissed = false;
+                }
+            }
+
             let mode_label = match app.color_mode {
                 ColorMode::Dark => "☀",
                 ColorMode::Light => "🌙",

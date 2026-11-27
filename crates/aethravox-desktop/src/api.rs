@@ -5,11 +5,13 @@ use aethravox_core::{
     CategoryRowDto, ChangePasswordRequest, ChatConversationDto, ChatMessageDto, CommunityDetailDto,
     CommunityDto, CreateCommunityGroupRequest, CreateCommunityRequest, CreateGroupRequest,
     CreateTicketRequest, DocumentDto, DownloadAppDto, DownloadFileDto, DownloadPlatformDto,
-    FriendDto, FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest,
-    LoginRequest, PendingFriendDto, PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload,
-    RegisterRequest, ReplyTicketRequest, SendMessageRequest, StartDmRequest, StartDmResponse,
-    ThemeKind, ThemeSelectRequest, TicketActionRequest, TicketDetailDto, TicketDto,
-    UpdateProfileRequest, UpdateTitlesRequest, UserSearchDto, UserSummary, VideoDto,
+    EditMessageRequest, EmailIdBody, EmailRequestBody, EmailVerifyBody, EmailsPayload, FriendDto,
+    FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest,
+    LinkCodeDto, LinkConsumeRequest, LoginRequest, PendingFriendDto, PlaygroundGenRequest,
+    PlaygroundGenResult, ProfilePayload, RecoverRequest, RecoverResponse, RegisterRequest,
+    ReplyTicketRequest, ResetPasswordRequest, SendMessageRequest, StartDmRequest,
+    StartDmResponse, ThemeKind, ThemeSelectRequest, TicketActionRequest, TicketDetailDto,
+    TicketDto, UpdateProfileRequest, UpdateTitlesRequest, UserSearchDto, UserSummary, VideoDto,
     VideoReactRequest, WebAppDto,
 };
 use serde::{de::DeserializeOwned, Serialize};
@@ -121,6 +123,15 @@ pub enum ApiEvent {
     AdminOverviewLoaded(AdminOverviewDto),
     AdminActionOk(String),
     AdminErr(String),
+
+    // Recuperación, Vinculación y Correo interno
+    RecoverOk(RecoverResponse),
+    ResetOk,
+    LinkCodeLoaded(LinkCodeDto),
+    EmailsLoaded(EmailsPayload),
+    EmailRequestOk(String),
+    EmailErr(String),
+    LogoutAllOk,
 }
 
 fn encode_uri_component(s: &str) -> String {
@@ -1651,6 +1662,339 @@ pub fn spawn_admin_simple_action(
             }
             Err(e) => {
                 let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Recuperación, Vinculación, Correo y Chat Edit/Delete =====================
+
+pub fn spawn_recover(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    req: RecoverRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<RecoverRequest, RecoverResponse>(
+            &base_url,
+            "/api/v1/auth/recover",
+            &None,
+            &req,
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::RecoverOk(res));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AuthErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_reset(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    req: ResetPasswordRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<ResetPasswordRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/auth/reset",
+            &None,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ResetOk);
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AuthErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_link_code(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<LinkCodeDto>(&base_url, "/api/v1/link/code", &token).await {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::LinkCodeLoaded(dto));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_link_consume(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    req: LinkConsumeRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<LinkConsumeRequest, AuthSuccess>(
+            &base_url,
+            "/api/v1/link/consume",
+            &None,
+            &req,
+        )
+        .await
+        {
+            Ok(auth) => {
+                let _ = tx.send(ApiEvent::AuthOk(auth));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AuthErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_edit_message(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    msg_id: i64,
+    body: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/messages/{msg_id}/edit");
+        let req = EditMessageRequest { body };
+        match post_json::<EditMessageRequest, serde_json::Value>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(_) => {
+                let msgs_path = format!("/api/v1/chat/conversations/{conv_id}/messages");
+                if let Ok(list) = get_json::<Vec<ChatMessageDto>>(&base_url, &msgs_path, &token).await
+                {
+                    let _ = tx.send(ApiEvent::MessagesLoaded {
+                        conv_id,
+                        messages: list,
+                    });
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_delete_message(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    msg_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/messages/{msg_id}/delete");
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let msgs_path = format!("/api/v1/chat/conversations/{conv_id}/messages");
+                if let Ok(list) = get_json::<Vec<ChatMessageDto>>(&base_url, &msgs_path, &token).await
+                {
+                    let _ = tx.send(ApiEvent::MessagesLoaded {
+                        conv_id,
+                        messages: list,
+                    });
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_logout_all(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match post_empty::<serde_json::Value>(&base_url, "/api/v1/profile/logout_all", &token).await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::LogoutAllOk);
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_fetch_emails(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<EmailsPayload>(&base_url, "/api/v1/emails", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::EmailsLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::EmailErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_request_email(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    email: String,
+) {
+    rt.spawn(async move {
+        let req = EmailRequestBody { email };
+        match post_json::<EmailRequestBody, serde_json::Value>(
+            &base_url,
+            "/api/v1/emails/request",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(val) => {
+                let msg = val
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Código de 8 dígitos enviado.")
+                    .to_string();
+                let _ = tx.send(ApiEvent::EmailRequestOk(msg));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::EmailErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_verify_email(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    email: String,
+    code: String,
+) {
+    rt.spawn(async move {
+        let req = EmailVerifyBody { email, code };
+        match post_json::<EmailVerifyBody, EmailsPayload>(
+            &base_url,
+            "/api/v1/emails/verify",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::EmailsLoaded(p));
+                let _ = tx.send(ApiEvent::ProfileActionOk(
+                    "Correo interno vinculado y verificado.".into(),
+                ));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::EmailErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_set_primary_email(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    email_id: i64,
+) {
+    rt.spawn(async move {
+        let req = EmailIdBody { email_id };
+        match post_json::<EmailIdBody, EmailsPayload>(
+            &base_url,
+            "/api/v1/emails/primary",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::EmailsLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::EmailErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_remove_email(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    email_id: i64,
+) {
+    rt.spawn(async move {
+        let req = EmailIdBody { email_id };
+        match post_json::<EmailIdBody, EmailsPayload>(
+            &base_url,
+            "/api/v1/emails/remove",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::EmailsLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::EmailErr(e));
             }
         }
         ctx.request_repaint();

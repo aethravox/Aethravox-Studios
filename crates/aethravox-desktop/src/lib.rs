@@ -124,12 +124,35 @@ pub fn run_web() {
 pub fn android_main(android_app: winit::platform::android::activity::AndroidApp) {
     use winit::platform::android::EventLoopBuilderExtAndroid;
 
+    let android_handle = android_app.clone();
     let profile = detect_initial_device_profile();
     let mut options = base_native_options(profile);
     options.event_loop_builder = Some(Box::new(move |builder| {
         builder.with_android_app(android_app);
     }));
-    let _ = run_with_options(options, profile);
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to initialize Tokio runtime");
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let handle = rt.handle().clone();
+
+    let _ = eframe::run_native(
+        "Aethravox Studios",
+        options,
+        Box::new(move |cc| {
+            let mut app = app::AethravoxApp::new_with_profile(
+                cc,
+                tx,
+                rx,
+                handle,
+                profile,
+            );
+            app.android_app = Some(android_handle);
+            Ok(Box::new(app))
+        }),
+    );
 }
 
 #[cfg(target_os = "ios")]

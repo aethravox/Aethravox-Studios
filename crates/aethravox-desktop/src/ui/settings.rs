@@ -5,8 +5,10 @@ use aethravox_core::{
 use egui::{Color32, Rounding, Stroke};
 
 use crate::api::{
-    spawn_change_password, spawn_fetch_profile, spawn_revoke_device, spawn_revoke_session,
-    spawn_update_profile, spawn_update_titles,
+    spawn_change_password, spawn_fetch_emails, spawn_fetch_profile, spawn_link_code,
+    spawn_logout_all, spawn_remove_email, spawn_request_email, spawn_revoke_device,
+    spawn_revoke_session, spawn_set_primary_email, spawn_update_profile, spawn_update_titles,
+    spawn_verify_email,
 };
 use crate::app::AethravoxApp;
 use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palette};
@@ -14,9 +16,16 @@ use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palet
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &Palette) {
     let mobile = app.is_mobile_layout(ctx);
     let mut refresh_profile = false;
+    let mut refresh_emails = false;
     let mut save_profile = false;
     let mut save_titles = false;
     let mut change_pw = false;
+    let mut generate_link = false;
+    let mut logout_all = false;
+    let mut req_email: Option<String> = None;
+    let mut verify_email: Option<(String, String)> = None;
+    let mut primary_email: Option<i64> = None;
+    let mut remove_email: Option<i64> = None;
     let mut revoke_session: Option<String> = None;
     let mut revoke_device: Option<String> = None;
 
@@ -32,8 +41,13 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
             .clicked()
         {
             app.settings_tab_profile = true;
-            if app.profile.is_none() && !app.offline_mode && app.token.is_some() {
-                refresh_profile = true;
+            if !app.offline_mode && app.token.is_some() {
+                if app.profile.is_none() {
+                    refresh_profile = true;
+                }
+                if app.emails_payload.is_none() {
+                    refresh_emails = true;
+                }
             }
         }
     });
@@ -380,9 +394,181 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
 
                 ui.add_space(12.0);
 
+                // Vincular otro dispositivo
+                card_frame(p).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.heading("🔗 Vincular otro dispositivo");
+                        if primary_button(ui, p, "Generar código (60s)").clicked() {
+                            generate_link = true;
+                        }
+                    });
+                    ui.label(
+                        egui::RichText::new(
+                            "Úsalo desde la pestaña «Vincular» en otro dispositivo (móvil, TV o PC) sin escribir contraseña.",
+                        )
+                        .small()
+                        .color(p.text_muted),
+                    );
+                    if let Some(lc) = &app.link_code_generated {
+                        ui.add_space(8.0);
+                        elevated_frame(p).show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(format!("Código: {}", lc.numeric_code))
+                                    .size(22.0)
+                                    .strong()
+                                    .color(p.accent_primary),
+                            );
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Token completo: {} · Cuenta: @{} · Expira: {}",
+                                    lc.code, lc.target_username, lc.expires_at
+                                ))
+                                .small()
+                                .color(p.text_muted),
+                            );
+                        });
+                    }
+                });
+
+                ui.add_space(12.0);
+
+                // Correo interno (AethraMail)
+                card_frame(p).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.heading("📧 Correo interno (AethraMail)");
+                        if ui.button("↻ Actualizar").clicked() {
+                            refresh_emails = true;
+                        }
+                        if let Some(ep) = &app.emails_payload {
+                            if let Some(url) = &ep.aethramail_url {
+                                ui.hyperlink_to("Abrir AethraMail ↗", url);
+                            }
+                        }
+                    });
+                    if let Some(err) = &app.email_error {
+                        ui.label(egui::RichText::new(err).small().color(p.danger));
+                    }
+                    if let Some(info) = &app.email_info {
+                        ui.label(egui::RichText::new(info).small().color(p.success));
+                    }
+                    ui.separator();
+
+                    if let Some(ep) = app.emails_payload.clone() {
+                        if ep.emails.is_empty() {
+                            ui.label(
+                                egui::RichText::new("No tienes correos internos vinculados todavía.")
+                                    .small()
+                                    .color(p.text_muted),
+                            );
+                        } else {
+                            for em in ep.emails {
+                                elevated_frame(p).show(ui, |ui| {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(egui::RichText::new(&em.email).strong());
+                                        if em.verified {
+                                            badge_pill(
+                                                ui,
+                                                "✓ Verificado",
+                                                p.success.gamma_multiply(0.18),
+                                                p.success,
+                                            );
+                                        } else {
+                                            badge_pill(
+                                                ui,
+                                                "Pendiente",
+                                                p.accent_secondary.gamma_multiply(0.18),
+                                                p.accent_secondary,
+                                            );
+                                        }
+                                        if em.is_primary {
+                                            badge_pill(
+                                                ui,
+                                                "Primario",
+                                                p.accent_primary.gamma_multiply(0.18),
+                                                p.accent_primary,
+                                            );
+                                        } else {
+                                            if em.verified && ui.button("Hacer primario").clicked() {
+                                                primary_email = Some(em.id);
+                                            }
+                                            if ui
+                                                .button(
+                                                    egui::RichText::new("Eliminar").color(p.danger),
+                                                )
+                                                .clicked()
+                                            {
+                                                remove_email = Some(em.id);
+                                            }
+                                        }
+                                    });
+                                });
+                                ui.add_space(4.0);
+                            }
+                        }
+                    }
+
+                    ui.add_space(6.0);
+                    ui.label(egui::RichText::new("Vincular correo AethraMail").strong().small());
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.email_input)
+                                .desired_width(ui.available_width().min(250.0))
+                                .hint_text("usuario@aethra.sac"),
+                        );
+                        if primary_button(ui, p, "Enviar código (8 dígitos)").clicked()
+                            && !app.email_input.trim().is_empty()
+                        {
+                            req_email = Some(app.email_input.trim().to_string());
+                        }
+                    });
+
+                    if let Some(pending) = app.email_pending_verify.clone() {
+                        ui.add_space(6.0);
+                        elevated_frame(p).show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Introduce el código de 8 dígitos enviado a {pending}:"
+                                ))
+                                .small(),
+                            );
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut app.email_verify_code)
+                                        .desired_width(160.0)
+                                        .hint_text("12345678"),
+                                );
+                                if primary_button(ui, p, "Verificar").clicked()
+                                    && !app.email_verify_code.trim().is_empty()
+                                {
+                                    verify_email = Some((
+                                        pending.clone(),
+                                        app.email_verify_code.trim().to_string(),
+                                    ));
+                                }
+                                if ui.button("Cancelar").clicked() {
+                                    app.email_pending_verify = None;
+                                    app.email_verify_code.clear();
+                                }
+                            });
+                        });
+                    }
+                });
+
+                ui.add_space(12.0);
+
                 // Sesiones activas
                 card_frame(p).show(ui, |ui| {
-                    ui.heading(format!("🖥 Sesiones activas ({})", prof.sessions.len()));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.heading(format!("🖥 Sesiones activas ({})", prof.sessions.len()));
+                        if ui
+                            .button(
+                                egui::RichText::new("Cerrar todas las sesiones").color(p.danger),
+                            )
+                            .clicked()
+                        {
+                            logout_all = true;
+                        }
+                    });
                     ui.separator();
                     for s in &prof.sessions {
                         elevated_frame(p).show(ui, |ui| {
@@ -473,6 +659,82 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
             app.server_url.clone(),
             app.token.clone(),
         );
+    }
+    if refresh_emails && !app.offline_mode && app.token.is_some() {
+        spawn_fetch_emails(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+        );
+    }
+    if generate_link && !app.offline_mode && app.token.is_some() {
+        spawn_link_code(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+        );
+    }
+    if logout_all && !app.offline_mode && app.token.is_some() {
+        spawn_logout_all(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+        );
+    }
+    if let Some(email) = req_email {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_request_email(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                email,
+            );
+        }
+    }
+    if let Some((email, code)) = verify_email {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_verify_email(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                email,
+                code,
+            );
+        }
+    }
+    if let Some(eid) = primary_email {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_set_primary_email(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                eid,
+            );
+        }
+    }
+    if let Some(eid) = remove_email {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_remove_email(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                eid,
+            );
+        }
     }
     if save_profile && !app.offline_mode && app.token.is_some() {
         spawn_update_profile(
