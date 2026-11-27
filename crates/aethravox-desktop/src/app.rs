@@ -1,10 +1,12 @@
 use aethravox_core::{
-    AdminIpBansPayload, AdminOverviewDto, AexosProfileDto, ArisChatDto, ArisCreditsDto,
-    ArisMessageDto, ArisMode, ChatConversationDto, ChatGroupManageDto, ChatMessageDto, ColorMode,
-    CommunityDetailDto, CommunityDto, DeviceProfile, DocumentDto, DownloadPlatformDto,
-    EmailsPayload, FriendsPayload, HubPayload, LinkCodeDto, ProfilePayload, SystemConfigDto,
-    ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto, WebAppDto,
+    AdminIpBansPayload, AdminOverviewDto, AdminRolesPayload, AdminTitlesPayload, AexosProfileDto,
+    ArisChatDto, ArisCreditsDto, ArisMessageDto, ArisMode, ChatConversationDto, ChatGroupManageDto,
+    ChatMessageDto, ChatMessageInfoDto, ColorMode, CommunityDetailDto, CommunityDto, DeviceProfile,
+    DocumentDto, DownloadPlatformDto, EmailsPayload, FriendsPayload, HubPayload, LinkCodeDto,
+    ProfilePayload, PublicProfileDto, SystemConfigDto, ThemeKind, TicketDetailDto, TicketDto,
+    UserSearchDto, VideoDto, WebAppDto,
 };
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -12,14 +14,17 @@ use crate::api::{
     demo_aexos_profiles, demo_aris_chats, demo_chat_conversations, demo_chat_messages,
     demo_communities, demo_docs, demo_downloads, demo_friends, demo_tickets, demo_videos,
     offline_demo_hub, spawn_admin_config_get, spawn_admin_ip_bans, spawn_admin_overview,
-    spawn_aexos_profiles, spawn_aris_chats, spawn_aris_credits, spawn_aris_messages,
-    spawn_community_detail, spawn_community_inviteable, spawn_fetch_communities,
-    spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads, spawn_fetch_emails,
-    spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages, spawn_fetch_profile,
-    spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read, spawn_save_theme,
-    spawn_send_message, spawn_ticket_detail, ApiEvent, AsyncRt,
+    spawn_admin_roles, spawn_admin_titles, spawn_aexos_profiles, spawn_aris_chats,
+    spawn_aris_credits, spawn_aris_messages, spawn_community_detail, spawn_community_inviteable,
+    spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
+    spawn_fetch_emails, spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages,
+    spawn_fetch_profile, spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read,
+    spawn_save_theme, spawn_send_friend_request, spawn_send_message, spawn_start_dm,
+    spawn_ticket_detail, ApiEvent, AsyncRt,
 };
-use crate::theme::{apply_theme_for_device, Palette};
+use crate::theme::{
+    apply_theme_for_device, badge_pill, parse_hex_color, primary_button, Palette,
+};
 use crate::ui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,6 +129,18 @@ pub struct AethravoxApp {
     pub chat_rank_can_assign: bool,
     pub chat_rank_can_pin: bool,
     pub chat_rank_can_transfer: bool,
+    pub chat_attach_open: bool,
+    pub chat_attach_is_image: bool,
+    pub chat_attach_path: String,
+    pub chat_attach_dropped_name: Option<String>,
+    pub chat_attach_dropped_bytes: Option<Vec<u8>>,
+    pub chat_attach_busy: bool,
+    pub chat_select_mode: bool,
+    pub chat_selected_ids: Vec<i64>,
+    pub chat_msg_info: Option<ChatMessageInfoDto>,
+    pub chat_group_img_path: String,
+    pub chat_group_img_dropped_name: Option<String>,
+    pub chat_group_img_dropped_bytes: Option<Vec<u8>>,
 
     // Aris state
     pub aris_chats: Vec<ArisChatDto>,
@@ -187,6 +204,12 @@ pub struct AethravoxApp {
     pub email_verify_code: String,
     pub email_info: Option<String>,
     pub email_error: Option<String>,
+    pub avatar_path: String,
+    pub avatar_dropped_name: Option<String>,
+    pub avatar_dropped_bytes: Option<Vec<u8>>,
+    pub avatar_busy: bool,
+    pub public_profile_modal: Option<PublicProfileDto>,
+    pub public_profile_error: Option<String>,
 
     // aexTube state
     pub videos: Vec<VideoDto>,
@@ -247,6 +270,28 @@ pub struct AethravoxApp {
     pub admin_cfg_register: bool,
     pub admin_cfg_default_role: String,
     pub admin_cfg_maintenance: bool,
+    pub admin_roles: Option<AdminRolesPayload>,
+    pub admin_role_new_name: String,
+    pub admin_role_new_color: String,
+    pub admin_role_new_pos: String,
+    pub admin_role_new_desc: String,
+    pub admin_role_editing_id: Option<i64>,
+    pub admin_role_edit_name: String,
+    pub admin_role_edit_color: String,
+    pub admin_role_edit_pos: String,
+    pub admin_role_edit_desc: String,
+    pub admin_role_selected_id: Option<i64>,
+    pub admin_role_perms_draft: Vec<String>,
+    pub admin_role_webs_draft: Vec<i64>,
+    pub admin_role_delete_target: Option<(i64, String, i64)>,
+    pub admin_role_reassign_id: Option<i64>,
+    pub admin_titles: Option<AdminTitlesPayload>,
+    pub admin_title_editing_id: Option<i64>,
+    pub admin_title_name: String,
+    pub admin_title_color: String,
+    pub admin_title_effect: String,
+    pub admin_title_desc: String,
+    pub admin_title_assign_user: HashMap<i64, i64>,
     pub admin_error: Option<String>,
 
     // Neon Canvas / PDI state
@@ -377,6 +422,18 @@ impl AethravoxApp {
             chat_rank_can_assign: false,
             chat_rank_can_pin: false,
             chat_rank_can_transfer: false,
+            chat_attach_open: false,
+            chat_attach_is_image: true,
+            chat_attach_path: String::new(),
+            chat_attach_dropped_name: None,
+            chat_attach_dropped_bytes: None,
+            chat_attach_busy: false,
+            chat_select_mode: false,
+            chat_selected_ids: Vec::new(),
+            chat_msg_info: None,
+            chat_group_img_path: String::new(),
+            chat_group_img_dropped_name: None,
+            chat_group_img_dropped_bytes: None,
             aris_chats,
             active_aris_chat_id: 1,
             aris_messages,
@@ -432,6 +489,12 @@ impl AethravoxApp {
             email_verify_code: String::new(),
             email_info: None,
             email_error: None,
+            avatar_path: String::new(),
+            avatar_dropped_name: None,
+            avatar_dropped_bytes: None,
+            avatar_busy: false,
+            public_profile_modal: None,
+            public_profile_error: None,
             videos: demo_videos(),
             aextube_filter: "all".to_string(),
             aextube_error: None,
@@ -482,6 +545,28 @@ impl AethravoxApp {
             admin_cfg_register: true,
             admin_cfg_default_role: "usuario".to_string(),
             admin_cfg_maintenance: false,
+            admin_roles: None,
+            admin_role_new_name: String::new(),
+            admin_role_new_color: "#8b5cf6".to_string(),
+            admin_role_new_pos: "150".to_string(),
+            admin_role_new_desc: String::new(),
+            admin_role_editing_id: None,
+            admin_role_edit_name: String::new(),
+            admin_role_edit_color: String::new(),
+            admin_role_edit_pos: String::new(),
+            admin_role_edit_desc: String::new(),
+            admin_role_selected_id: None,
+            admin_role_perms_draft: Vec::new(),
+            admin_role_webs_draft: Vec::new(),
+            admin_role_delete_target: None,
+            admin_role_reassign_id: None,
+            admin_titles: None,
+            admin_title_editing_id: None,
+            admin_title_name: String::new(),
+            admin_title_color: "#e0a308".to_string(),
+            admin_title_effect: "none".to_string(),
+            admin_title_desc: String::new(),
+            admin_title_assign_user: HashMap::new(),
             admin_error: None,
             neon_strokes: Vec::new(),
             neon_active_stroke: None,
@@ -767,6 +852,18 @@ impl AethravoxApp {
         self.admin_ban_target = None;
         self.admin_suspend_target = None;
         self.admin_delete_confirm = None;
+        self.admin_roles = None;
+        self.admin_titles = None;
+        self.admin_role_editing_id = None;
+        self.admin_role_selected_id = None;
+        self.admin_role_delete_target = None;
+        self.admin_title_editing_id = None;
+        self.avatar_path.clear();
+        self.avatar_dropped_name = None;
+        self.avatar_dropped_bytes = None;
+        self.avatar_busy = false;
+        self.public_profile_modal = None;
+        self.public_profile_error = None;
         self.aextube_upload_open = false;
         self.aextube_up_busy = false;
         self.aextube_up_dropped_name = None;
@@ -790,6 +887,17 @@ impl AethravoxApp {
         self.chat_edit_draft.clear();
         self.chat_group_panel = false;
         self.chat_group_manage = None;
+        self.chat_attach_open = false;
+        self.chat_attach_path.clear();
+        self.chat_attach_dropped_name = None;
+        self.chat_attach_dropped_bytes = None;
+        self.chat_attach_busy = false;
+        self.chat_select_mode = false;
+        self.chat_selected_ids.clear();
+        self.chat_msg_info = None;
+        self.chat_group_img_path.clear();
+        self.chat_group_img_dropped_name = None;
+        self.chat_group_img_dropped_bytes = None;
     }
 
     /// Abre una conversación: carga sus mensajes y la marca como leída (modo online).
@@ -800,6 +908,13 @@ impl AethravoxApp {
         self.chat_edit_draft.clear();
         self.chat_group_panel = false;
         self.chat_group_manage = None;
+        self.chat_select_mode = false;
+        self.chat_selected_ids.clear();
+        self.chat_msg_info = None;
+        self.chat_attach_open = false;
+        self.chat_group_img_path.clear();
+        self.chat_group_img_dropped_name = None;
+        self.chat_group_img_dropped_bytes = None;
         if self.offline_mode || self.token.is_none() || conv_id == 0 {
             return;
         }
@@ -977,7 +1092,12 @@ impl AethravoxApp {
                 }
                 ApiEvent::MessageSent(msg) => {
                     self.chat_sending = false;
+                    self.chat_attach_busy = false;
                     self.chat_pending = None;
+                    self.chat_attach_open = false;
+                    self.chat_attach_path.clear();
+                    self.chat_attach_dropped_name = None;
+                    self.chat_attach_dropped_bytes = None;
                     if !self.chat_messages.iter().any(|m| m.id == msg.id) {
                         self.chat_messages.push(msg);
                     }
@@ -998,6 +1118,9 @@ impl AethravoxApp {
                     self.chat_error = None;
                     self.chat_group_edit_name = dto.name.clone();
                     self.chat_group_edit_desc = dto.description.clone();
+                    self.chat_group_img_path.clear();
+                    self.chat_group_img_dropped_name = None;
+                    self.chat_group_img_dropped_bytes = None;
                     self.chat_group_manage = Some(dto);
                 }
                 ApiEvent::ChatGroupActionOk(msg) => {
@@ -1028,11 +1151,39 @@ impl AethravoxApp {
                         self.token.clone(),
                     );
                 }
+                ApiEvent::ChatMessageInfoLoaded(info) => {
+                    self.chat_msg_info = Some(info);
+                }
+                ApiEvent::ChatBulkDeleted { ok, denied } => {
+                    self.chat_select_mode = false;
+                    self.chat_selected_ids.clear();
+                    for m in &mut self.chat_messages {
+                        if ok.contains(&m.id) {
+                            m.content = "🚫 Mensaje eliminado".into();
+                        }
+                    }
+                    self.status_banner = Some(if denied == 0 {
+                        format!("{} mensaje(s) eliminado(s).", ok.len())
+                    } else {
+                        format!("{} eliminado(s), {} sin permiso.", ok.len(), denied)
+                    });
+                    if self.active_conv_id != 0 {
+                        spawn_fetch_messages(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                            self.active_conv_id,
+                        );
+                    }
+                }
                 ApiEvent::ChatErr(msg) => {
                     self.chat_error = Some(msg);
                 }
                 ApiEvent::ChatSendErr(msg) => {
                     self.chat_sending = false;
+                    self.chat_attach_busy = false;
                     self.chat_error = Some(msg);
                     if let Some(txt) = self.chat_pending.take() {
                         if self.chat_draft.is_empty() {
@@ -1270,6 +1421,10 @@ impl AethravoxApp {
                     self.profile = Some(p);
                 }
                 ApiEvent::ProfileActionOk(msg) => {
+                    self.avatar_busy = false;
+                    self.avatar_path.clear();
+                    self.avatar_dropped_name = None;
+                    self.avatar_dropped_bytes = None;
                     self.profile_error = None;
                     self.status_banner = Some(msg);
                     spawn_fetch_profile(
@@ -1288,7 +1443,16 @@ impl AethravoxApp {
                     );
                 }
                 ApiEvent::ProfileErr(e) => {
+                    self.avatar_busy = false;
                     self.profile_error = Some(e);
+                }
+                ApiEvent::PublicProfileLoaded(prof) => {
+                    self.public_profile_error = None;
+                    self.public_profile_modal = Some(prof);
+                }
+                ApiEvent::PublicProfileErr(e) => {
+                    self.public_profile_error = Some(e.clone());
+                    self.status_banner = Some(e);
                 }
 
                 // aexTube
@@ -1379,6 +1543,28 @@ impl AethravoxApp {
                     self.admin_cfg_maintenance = cfg.maintenance_mode;
                     self.admin_config = Some(cfg);
                 }
+                ApiEvent::AdminRolesLoaded(p) => {
+                    self.admin_error = None;
+                    let sel_id = self
+                        .admin_role_selected_id
+                        .filter(|id| p.roles.iter().any(|r| r.id == *id))
+                        .or_else(|| p.roles.first().map(|r| r.id));
+                    self.admin_role_selected_id = sel_id;
+                    if let Some(sid) = sel_id {
+                        if let Some(r) = p.roles.iter().find(|r| r.id == sid) {
+                            self.admin_role_perms_draft = r.perms.clone();
+                            self.admin_role_webs_draft = r.web_ids.clone();
+                        }
+                    } else {
+                        self.admin_role_perms_draft.clear();
+                        self.admin_role_webs_draft.clear();
+                    }
+                    self.admin_roles = Some(p);
+                }
+                ApiEvent::AdminTitlesLoaded(p) => {
+                    self.admin_error = None;
+                    self.admin_titles = Some(p);
+                }
                 ApiEvent::AdminActionOk(msg) => {
                     self.admin_error = None;
                     self.status_banner = Some(msg);
@@ -1399,6 +1585,22 @@ impl AethravoxApp {
                         );
                     } else if self.admin_tab == 4 {
                         spawn_admin_config_get(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    } else if self.admin_tab == 5 {
+                        spawn_admin_roles(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    } else if self.admin_tab == 6 {
+                        spawn_admin_titles(
                             &self.rt,
                             self.tx.clone(),
                             ctx.clone(),
@@ -1694,6 +1896,153 @@ impl eframe::App for AethravoxApp {
                 });
             if !open {
                 self.locked_modal = None;
+            }
+        }
+
+        // Public Profile Modal
+        if let Some(prof) = self.public_profile_modal.clone() {
+            let mut open = true;
+            let mut start_dm: Option<String> = None;
+            let mut add_friend: Option<String> = None;
+            let mut open_avatar: Option<String> = None;
+            egui::Window::new(format!("👤 Perfil de @{}", prof.username))
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .max_width(420.0)
+                .show(ctx, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new(&prof.display).heading().strong());
+                        let rcol = parse_hex_color(&prof.role_color, p.accent_secondary);
+                        badge_pill(
+                            ui,
+                            &prof.role_display,
+                            rcol.gamma_multiply(0.22),
+                            rcol,
+                        );
+                    });
+                    ui.label(
+                        egui::RichText::new(format!("@{} · Miembro desde {}", prof.username, prof.created_at))
+                            .small()
+                            .color(p.text_muted),
+                    );
+                    if !prof.avatar_url.is_empty() {
+                        ui.add_space(4.0);
+                        if ui.button("🖼 Ver avatar en navegador ↗").clicked() {
+                            open_avatar = Some(format!(
+                                "{}{}",
+                                self.server_url.trim_end_matches('/'),
+                                prof.avatar_url
+                            ));
+                        }
+                    }
+                    if let Some(pt) = &prof.primary_title {
+                        ui.add_space(6.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(egui::RichText::new("Título principal:").small().color(p.text_muted));
+                            badge_pill(
+                                ui,
+                                &format!("★ {}", pt.name),
+                                p.accent_primary.gamma_multiply(0.22),
+                                p.accent_primary,
+                            );
+                        });
+                    }
+                    if !prof.visible_titles.is_empty() {
+                        ui.add_space(4.0);
+                        ui.horizontal_wrapped(|ui| {
+                            for t in &prof.visible_titles {
+                                badge_pill(
+                                    ui,
+                                    &t.name,
+                                    p.accent_secondary.gamma_multiply(0.16),
+                                    p.accent_secondary,
+                                );
+                            }
+                        });
+                    }
+                    if !prof.bio.trim().is_empty() {
+                        ui.add_space(8.0);
+                        ui.label(&prof.bio);
+                    }
+                    ui.add_space(10.0);
+                    ui.horizontal_wrapped(|ui| {
+                        if !prof.is_self && primary_button(ui, &p, "💬 Enviar DM").clicked() {
+                            start_dm = Some(prof.username.clone());
+                        }
+                        if !prof.is_self && !prof.is_friend && ui.button("➕ Añadir amigo").clicked() {
+                            add_friend = Some(prof.username.clone());
+                        }
+                        if ui.button("Cerrar").clicked() {
+                            self.public_profile_modal = None;
+                        }
+                    });
+                });
+            if !open {
+                self.public_profile_modal = None;
+            }
+            if let Some(url) = open_avatar {
+                ctx.open_url(egui::OpenUrl::new_tab(url));
+            }
+            if let Some(uname) = start_dm {
+                self.public_profile_modal = None;
+                if !self.offline_mode && self.token.is_some() {
+                    spawn_start_dm(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                        uname,
+                    );
+                }
+                self.navigate_to(ctx, Route::Chat);
+            }
+            if let Some(uname) = add_friend {
+                if !self.offline_mode && self.token.is_some() {
+                    spawn_send_friend_request(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                        uname,
+                    );
+                }
+                self.public_profile_modal = None;
+            }
+        }
+
+        // Chat Message Info Modal
+        if let Some(info) = self.chat_msg_info.clone() {
+            let mut open = true;
+            egui::Window::new(format!("ℹ Información del mensaje #{}", info.id))
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .max_width(420.0)
+                .show(ctx, |ui| {
+                    ui.label(format!("Remitente: {}", info.sender_name));
+                    ui.label(format!("Conversación: #{}", info.conversation_id));
+                    ui.label(format!("Enviado: {}", info.created_at));
+                    ui.label(format!("Estado: {}", info.status));
+                    if let Some(ed) = &info.edited_at {
+                        ui.label(format!("Editado: {ed}"));
+                    }
+                    if let Some(del) = &info.deleted_at {
+                        ui.label(format!("Eliminado: {del}"));
+                    }
+                    ui.separator();
+                    ui.label(egui::RichText::new(&info.body).small().color(p.text_muted));
+                    ui.add_space(8.0);
+                    if primary_button(ui, &p, "Cerrar").clicked() {
+                        self.chat_msg_info = None;
+                    }
+                });
+            if !open {
+                self.chat_msg_info = None;
             }
         }
     }

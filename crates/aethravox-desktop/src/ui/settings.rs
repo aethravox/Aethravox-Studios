@@ -6,12 +6,19 @@ use egui::{Color32, Rounding, Stroke};
 
 use crate::api::{
     spawn_change_password, spawn_fetch_emails, spawn_fetch_profile, spawn_link_code,
-    spawn_logout_all, spawn_remove_email, spawn_request_email, spawn_revoke_device,
-    spawn_revoke_session, spawn_set_primary_email, spawn_update_profile, spawn_update_titles,
-    spawn_verify_email,
+    spawn_logout_all, spawn_remove_avatar, spawn_remove_email, spawn_request_email,
+    spawn_revoke_device, spawn_revoke_session, spawn_set_primary_email, spawn_update_profile,
+    spawn_update_titles, spawn_upload_avatar_bytes, spawn_upload_avatar_path, spawn_verify_email,
 };
 use crate::app::AethravoxApp;
 use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palette};
+
+#[allow(dead_code)]
+enum AvatarAction {
+    Bytes { filename: String, bytes: Vec<u8> },
+    Path(String),
+    Remove,
+}
 
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &Palette) {
     let mobile = app.is_mobile_layout(ctx);
@@ -28,6 +35,26 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
     let mut remove_email: Option<i64> = None;
     let mut revoke_session: Option<String> = None;
     let mut revoke_device: Option<String> = None;
+    let mut avatar_action: Option<AvatarAction> = None;
+
+    if app.settings_tab_profile {
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if let Some(f) = dropped.into_iter().next() {
+            if let Some(bytes) = f.bytes {
+                let name = if f.name.is_empty() {
+                    "avatar.png".to_string()
+                } else {
+                    f.name.clone()
+                };
+                app.avatar_dropped_name = Some(name);
+                app.avatar_dropped_bytes = Some(bytes.to_vec());
+            } else if let Some(path) = f.path {
+                app.avatar_path = path.display().to_string();
+                app.avatar_dropped_name = None;
+                app.avatar_dropped_bytes = None;
+            }
+        }
+    }
 
     ui.horizontal_wrapped(|ui| {
         if ui
@@ -302,6 +329,80 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     ui.add_space(8.0);
                     if primary_button(ui, p, "Guardar perfil").clicked() {
                         save_profile = true;
+                    }
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("🖼 Avatar de perfil (máx. 5 MB · PNG/JPG/GIF/WEBP)").strong());
+                    ui.horizontal_wrapped(|ui| {
+                        if prof.avatar_url.is_empty() {
+                            ui.label(
+                                egui::RichText::new("Sin avatar personalizado")
+                                    .small()
+                                    .color(p.text_muted),
+                            );
+                        } else {
+                            if ui.button("👁 Abrir avatar actual ↗").clicked() {
+                                let url = format!(
+                                    "{}{}",
+                                    app.server_url.trim_end_matches('/'),
+                                    prof.avatar_url
+                                );
+                                ctx.open_url(egui::OpenUrl::new_tab(url));
+                            }
+                            if !app.avatar_busy
+                                && ui
+                                    .button(egui::RichText::new("🗑 Quitar avatar").color(p.danger))
+                                    .clicked()
+                            {
+                                avatar_action = Some(AvatarAction::Remove);
+                            }
+                        }
+                    });
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        ui.add_space(4.0);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.avatar_path)
+                                .desired_width(ui.available_width().min(360.0))
+                                .hint_text("Arrastra una imagen aquí o pega la ruta local…"),
+                        );
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    ui.label(
+                        egui::RichText::new("Arrastra una imagen directamente sobre esta ventana.")
+                            .small()
+                            .color(p.text_muted),
+                    );
+                    if let Some(name) = &app.avatar_dropped_name {
+                        ui.label(
+                            egui::RichText::new(format!("Imagen lista: {name}"))
+                                .small()
+                                .color(p.accent_secondary),
+                        );
+                    }
+                    ui.add_space(4.0);
+                    if app.avatar_busy {
+                        ui.label(
+                            egui::RichText::new("⏳ Subiendo avatar…")
+                                .small()
+                                .color(p.accent_secondary),
+                        );
+                    } else {
+                        let can_upload = app.avatar_dropped_bytes.is_some()
+                            || !app.avatar_path.trim().is_empty();
+                        if can_upload && primary_button(ui, p, "📷 Subir avatar").clicked() {
+                            if let (Some(fname), Some(bytes)) = (
+                                app.avatar_dropped_name.clone(),
+                                app.avatar_dropped_bytes.clone(),
+                            ) {
+                                avatar_action = Some(AvatarAction::Bytes {
+                                    filename: fname,
+                                    bytes,
+                                });
+                            } else {
+                                avatar_action = Some(AvatarAction::Path(app.avatar_path.clone()));
+                            }
+                        }
                     }
                 });
 
@@ -797,5 +898,43 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
             app.token.clone(),
             tok,
         );
+    }
+    if let Some(act) = avatar_action {
+        if !app.offline_mode && app.token.is_some() {
+            app.avatar_busy = true;
+            match act {
+                AvatarAction::Bytes { filename, bytes } => {
+                    spawn_upload_avatar_bytes(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        filename,
+                        String::new(),
+                        bytes,
+                    );
+                }
+                AvatarAction::Path(path) => {
+                    spawn_upload_avatar_path(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        path,
+                    );
+                }
+                AvatarAction::Remove => {
+                    spawn_remove_avatar(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx,
+                        app.server_url.clone(),
+                        app.token.clone(),
+                    );
+                }
+            }
+        }
     }
 }

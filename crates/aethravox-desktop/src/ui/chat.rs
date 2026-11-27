@@ -4,10 +4,13 @@ use aethravox_core::{
 use egui::Rounding;
 
 use crate::api::{
-    spawn_chat_group_add_member, spawn_chat_group_assign_rank, spawn_chat_group_create_rank,
-    spawn_chat_group_delete_rank, spawn_chat_group_leave, spawn_chat_group_manage,
+    spawn_chat_bulk_delete, spawn_chat_group_add_member, spawn_chat_group_assign_rank,
+    spawn_chat_group_create_rank, spawn_chat_group_delete_rank, spawn_chat_group_image_bytes,
+    spawn_chat_group_image_path, spawn_chat_group_leave, spawn_chat_group_manage,
     spawn_chat_group_remove_member, spawn_chat_group_transfer, spawn_chat_group_update_info,
-    spawn_create_group, spawn_delete_message, spawn_edit_message, spawn_start_dm,
+    spawn_chat_message_info, spawn_chat_upload_media_bytes, spawn_chat_upload_media_path,
+    spawn_create_group, spawn_delete_message, spawn_edit_message, spawn_fetch_public_profile,
+    spawn_start_dm,
 };
 use crate::app::AethravoxApp;
 use crate::theme::{badge_pill, card_frame, elevated_frame, parse_hex_color, primary_button, Palette};
@@ -46,6 +49,30 @@ enum GroupAction {
     LeaveGroup(i64),
 }
 
+#[allow(dead_code)]
+enum ChatMediaAction {
+    UploadBytes {
+        conv_id: i64,
+        is_image: bool,
+        filename: String,
+        bytes: Vec<u8>,
+    },
+    UploadPath {
+        conv_id: i64,
+        is_image: bool,
+        path: String,
+    },
+    GroupImageBytes {
+        conv_id: i64,
+        filename: String,
+        bytes: Vec<u8>,
+    },
+    GroupImagePath {
+        conv_id: i64,
+        path: String,
+    },
+}
+
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let ctx = ui.ctx().clone();
     let mut clicked_conv: Option<i64> = None;
@@ -54,7 +81,51 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let mut create_group: Option<CreateGroupRequest> = None;
     let mut edit_msg: Option<(i64, String)> = None;
     let mut delete_msg: Option<i64> = None;
+    let mut info_msg: Option<i64> = None;
+    let mut bulk_delete_ids: Option<Vec<i64>> = None;
     let mut group_action: Option<GroupAction> = None;
+    let mut media_action: Option<ChatMediaAction> = None;
+    let mut view_profile_user: Option<String> = None;
+    let mut open_media_url: Option<String> = None;
+
+    if app.active_conv_id != 0 {
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if let Some(f) = dropped.into_iter().next() {
+            if app.chat_group_panel {
+                if let Some(bytes) = f.bytes {
+                    let name = if f.name.is_empty() {
+                        "grupo.png".to_string()
+                    } else {
+                        f.name.clone()
+                    };
+                    app.chat_group_img_dropped_name = Some(name);
+                    app.chat_group_img_dropped_bytes = Some(bytes.to_vec());
+                } else if let Some(path) = f.path {
+                    app.chat_group_img_path = path.display().to_string();
+                    app.chat_group_img_dropped_name = None;
+                    app.chat_group_img_dropped_bytes = None;
+                }
+            } else if app.chat_attach_open {
+                if let Some(bytes) = f.bytes {
+                    let name = if f.name.is_empty() {
+                        if app.chat_attach_is_image {
+                            "imagen.png".to_string()
+                        } else {
+                            "archivo.bin".to_string()
+                        }
+                    } else {
+                        f.name.clone()
+                    };
+                    app.chat_attach_dropped_name = Some(name);
+                    app.chat_attach_dropped_bytes = Some(bytes.to_vec());
+                } else if let Some(path) = f.path {
+                    app.chat_attach_path = path.display().to_string();
+                    app.chat_attach_dropped_name = None;
+                    app.chat_attach_dropped_bytes = None;
+                }
+            }
+        }
+    }
 
     let mobile = app.is_mobile_layout(&ctx);
 
@@ -78,7 +149,12 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 &mut send_requested,
                 &mut edit_msg,
                 &mut delete_msg,
+                &mut info_msg,
+                &mut bulk_delete_ids,
                 &mut group_action,
+                &mut media_action,
+                &mut view_profile_user,
+                &mut open_media_url,
             );
         }
     } else {
@@ -101,11 +177,19 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 &mut send_requested,
                 &mut edit_msg,
                 &mut delete_msg,
+                &mut info_msg,
+                &mut bulk_delete_ids,
                 &mut group_action,
+                &mut media_action,
+                &mut view_profile_user,
+                &mut open_media_url,
             );
         });
     }
 
+    if let Some(url) = open_media_url {
+        ctx.open_url(egui::OpenUrl::new_tab(url));
+    }
     if let Some(id) = clicked_conv {
         app.mobile_detail_open = true;
         app.chat_open_conversation(&ctx, id);
@@ -148,6 +232,41 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
             );
         }
     }
+    if let Some(msg_id) = info_msg {
+        if app.offline_mode || app.token.is_none() {
+            app.status_banner =
+                Some("Información detallada de mensajes disponible en modo conectado.".into());
+        } else {
+            spawn_chat_message_info(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                msg_id,
+            );
+        }
+    }
+    if let Some(ids) = bulk_delete_ids {
+        if app.offline_mode || app.token.is_none() {
+            for m in &mut app.chat_messages {
+                if ids.contains(&m.id) {
+                    m.content = "🚫 Mensaje eliminado".to_string();
+                }
+            }
+            app.chat_select_mode = false;
+            app.chat_selected_ids.clear();
+        } else {
+            spawn_chat_bulk_delete(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                ids,
+            );
+        }
+    }
     if let Some(username) = start_dm {
         if !app.offline_mode && app.token.is_some() {
             spawn_start_dm(
@@ -170,6 +289,94 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 app.token.clone(),
                 req,
             );
+        }
+    }
+    if let Some(username) = view_profile_user {
+        if app.offline_mode || app.token.is_none() {
+            app.status_banner = Some("Conecta al servidor para ver perfiles públicos.".into());
+        } else {
+            spawn_fetch_public_profile(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                username,
+            );
+        }
+    }
+    if let Some(act) = media_action {
+        if app.offline_mode || app.token.is_none() {
+            app.status_banner =
+                Some("La subida de archivos e imágenes requiere conexión con el servidor.".into());
+        } else {
+            match act {
+                ChatMediaAction::UploadBytes {
+                    conv_id,
+                    is_image,
+                    filename,
+                    bytes,
+                } => {
+                    app.chat_attach_busy = true;
+                    spawn_chat_upload_media_bytes(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx.clone(),
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        is_image,
+                        filename,
+                        String::new(),
+                        bytes,
+                    );
+                }
+                ChatMediaAction::UploadPath {
+                    conv_id,
+                    is_image,
+                    path,
+                } => {
+                    app.chat_attach_busy = true;
+                    spawn_chat_upload_media_path(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx.clone(),
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        is_image,
+                        path,
+                    );
+                }
+                ChatMediaAction::GroupImageBytes {
+                    conv_id,
+                    filename,
+                    bytes,
+                } => {
+                    spawn_chat_group_image_bytes(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx.clone(),
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        filename,
+                        String::new(),
+                        bytes,
+                    );
+                }
+                ChatMediaAction::GroupImagePath { conv_id, path } => {
+                    spawn_chat_group_image_path(
+                        &app.rt,
+                        app.tx.clone(),
+                        ctx.clone(),
+                        app.server_url.clone(),
+                        app.token.clone(),
+                        conv_id,
+                        path,
+                    );
+                }
+            }
         }
     }
     if let Some(act) = group_action {
@@ -285,6 +492,83 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 }
             }
         }
+    }
+}
+
+fn resolve_media_url(server_url: &str, raw_url: &str) -> String {
+    let trimmed = raw_url.trim();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else if trimmed.starts_with('/') {
+        format!("{}{}", server_url.trim_end_matches('/'), trimmed)
+    } else {
+        format!("{}/{}", server_url.trim_end_matches('/'), trimmed)
+    }
+}
+
+fn render_message_content(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    server_url: &str,
+    content: &str,
+    open_media_url: &mut Option<String>,
+) {
+    if let Some(url) = content
+        .strip_prefix("[IMG]")
+        .or_else(|| content.strip_prefix("[IMAGE]"))
+    {
+        elevated_frame(p).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("📷 Imagen adjunta").strong().small());
+                if ui.small_button("Abrir imagen ↗").clicked() {
+                    *open_media_url = Some(resolve_media_url(server_url, url));
+                }
+            });
+        });
+    } else if let Some(rest) = content.strip_prefix("[VOICE]") {
+        let (url, dur) = rest.rsplit_once(':').unwrap_or((rest, ""));
+        elevated_frame(p).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let lbl = if dur.trim().is_empty() {
+                    "🎙 Nota de voz".to_string()
+                } else {
+                    format!("🎙 Nota de voz ({}s)", dur.trim())
+                };
+                ui.label(egui::RichText::new(lbl).strong().small());
+                if ui.small_button("Escuchar ↗").clicked() {
+                    *open_media_url = Some(resolve_media_url(server_url, url));
+                }
+            });
+        });
+    } else if let Some(rest) = content.strip_prefix("[FILE]") {
+        let parts: Vec<&str> = rest.splitn(4, ':').collect();
+        let url = parts.first().copied().unwrap_or(rest);
+        let name = parts
+            .get(1)
+            .copied()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Archivo");
+        let size_label = parts
+            .get(3)
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .map(|b| {
+                if b >= 1024 * 1024 {
+                    format!(" ({:.1} MB)", b as f64 / (1024.0 * 1024.0))
+                } else {
+                    format!(" ({} KB)", (b / 1024).max(1))
+                }
+            })
+            .unwrap_or_default();
+        elevated_frame(p).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new(format!("📎 {name}{size_label}")).strong().small());
+                if ui.small_button("Descargar ↗").clicked() {
+                    *open_media_url = Some(resolve_media_url(server_url, url));
+                }
+            });
+        });
+    } else {
+        ui.label(content);
     }
 }
 
@@ -419,6 +703,7 @@ fn show_conv_list(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn show_chat_pane(
     app: &mut AethravoxApp,
     ui: &mut egui::Ui,
@@ -427,7 +712,12 @@ fn show_chat_pane(
     send_requested: &mut bool,
     edit_msg: &mut Option<(i64, String)>,
     delete_msg: &mut Option<i64>,
+    info_msg: &mut Option<i64>,
+    bulk_delete_ids: &mut Option<Vec<i64>>,
     group_action: &mut Option<GroupAction>,
+    media_action: &mut Option<ChatMediaAction>,
+    view_profile_user: &mut Option<String>,
+    open_media_url: &mut Option<String>,
 ) {
     card_frame(p).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -449,6 +739,35 @@ fn show_chat_pane(
                 app.mobile_detail_open = false;
             }
             ui.heading(&active_title);
+            if app.active_conv_id != 0 && !(is_group && app.chat_group_panel) {
+                if ui
+                    .selectable_label(app.chat_select_mode, "☑ Seleccionar")
+                    .clicked()
+                {
+                    app.chat_select_mode = !app.chat_select_mode;
+                    if !app.chat_select_mode {
+                        app.chat_selected_ids.clear();
+                    }
+                }
+                if app.chat_select_mode && !app.chat_selected_ids.is_empty() {
+                    if ui
+                        .button(
+                            egui::RichText::new(format!(
+                                "🗑 Borrar ({})",
+                                app.chat_selected_ids.len()
+                            ))
+                            .color(p.danger),
+                        )
+                        .clicked()
+                    {
+                        *bulk_delete_ids = Some(app.chat_selected_ids.clone());
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        app.chat_select_mode = false;
+                        app.chat_selected_ids.clear();
+                    }
+                }
+            }
             if is_group {
                 let grp_lbl = if app.chat_group_panel {
                     "✕ Cerrar gestión"
@@ -470,7 +789,15 @@ fn show_chat_pane(
         }
 
         if is_group && app.chat_group_panel {
-            show_group_manage_panel(app, ui, p, group_action);
+            show_group_manage_panel(
+                app,
+                ui,
+                p,
+                group_action,
+                media_action,
+                view_profile_user,
+                open_media_url,
+            );
             return;
         }
 
@@ -481,35 +808,61 @@ fn show_chat_pane(
             .cloned()
             .collect();
 
-        let msg_height = (ui.available_height() - 56.0).max(160.0);
+        let footer_reserve = if app.chat_attach_open { 156.0 } else { 56.0 };
+        let msg_height = (ui.available_height() - footer_reserve).max(140.0);
         egui::ScrollArea::vertical()
             .id_salt("chat_msgs")
             .max_height(msg_height)
             .stick_to_bottom(true)
             .show(ui, |ui| {
                 for m in msgs {
-                    let bg = if m.is_mine {
+                    let is_selected = app.chat_selected_ids.contains(&m.id);
+                    let bg = if is_selected {
+                        p.danger.gamma_multiply(0.14)
+                    } else if m.is_mine {
                         p.accent_primary.gamma_multiply(0.16)
                     } else {
                         p.bg_elevated
                     };
                     egui::Frame::none()
                         .fill(bg)
-                        .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
+                        .stroke(egui::Stroke::new(
+                            1.0_f32,
+                            if is_selected { p.danger } else { p.border_subtle },
+                        ))
                         .rounding(Rounding::same(10.0))
                         .inner_margin(egui::Margin::same(10.0))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
+                                if app.chat_select_mode {
+                                    let mut checked = is_selected;
+                                    if ui.checkbox(&mut checked, "").changed() {
+                                        if checked {
+                                            if !app.chat_selected_ids.contains(&m.id) {
+                                                app.chat_selected_ids.push(m.id);
+                                            }
+                                        } else {
+                                            app.chat_selected_ids.retain(|id| *id != m.id);
+                                        }
+                                    }
+                                }
                                 ui.label(egui::RichText::new(&m.sender).strong().small());
                                 ui.label(
                                     egui::RichText::new(&m.created_at)
                                         .small()
                                         .color(p.text_muted),
                                 );
-                                if m.is_mine && m.content != "🚫 Mensaje eliminado" {
-                                    ui.with_layout(
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .small_button("ℹ")
+                                            .on_hover_text("Info del mensaje")
+                                            .clicked()
+                                        {
+                                            *info_msg = Some(m.id);
+                                        }
+                                        if m.is_mine && m.content != "🚫 Mensaje eliminado" {
                                             if ui
                                                 .small_button(
                                                     egui::RichText::new("🗑").color(p.danger),
@@ -531,9 +884,9 @@ fn show_chat_pane(
                                                 app.chat_editing_id = Some(m.id);
                                                 app.chat_edit_draft = m.content.clone();
                                             }
-                                        },
-                                    );
-                                }
+                                        }
+                                    },
+                                );
                             });
 
                             if app.chat_editing_id == Some(m.id) {
@@ -557,18 +910,110 @@ fn show_chat_pane(
                                     }
                                 });
                             } else {
-                                ui.label(&m.content);
+                                render_message_content(
+                                    ui,
+                                    p,
+                                    &app.server_url,
+                                    &m.content,
+                                    open_media_url,
+                                );
                             }
                         });
                     ui.add_space(6.0);
                 }
             });
 
+        if app.chat_attach_open && app.active_conv_id != 0 {
+            ui.add_space(4.0);
+            elevated_frame(p).show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .selectable_label(app.chat_attach_is_image, "🖼 Imagen (máx 5 MB)")
+                        .clicked()
+                    {
+                        app.chat_attach_is_image = true;
+                    }
+                    if ui
+                        .selectable_label(!app.chat_attach_is_image, "📄 Archivo (máx 20 MB)")
+                        .clicked()
+                    {
+                        app.chat_attach_is_image = false;
+                    }
+                    if let Some(name) = app.chat_attach_dropped_name.clone() {
+                        badge_pill(
+                            ui,
+                            &format!("Listo: {name}"),
+                            p.accent_secondary.gamma_multiply(0.20),
+                            p.accent_secondary,
+                        );
+                        if ui.small_button("✕").clicked() {
+                            app.chat_attach_dropped_name = None;
+                            app.chat_attach_dropped_bytes = None;
+                        }
+                    }
+                });
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    ui.add(
+                        egui::TextEdit::singleline(&mut app.chat_attach_path)
+                            .desired_width((ui.available_width() - 150.0).max(140.0))
+                            .hint_text("Ruta local o arrastra archivo aquí…"),
+                    );
+                    #[cfg(target_arch = "wasm32")]
+                    ui.label(
+                        egui::RichText::new("Arrastra un archivo a esta ventana para adjuntarlo.")
+                            .small()
+                            .color(p.text_muted),
+                    );
+                    let send_lbl = if app.chat_attach_busy {
+                        "Subiendo…"
+                    } else {
+                        "Enviar adjunto"
+                    };
+                    if primary_button(ui, p, send_lbl).clicked() && !app.chat_attach_busy {
+                        if let Some(bytes) = app.chat_attach_dropped_bytes.take() {
+                            let name = app.chat_attach_dropped_name.take().unwrap_or_else(|| {
+                                if app.chat_attach_is_image {
+                                    "imagen.png".to_string()
+                                } else {
+                                    "archivo.bin".to_string()
+                                }
+                            });
+                            *media_action = Some(ChatMediaAction::UploadBytes {
+                                conv_id: app.active_conv_id,
+                                is_image: app.chat_attach_is_image,
+                                filename: name,
+                                bytes,
+                            });
+                        } else {
+                            #[cfg(not(target_arch = "wasm32"))]
+                            if !app.chat_attach_path.trim().is_empty() {
+                                *media_action = Some(ChatMediaAction::UploadPath {
+                                    conv_id: app.active_conv_id,
+                                    is_image: app.chat_attach_is_image,
+                                    path: app.chat_attach_path.trim().to_string(),
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
         ui.add_space(6.0);
         ui.horizontal(|ui| {
+            if app.active_conv_id != 0
+                && ui
+                    .selectable_label(app.chat_attach_open, "📎")
+                    .on_hover_text("Adjuntar imagen o archivo")
+                    .clicked()
+            {
+                app.chat_attach_open = !app.chat_attach_open;
+            }
             let resp = ui.add(
                 egui::TextEdit::singleline(&mut app.chat_draft)
-                    .desired_width((ui.available_width() - 95.0).max(120.0))
+                    .desired_width((ui.available_width() - 105.0).max(110.0))
                     .hint_text("Escribe un mensaje…"),
             );
             let enter_pressed =
@@ -590,6 +1035,9 @@ fn show_group_manage_panel(
     ui: &mut egui::Ui,
     p: &Palette,
     group_action: &mut Option<GroupAction>,
+    media_action: &mut Option<ChatMediaAction>,
+    view_profile_user: &mut Option<String>,
+    open_media_url: &mut Option<String>,
 ) {
     let dto: ChatGroupManageDto = match &app.chat_group_manage {
         Some(d) => d.clone(),
@@ -614,6 +1062,11 @@ fn show_group_manage_panel(
             // Información del grupo
             elevated_frame(p).show(ui, |ui| {
                 ui.label(egui::RichText::new("Información del grupo").strong());
+                if !dto.image_url.is_empty() {
+                    if ui.small_button("🖼 Ver imagen del grupo ↗").clicked() {
+                        *open_media_url = Some(resolve_media_url(&app.server_url, &dto.image_url));
+                    }
+                }
                 if dto.can_edit_group_info {
                     ui.add(
                         egui::TextEdit::singleline(&mut app.chat_group_edit_name)
@@ -636,6 +1089,58 @@ fn show_group_manage_panel(
                             },
                         });
                     }
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("Imagen del grupo").strong().small());
+                    if let Some(name) = app.chat_group_img_dropped_name.clone() {
+                        ui.horizontal_wrapped(|ui| {
+                            badge_pill(
+                                ui,
+                                &format!("Lista: {name}"),
+                                p.accent_secondary.gamma_multiply(0.20),
+                                p.accent_secondary,
+                            );
+                            if ui.small_button("✕").clicked() {
+                                app.chat_group_img_dropped_name = None;
+                                app.chat_group_img_dropped_bytes = None;
+                            }
+                        });
+                    }
+                    ui.horizontal_wrapped(|ui| {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.chat_group_img_path)
+                                .desired_width(ui.available_width().min(280.0))
+                                .hint_text("Ruta de imagen o arrástrala aquí…"),
+                        );
+                        #[cfg(target_arch = "wasm32")]
+                        ui.label(
+                            egui::RichText::new("Arrastra una imagen aquí para cambiar el icono.")
+                                .small()
+                                .color(p.text_muted),
+                        );
+                        if ui.button("📷 Cambiar imagen").clicked() {
+                            if let Some(bytes) = app.chat_group_img_dropped_bytes.take() {
+                                let name = app
+                                    .chat_group_img_dropped_name
+                                    .take()
+                                    .unwrap_or_else(|| "grupo.png".to_string());
+                                *media_action = Some(ChatMediaAction::GroupImageBytes {
+                                    conv_id: dto.conversation_id,
+                                    filename: name,
+                                    bytes,
+                                });
+                            } else {
+                                #[cfg(not(target_arch = "wasm32"))]
+                                if !app.chat_group_img_path.trim().is_empty() {
+                                    *media_action = Some(ChatMediaAction::GroupImagePath {
+                                        conv_id: dto.conversation_id,
+                                        path: app.chat_group_img_path.trim().to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    });
                 } else {
                     ui.label(egui::RichText::new(&dto.name).strong());
                     if !dto.description.is_empty() {
@@ -683,6 +1188,13 @@ fn show_group_manage_panel(
                                 .small()
                                 .color(p.text_muted),
                         );
+                        if ui
+                            .small_button("👤")
+                            .on_hover_text("Ver perfil público")
+                            .clicked()
+                        {
+                            *view_profile_user = Some(m.username.clone());
+                        }
                         let rcol = parse_hex_color(&m.rank_color, p.accent_secondary);
                         badge_pill(ui, &m.rank_name, rcol.gamma_multiply(0.18), rcol);
                         if m.is_owner {

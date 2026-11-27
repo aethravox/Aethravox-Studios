@@ -1,8 +1,8 @@
 use egui::{Color32, Rounding};
 
 use crate::api::{
-    spawn_fetch_friends, spawn_friend_action, spawn_search_friends, spawn_send_friend_request,
-    spawn_start_dm,
+    spawn_fetch_friends, spawn_fetch_public_profile, spawn_friend_action, spawn_search_friends,
+    spawn_send_friend_request, spawn_start_dm,
 };
 use crate::app::{AethravoxApp, Route};
 use crate::theme::{badge_pill, card_frame, elevated_frame, parse_hex_color, primary_button, Palette};
@@ -11,6 +11,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let ctx = ui.ctx().clone();
     let mut trigger_refresh = false;
     let mut start_dm_user: Option<String> = None;
+    let mut view_profile_user: Option<String> = None;
     let mut friend_act: Option<(&'static str, i64)> = None;
     let mut send_req_user: Option<String> = None;
     let mut run_search = false;
@@ -49,6 +50,9 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                                     .small()
                                     .color(p.text_muted),
                             );
+                            if ui.button("👤 Perfil").clicked() {
+                                view_profile_user = Some(req.username.clone());
+                            }
                             if primary_button(ui, p, "Aceptar").clicked() {
                                 friend_act = Some(("accept", req.id));
                             }
@@ -65,16 +69,44 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
 
         let mobile = app.is_mobile_layout(&ctx);
         if mobile {
-            show_friends_list(app, ui, p, &mut friend_act, &mut start_dm_user);
+            show_friends_list(
+                app,
+                ui,
+                p,
+                &mut friend_act,
+                &mut start_dm_user,
+                &mut view_profile_user,
+            );
             ui.add_space(12.0);
-            show_friends_add(app, ui, p, &mut send_req_user, &mut run_search);
+            show_friends_add(
+                app,
+                ui,
+                p,
+                &mut send_req_user,
+                &mut run_search,
+                &mut view_profile_user,
+            );
         } else {
             ui.columns(2, |cols| {
                 cols[0].vertical(|ui| {
-                    show_friends_list(app, ui, p, &mut friend_act, &mut start_dm_user);
+                    show_friends_list(
+                        app,
+                        ui,
+                        p,
+                        &mut friend_act,
+                        &mut start_dm_user,
+                        &mut view_profile_user,
+                    );
                 });
                 cols[1].vertical(|ui| {
-                    show_friends_add(app, ui, p, &mut send_req_user, &mut run_search);
+                    show_friends_add(
+                        app,
+                        ui,
+                        p,
+                        &mut send_req_user,
+                        &mut run_search,
+                        &mut view_profile_user,
+                    );
                 });
             });
         }
@@ -131,12 +163,26 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
             spawn_start_dm(
                 &app.rt,
                 app.tx.clone(),
-                ctx,
+                ctx.clone(),
                 app.server_url.clone(),
                 app.token.clone(),
                 username,
             );
             app.route = Route::Chat;
+        }
+    }
+    if let Some(username) = view_profile_user {
+        if app.offline_mode || app.token.is_none() {
+            app.status_banner = Some("Conecta al servidor para ver perfiles públicos.".into());
+        } else {
+            spawn_fetch_public_profile(
+                &app.rt,
+                app.tx.clone(),
+                ctx,
+                app.server_url.clone(),
+                app.token.clone(),
+                username,
+            );
         }
     }
 }
@@ -147,6 +193,7 @@ fn show_friends_list(
     p: &Palette,
     friend_act: &mut Option<(&'static str, i64)>,
     start_dm_user: &mut Option<String>,
+    view_profile_user: &mut Option<String>,
 ) {
     card_frame(p).show(ui, |ui| {
         ui.set_min_height(300.0);
@@ -185,6 +232,9 @@ fn show_friends_list(
                         );
                     });
 
+                    if ui.button("👤 Perfil").clicked() {
+                        *view_profile_user = Some(f.username.clone());
+                    }
                     if primary_button(ui, p, "💬 Chat").clicked() {
                         *start_dm_user = Some(f.username.clone());
                     }
@@ -207,6 +257,7 @@ fn show_friends_add(
     p: &Palette,
     send_req_user: &mut Option<String>,
     run_search: &mut bool,
+    view_profile_user: &mut Option<String>,
 ) {
     card_frame(p).show(ui, |ui| {
         ui.set_min_height(300.0);
@@ -258,6 +309,9 @@ fn show_friends_add(
                                 .small()
                                 .color(p.text_muted),
                         );
+                        if ui.button("👤 Perfil").clicked() {
+                            *view_profile_user = Some(u.username.clone());
+                        }
                         if ui.button("+ Agregar").clicked() {
                             *send_req_user = Some(u.username.clone());
                         }

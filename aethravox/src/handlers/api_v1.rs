@@ -2,24 +2,29 @@ use std::collections::HashMap;
 
 use aethravox_core::{
     base64_decode, AddGroupMemberRequest, AdminAuditDto, AdminBanRequest, AdminIpBansPayload,
-    AdminOverviewDto, AdminRoleRequest, AdminUserDto, AdminWebDto, AexosLinkRequest,
+    AdminOverviewDto, AdminRoleDto, AdminRoleRequest, AdminRolesPayload, AdminTitleDto,
+    AdminTitlesPayload, AdminUserDto, AdminWebDto, AdminWebPermDto, AexosLinkRequest,
     AexosProfileDto, AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto,
     ArisCreateChatRequest, ArisCreditsDto, ArisMessageDto, ArisSendRequest, ArisSendResponse,
-    AssignMemberRankRequest, AuthSuccess, CategoryRowDto, ChangePasswordRequest,
-    ChatConversationDto, ChatGroupManageDto, ChatGroupMemberDto, ChatGroupRankDto, ChatMessageDto,
+    AssignMemberRankRequest, AssignUserRoleIdRequest, AuthSuccess, BulkDeleteMessagesRequest,
+    BulkDeleteMessagesResponse, CategoryRowDto, ChangePasswordRequest, ChatConversationDto,
+    ChatGroupManageDto, ChatGroupMemberDto, ChatGroupRankDto, ChatMessageDto, ChatMessageInfoDto,
     CommunityDetailDto, CommunityDto, CommunityGroupDto, CreateCommunityGroupRequest,
     CreateCommunityRequest, CreateGroupRankRequest, CreateGroupRequest, CreateIpBanRequest,
-    CreateTicketRequest, DocumentDto, DownloadAppDto, DownloadFileDto, DownloadPlatformDto,
-    EditMessageRequest, EmailIdBody, EmailRequestBody, EmailVerifyBody, EmailsPayload, FriendDto,
-    FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest, IpBanDto,
-    LinkCodeDto, LinkConsumeRequest, LinkedDeviceDto, LoginRequest, PendingFriendDto,
-    PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload, RecoverRequest, RecoverResponse,
-    RegisterRequest, ReplyTicketRequest, ResetPasswordRequest, SendMessageRequest, SessionDto,
-    StartDmRequest, StartDmResponse, SuspendUserRequest, SystemConfigDto, ThemeKind,
-    ThemeSelectRequest, TicketActionRequest, TicketDetailDto, TicketDto, TicketMessageDto,
-    TitleDto, TransferGroupOwnershipRequest, UpdateGroupInfoRequest, UpdateProfileRequest,
-    UpdateTitlesRequest, UploadVideoRequest, UserEmailDto, UserSearchDto, UserSummary, VideoDto,
-    VideoReactRequest, WebAppDto,
+    CreateTicketRequest, DeleteRoleRequest, DocumentDto, DownloadAppDto, DownloadFileDto,
+    DownloadPlatformDto, EditMessageRequest, EmailIdBody, EmailRequestBody, EmailVerifyBody,
+    EmailsPayload, FriendDto, FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto,
+    InviteCommunityRequest, IpBanDto, LinkCodeDto, LinkConsumeRequest, LinkedDeviceDto,
+    LoginRequest, PendingFriendDto, PermissionDefDto, PlaygroundGenRequest, PlaygroundGenResult,
+    ProfilePayload, PublicProfileDto, PublicTitleDto, RecoverRequest, RecoverResponse,
+    RegisterRequest, ReplyTicketRequest, ResetPasswordRequest, SaveRoleRequest, SaveTitleRequest,
+    SendMessageRequest, SessionDto, SetRolePermsRequest, SetRoleWebPermsRequest, StartDmRequest,
+    StartDmResponse, SuspendUserRequest, SystemConfigDto, ThemeKind, ThemeSelectRequest,
+    TicketActionRequest, TicketDetailDto, TicketDto, TicketMessageDto, TitleAssignRequest,
+    TitleDto, TitleHolderDto, TransferGroupOwnershipRequest, UpdateGroupInfoRequest,
+    UpdateProfileRequest, UpdateTitlesRequest, UploadAvatarRequest, UploadChatMediaRequest,
+    UploadGroupImageRequest, UploadVideoRequest, UserEmailDto, UserSearchDto, UserSummary,
+    VideoDto, VideoReactRequest, WebAppDto,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -45,7 +50,7 @@ use crate::{
     },
     models::{
         sanitize_text, validate_email, validate_password, validate_username, ActionOnUser,
-        is_role, Message, User, Web,
+        is_role, Message, User, Web, PERMISSIONS,
     },
     AppState,
 };
@@ -72,8 +77,21 @@ pub fn router() -> Router<AppState> {
             get(chat_messages).post(chat_send),
         )
         .route("/api/v1/chat/conversations/:id/read", post(chat_mark_read))
+        .route(
+            "/api/v1/chat/conversations/:id/upload",
+            post(chat_upload_media),
+        )
+        .route(
+            "/api/v1/chat/conversations/:id/group_image",
+            post(chat_group_upload_image),
+        )
         .route("/api/v1/chat/messages/:id/edit", post(chat_edit_message))
         .route("/api/v1/chat/messages/:id/delete", post(chat_delete_message))
+        .route(
+            "/api/v1/chat/messages/bulk_delete",
+            post(chat_bulk_delete_messages),
+        )
+        .route("/api/v1/chat/messages/:id/info", get(chat_message_info))
         .route("/api/v1/chat/dm", post(chat_start_dm))
         .route("/api/v1/chat/group", post(chat_create_group))
         .route(
@@ -166,9 +184,10 @@ pub fn router() -> Router<AppState> {
             "/api/v1/support/tickets/:id/action",
             post(support_ticket_action),
         )
-        // Perfil, Títulos y Sesiones
+        // Perfil, Títulos, Avatar y Sesiones
         .route("/api/v1/profile", get(profile_get))
         .route("/api/v1/profile/update", post(profile_update))
+        .route("/api/v1/profile/avatar", post(profile_avatar))
         .route("/api/v1/profile/titles", post(profile_titles))
         .route("/api/v1/profile/password", post(profile_password))
         .route("/api/v1/profile/logout_all", post(profile_logout_all))
@@ -180,6 +199,7 @@ pub fn router() -> Router<AppState> {
             "/api/v1/profile/devices/:token/revoke",
             post(profile_revoke_device),
         )
+        .route("/api/v1/users/:username/profile", get(user_public_profile))
         // Correo interno (AethraMail)
         .route("/api/v1/emails", get(emails_list))
         .route("/api/v1/emails/request", post(emails_request))
@@ -208,6 +228,7 @@ pub fn router() -> Router<AppState> {
         // Admin
         .route("/api/v1/admin/overview", get(admin_overview))
         .route("/api/v1/admin/users/:id/role", post(admin_set_role))
+        .route("/api/v1/admin/users/:id/role_id", post(admin_assign_role_id))
         .route("/api/v1/admin/users/:id/ban", post(admin_ban_user))
         .route("/api/v1/admin/users/:id/suspend", post(admin_suspend_user))
         .route("/api/v1/admin/users/:id/unban", post(admin_unban_user))
@@ -227,6 +248,21 @@ pub fn router() -> Router<AppState> {
             "/api/v1/admin/config",
             get(admin_config_get).post(admin_config_set),
         )
+        .route("/api/v1/admin/roles", get(admin_roles_list))
+        .route("/api/v1/admin/roles/create", post(admin_roles_create))
+        .route("/api/v1/admin/roles/:id/update", post(admin_roles_update))
+        .route("/api/v1/admin/roles/:id/delete", post(admin_roles_delete))
+        .route("/api/v1/admin/roles/:id/perms", post(admin_roles_set_perms))
+        .route(
+            "/api/v1/admin/roles/:id/web_perms",
+            post(admin_roles_set_web_perms),
+        )
+        .route("/api/v1/admin/titles", get(admin_titles_list))
+        .route("/api/v1/admin/titles/create", post(admin_titles_create))
+        .route("/api/v1/admin/titles/:id/update", post(admin_titles_update))
+        .route("/api/v1/admin/titles/:id/delete", post(admin_titles_delete))
+        .route("/api/v1/admin/titles/:id/assign", post(admin_titles_assign))
+        .route("/api/v1/admin/titles/:id/revoke", post(admin_titles_revoke))
 }
 
 fn json_err(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -313,6 +349,7 @@ async fn build_user_summary(state: &AppState, user: &User) -> UserSummary {
         is_guest: user.id == 0,
         can_access_admin,
         bio: user.bio.clone().unwrap_or_default(),
+        avatar_url: user.avatar(),
         theme,
     }
 }
@@ -568,7 +605,7 @@ async fn hub(State(state): State<AppState>, headers: HeaderMap) -> Response {
 // ===================== Chat (REST) =====================
 
 fn chat_preview(body: &str) -> String {
-    if body.starts_with("[IMAGE]") {
+    if body.starts_with("[IMG]") || body.starts_with("[IMAGE]") {
         "📷 Imagen".to_string()
     } else if body.starts_with("[VOICE]") {
         "🎙️ Nota de voz".to_string()
@@ -583,7 +620,7 @@ fn message_to_dto(m: &Message, sender: String, my_id: i64) -> ChatMessageDto {
     let content = if m.deleted_at.is_some() {
         "🚫 Mensaje eliminado".to_string()
     } else {
-        chat_preview(&m.body)
+        m.body.clone()
     };
     ChatMessageDto {
         id: m.id,
@@ -820,7 +857,7 @@ async fn chat_send(
         id: msg_id,
         conversation_id: id,
         sender: sender_name,
-        content: chat_preview(&body),
+        content: body,
         created_at,
         is_mine: true,
     })
@@ -2149,6 +2186,7 @@ async fn profile_get(State(state): State<AppState>, headers: HeaderMap) -> Respo
         email: user.email.clone(),
         display_name: user.display_name.clone().unwrap_or_default(),
         bio: user.bio.clone().unwrap_or_default(),
+        avatar_url: user.avatar(),
         role_display,
         created_at: user.created_at.format("%d/%m/%Y").to_string(),
         last_login: user
@@ -3404,6 +3442,7 @@ async fn build_group_manage_dto(
         conversation_id: conv.id,
         name: conv.name.unwrap_or_else(|| "Grupo".into()),
         description: conv.description.unwrap_or_default(),
+        image_url: conv.image_url.unwrap_or_default(),
         is_group: conv.conv_type != "dm",
         owner_id,
         my_user_id: viewer_id,
@@ -4217,4 +4256,1365 @@ async fn aextube_upload(
             )
         }
     }
+}
+
+// ===================== Helpers Batch 3 =====================
+
+fn resolve_hex_color(raw: Option<&str>, fallback: &str) -> String {
+    let (bg, _) = crate::role_color::parse_role_color(raw);
+    if bg.starts_with('#') {
+        return bg;
+    }
+    if let Some(r) = raw {
+        if let Some(pos) = r.find('#') {
+            let candidate: String = r[pos..]
+                .chars()
+                .take_while(|c| *c == '#' || c.is_ascii_hexdigit())
+                .collect();
+            if candidate.len() == 7 || candidate.len() == 4 {
+                return candidate;
+            }
+        }
+    }
+    fallback.to_string()
+}
+
+fn image_ext_strict(content_type: &str, filename: &str) -> Option<&'static str> {
+    match content_type.trim().to_ascii_lowercase().as_str() {
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/gif" => Some("gif"),
+        "image/webp" => Some("webp"),
+        "image/bmp" => Some("bmp"),
+        _ => {
+            let lower = filename.trim().to_ascii_lowercase();
+            match lower.rsplit_once('.').map(|(_, e)| e) {
+                Some("jpg" | "jpeg") => Some("jpg"),
+                Some("png") => Some("png"),
+                Some("gif") => Some("gif"),
+                Some("webp") => Some("webp"),
+                Some("bmp") => Some("bmp"),
+                _ => None,
+            }
+        }
+    }
+}
+
+fn safe_chat_mime_to_ext(mime: &str, orig_name: &str) -> &'static str {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/jpeg" | "image/jpg" => return "jpg",
+        "image/png" => return "png",
+        "image/gif" => return "gif",
+        "image/webp" => return "webp",
+        "image/bmp" => return "bmp",
+        "video/mp4" => return "mp4",
+        "video/webm" => return "webm",
+        "video/ogg" => return "ogv",
+        "video/quicktime" => return "mov",
+        "audio/mpeg" | "audio/mp3" => return "mp3",
+        "audio/ogg" => return "oga",
+        "audio/wav" | "audio/x-wav" => return "wav",
+        "audio/webm" => return "weba",
+        "audio/aac" => return "aac",
+        "audio/mp4" => return "m4a",
+        "application/pdf" => return "pdf",
+        "application/zip" | "application/x-zip-compressed" => return "zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => return "docx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => return "xlsx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => return "pptx",
+        "text/plain" => return "txt",
+        "text/csv" => return "csv",
+        "application/json" => return "json",
+        "application/msword" => return "doc",
+        "application/vnd.ms-excel" => return "xls",
+        "application/vnd.ms-powerpoint" => return "ppt",
+        _ => {}
+    }
+    let lower = orig_name.to_ascii_lowercase();
+    let after_dot = lower.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
+    match after_dot {
+        "jpg" | "jpeg" => "jpg",
+        "png" => "png",
+        "gif" => "gif",
+        "webp" => "webp",
+        "bmp" => "bmp",
+        "mp4" | "m4v" => "mp4",
+        "webm" => "webm",
+        "ogv" => "ogv",
+        "mov" => "mov",
+        "mp3" | "ogg" => "mp3",
+        "oga" => "oga",
+        "wav" => "wav",
+        "weba" => "weba",
+        "aac" => "aac",
+        "m4a" => "m4a",
+        "pdf" => "pdf",
+        "zip" => "zip",
+        "txt" => "txt",
+        "csv" => "csv",
+        "json" => "json",
+        "docx" => "docx",
+        "xlsx" => "xlsx",
+        "pptx" => "pptx",
+        "doc" | "xls" | "ppt" => "doc",
+        _ => "bin",
+    }
+}
+
+// ===================== Avatar y Perfil Público =====================
+
+async fn profile_avatar(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UploadAvatarRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    if req.remove {
+        let _ = state.db.update_profile(user.id, None, None, Some("")).await;
+        let _ = state
+            .db
+            .audit(Some(user.id), "avatar_removed", Some("desktop"), None)
+            .await;
+        return Json(serde_json::json!({ "ok": true, "avatar_url": "" })).into_response();
+    }
+
+    let bytes = match base64_decode(&req.data_base64) {
+        Ok(b) => b,
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, e),
+    };
+    if bytes.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "La imagen está vacía.");
+    }
+    if bytes.len() > 5 * 1024 * 1024 {
+        return json_err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "La imagen supera el límite de 5 MB.",
+        );
+    }
+
+    let Some(ext) = image_ext_strict(&req.content_type, &req.filename) else {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Formato no permitido. Usa PNG, JPG, GIF, WEBP o BMP.",
+        );
+    };
+
+    let dir = "data/avatars";
+    if std::fs::create_dir_all(dir).is_err() {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "No se pudo preparar el directorio de avatares.",
+        );
+    }
+
+    let temp_path = format!("{}/{}_temp.{}", dir, user.id, ext);
+    let webp_path = format!("{}/{}.webp", dir, user.id);
+    if std::fs::write(&temp_path, &bytes).is_err() {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "No se pudo guardar el avatar en disco.",
+        );
+    }
+
+    let ts = chrono::Utc::now().timestamp();
+    let cwebp = std::process::Command::new("cwebp")
+        .arg("-q")
+        .arg("80")
+        .arg("-resize")
+        .arg("400")
+        .arg("0")
+        .arg(&temp_path)
+        .arg("-o")
+        .arg(&webp_path)
+        .output();
+
+    let avatar_url = match cwebp {
+        Ok(o) if o.status.success() => {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("/avatars/{}.webp?v={}", user.id, ts)
+        }
+        _ => {
+            let fallback = format!("{}/{}.{}", dir, user.id, ext);
+            let _ = std::fs::rename(&temp_path, &fallback);
+            let _ = std::fs::remove_file(&webp_path);
+            format!("/avatars/{}.{}?v={}", user.id, ext, ts)
+        }
+    };
+
+    let _ = state
+        .db
+        .update_profile(user.id, None, None, Some(&avatar_url))
+        .await;
+    let _ = state
+        .db
+        .audit(Some(user.id), "avatar_updated", Some("desktop"), None)
+        .await;
+
+    Json(serde_json::json!({ "ok": true, "avatar_url": avatar_url })).into_response()
+}
+
+async fn user_public_profile(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(username): Path<String>,
+) -> Response {
+    let viewer = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let clean_uname = username.trim().trim_start_matches('@');
+    let Ok(Some(user)) = state.db.find_user_by_username(clean_uname).await else {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    };
+
+    if user.status != "active" && !state.db.user_has_perm(&viewer, "profile.view_suspended").await {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    }
+
+    let to_public_title = |t: crate::models::Title| PublicTitleDto {
+        id: t.id,
+        name: t.name,
+        effect: t.effect,
+        description: t.description.unwrap_or_default(),
+    };
+
+    let primary_title = state
+        .db
+        .get_primary_title(user.id)
+        .await
+        .ok()
+        .flatten()
+        .map(to_public_title);
+
+    let mut visible_titles = Vec::new();
+    for tid in [user.visible_title_1, user.visible_title_2, user.visible_title_3]
+        .into_iter()
+        .flatten()
+    {
+        if let Ok(Some(t)) = state.db.get_title(tid).await {
+            visible_titles.push(to_public_title(t));
+        }
+    }
+
+    let (role_css_key, role_display) = state.db.role_display(&user).await;
+    let role_colors = state.role_colors.snapshot();
+    let role_color = role_colors
+        .get(&role_css_key)
+        .map(|e| resolve_hex_color(Some(&e.color), "#6b7280"))
+        .unwrap_or_else(|| "#6b7280".to_string());
+
+    let is_friend = if user.id == viewer.id {
+        false
+    } else {
+        state.db.are_friends(viewer.id, user.id).await.unwrap_or(false)
+    };
+
+    Json(PublicProfileDto {
+        id: user.id,
+        username: user.username.clone(),
+        display: user.display(),
+        avatar_url: user.avatar(),
+        role_display,
+        role_color,
+        bio: user.bio.clone().unwrap_or_default(),
+        created_at: user.created_at.format("%d/%m/%Y").to_string(),
+        is_self: user.id == viewer.id,
+        is_friend,
+        primary_title,
+        visible_titles,
+    })
+    .into_response()
+}
+
+// ===================== Chat Multimedia, Info, Imagen de Grupo y Borrado Masivo =====================
+
+async fn chat_upload_media(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<UploadChatMediaRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.is_conversation_member(conv_id, user.id).await {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No eres miembro de esta conversación.",
+        );
+    }
+    if let Ok(Some(rank)) = state.db.get_member_rank(conv_id, user.id).await {
+        if rank.can_send_messages == 0 {
+            return json_err(
+                StatusCode::FORBIDDEN,
+                "No tienes permiso para enviar mensajes en este grupo.",
+            );
+        }
+    }
+
+    let bytes = match base64_decode(&req.data_base64) {
+        Ok(b) => b,
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, e),
+    };
+    if bytes.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El archivo está vacío.");
+    }
+
+    let kind = req.kind.trim().to_ascii_lowercase();
+    let hex_name = crate::db::random_hex(16);
+
+    let body = if kind == "image" {
+        if bytes.len() > 5 * 1024 * 1024 {
+            return json_err(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "La imagen supera el límite de 5 MB.",
+            );
+        }
+        let Some(ext) = image_ext_strict(&req.content_type, &req.filename) else {
+            return json_err(
+                StatusCode::BAD_REQUEST,
+                "Formato de imagen no válido (usa PNG, JPG, GIF, WEBP o BMP).",
+            );
+        };
+        let dir = "data/chat_images";
+        if std::fs::create_dir_all(dir).is_err() {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error preparando carpeta de imágenes.",
+            );
+        }
+        let orig_path = format!("{}/{}_orig.{}", dir, hex_name, ext);
+        let webp_path = format!("{}/{}.webp", dir, hex_name);
+        if std::fs::write(&orig_path, &bytes).is_err() {
+            return json_err(StatusCode::INTERNAL_SERVER_ERROR, "Error guardando imagen.");
+        }
+        let cwebp = std::process::Command::new("cwebp")
+            .arg("-q")
+            .arg("80")
+            .arg("-resize")
+            .arg("1200")
+            .arg("0")
+            .arg(&orig_path)
+            .arg("-o")
+            .arg(&webp_path)
+            .output();
+        let final_filename = match cwebp {
+            Ok(o) if o.status.success() => {
+                let _ = std::fs::remove_file(&orig_path);
+                format!("{}.webp", hex_name)
+            }
+            _ => {
+                let fallback = format!("{}/{}.{}", dir, hex_name, ext);
+                let _ = std::fs::rename(&orig_path, &fallback);
+                format!("{}.{}", hex_name, ext)
+            }
+        };
+        format!("[IMG]/chat/images/{}", final_filename)
+    } else {
+        if bytes.len() > 20 * 1024 * 1024 {
+            return json_err(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "El archivo supera el límite de 20 MB.",
+            );
+        }
+        let dir = "data/chat_files";
+        if std::fs::create_dir_all(dir).is_err() {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error preparando carpeta de archivos.",
+            );
+        }
+        let mime = if req.content_type.trim().is_empty() {
+            "application/octet-stream"
+        } else {
+            req.content_type.trim()
+        };
+        let ext = safe_chat_mime_to_ext(mime, &req.filename);
+        let final_filename = format!("{}.{}", hex_name, ext);
+        let path = format!("{}/{}", dir, final_filename);
+        if std::fs::write(&path, &bytes).is_err() {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Error guardando archivo.",
+            );
+        }
+        if kind == "voice" {
+            let dur = req.duration.unwrap_or(0).max(0);
+            format!("[VOICE]/chat/files/{}:{}", final_filename, dur)
+        } else {
+            let clean_name: String = req
+                .filename
+                .trim()
+                .chars()
+                .filter(|c| *c != '\n' && *c != '\r' && *c != ':')
+                .take(120)
+                .collect();
+            let display_name = if clean_name.is_empty() {
+                format!("archivo.{}", ext)
+            } else {
+                clean_name
+            };
+            format!(
+                "[FILE]/chat/files/{}:{}:{}:{}",
+                final_filename,
+                display_name,
+                mime,
+                bytes.len()
+            )
+        }
+    };
+
+    let msg_id = match state.db.send_message(conv_id, user.id, &body).await {
+        Ok(mid) if mid > 0 => mid,
+        _ => {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "No se pudo guardar el mensaje multimedia.",
+            )
+        }
+    };
+
+    let sender_name = user.display();
+    let sender_avatar = user.avatar();
+    let now = chrono::Utc::now();
+    let created_at = now.format("%H:%M").to_string();
+    let created_iso = now.to_rfc3339();
+    let members = state
+        .db
+        .get_conversation_members(conv_id)
+        .await
+        .unwrap_or_default();
+    let conns = state.ws_connections.lock().await;
+    for member_id in members {
+        if let Some(tx) = conns.get(&member_id) {
+            let mut payload = serde_json::json!({
+                "type": "message",
+                "id": msg_id,
+                "conversation_id": conv_id,
+                "sender_id": user.id,
+                "sender_name": sender_name,
+                "sender_avatar": sender_avatar,
+                "body": body,
+                "time": created_at,
+                "created_iso": created_iso,
+                "status": "sent"
+            });
+            if member_id == user.id {
+                payload["is_self"] = serde_json::json!(true);
+            }
+            let _ = tx.send(payload.to_string());
+        }
+    }
+
+    Json(ChatMessageDto {
+        id: msg_id,
+        conversation_id: conv_id,
+        sender: sender_name,
+        content: body,
+        created_at,
+        is_mine: true,
+    })
+    .into_response()
+}
+
+async fn chat_group_upload_image(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(conv_id): Path<i64>,
+    Json(req): Json<UploadGroupImageRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let info = match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(d) => d,
+        Err(resp) => return resp,
+    };
+    if !info.is_group {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Solo los grupos pueden tener imagen.",
+        );
+    }
+    if !info.can_edit_group_info {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para cambiar la imagen del grupo.",
+        );
+    }
+
+    let bytes = match base64_decode(&req.data_base64) {
+        Ok(b) => b,
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, e),
+    };
+    if bytes.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "La imagen está vacía.");
+    }
+    if bytes.len() > 5 * 1024 * 1024 {
+        return json_err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "La imagen del grupo supera 5 MB.",
+        );
+    }
+    let Some(ext) = image_ext_strict(&req.content_type, &req.filename) else {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Formato no permitido. Usa PNG, JPG, GIF, WEBP o BMP.",
+        );
+    };
+
+    let dir = "data/group_images";
+    if std::fs::create_dir_all(dir).is_err() {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error preparando directorio de imágenes de grupo.",
+        );
+    }
+    let temp_path = format!("{}/{}_temp.{}", dir, conv_id, ext);
+    let webp_path = format!("{}/{}.webp", dir, conv_id);
+    if std::fs::write(&temp_path, &bytes).is_err() {
+        return json_err(StatusCode::INTERNAL_SERVER_ERROR, "Error guardando imagen.");
+    }
+
+    let ts = chrono::Utc::now().timestamp();
+    let cwebp = std::process::Command::new("cwebp")
+        .arg("-q")
+        .arg("80")
+        .arg("-resize")
+        .arg("400")
+        .arg("0")
+        .arg(&temp_path)
+        .arg("-o")
+        .arg(&webp_path)
+        .output();
+
+    let image_url = match cwebp {
+        Ok(o) if o.status.success() => {
+            let _ = std::fs::remove_file(&temp_path);
+            format!("/group_images/{}.webp?v={}", conv_id, ts)
+        }
+        _ => {
+            let fallback = format!("{}/{}.{}", dir, conv_id, ext);
+            let _ = std::fs::rename(&temp_path, &fallback);
+            let _ = std::fs::remove_file(&webp_path);
+            format!("/group_images/{}.{}?v={}", conv_id, ext, ts)
+        }
+    };
+
+    let _ = sqlx::query("UPDATE conversations SET image_url = ? WHERE id = ?")
+        .bind(&image_url)
+        .bind(conv_id)
+        .execute(&state.db.pool)
+        .await;
+
+    match build_group_manage_dto(&state, conv_id, user.id).await {
+        Ok(dto) => Json(dto).into_response(),
+        Err(resp) => resp,
+    }
+}
+
+async fn chat_bulk_delete_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<BulkDeleteMessagesRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if req.ids.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "No se seleccionaron mensajes.");
+    }
+    if req.ids.len() > 200 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Máximo 200 mensajes por operación.",
+        );
+    }
+
+    let mut ok = Vec::new();
+    let mut denied = Vec::new();
+    let mut broadcast_convs: HashMap<i64, Vec<i64>> = HashMap::new();
+
+    for &msg_id in &req.ids {
+        let Ok(Some(msg)) = state.db.get_message(msg_id).await else {
+            denied.push(msg_id);
+            continue;
+        };
+        let conv_id = msg.conversation_id;
+        if !state.db.is_conversation_member(conv_id, user.id).await {
+            denied.push(msg_id);
+            continue;
+        }
+        let success = if msg.sender_id == user.id {
+            state
+                .db
+                .soft_delete_message(msg_id, user.id)
+                .await
+                .unwrap_or(false)
+        } else {
+            let rank = state
+                .db
+                .get_member_rank(conv_id, user.id)
+                .await
+                .ok()
+                .flatten();
+            let group_can = rank
+                .as_ref()
+                .map(|r| r.can_delete_messages != 0 || r.is_owner_rank != 0)
+                .unwrap_or(false);
+            let hub_can = state.db.user_has_perm(&user, "chat.moderate").await;
+            if !group_can && !hub_can {
+                denied.push(msg_id);
+                continue;
+            }
+            state
+                .db
+                .soft_delete_message_admin(msg_id)
+                .await
+                .unwrap_or(false)
+        };
+
+        if success {
+            ok.push(msg_id);
+            broadcast_convs.entry(conv_id).or_default().push(msg_id);
+        } else {
+            denied.push(msg_id);
+        }
+    }
+
+    if !broadcast_convs.is_empty() {
+        let conns = state.ws_connections.lock().await;
+        for (conv_id, ids) in &broadcast_convs {
+            let members = state
+                .db
+                .get_conversation_members(*conv_id)
+                .await
+                .unwrap_or_default();
+            for member_id in members {
+                if let Some(tx) = conns.get(&member_id) {
+                    for &id in ids {
+                        let _ = tx.send(
+                            serde_json::json!({
+                                "type": "message_deleted",
+                                "id": id,
+                                "conversation_id": conv_id,
+                            })
+                            .to_string(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Json(BulkDeleteMessagesResponse { ok, denied }).into_response()
+}
+
+async fn chat_message_info(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(msg_id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let Ok(Some(msg)) = state.db.get_message(msg_id).await else {
+        return json_err(StatusCode::NOT_FOUND, "Mensaje no encontrado.");
+    };
+    if !state
+        .db
+        .is_conversation_member(msg.conversation_id, user.id)
+        .await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let sender_name = state
+        .db
+        .find_user_by_id(msg.sender_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.display())
+        .unwrap_or_else(|| format!("Usuario #{}", msg.sender_id));
+    let body = if msg.deleted_at.is_some() {
+        "🚫 Mensaje eliminado".to_string()
+    } else {
+        msg.body.clone()
+    };
+
+    Json(ChatMessageInfoDto {
+        id: msg.id,
+        conversation_id: msg.conversation_id,
+        sender_name,
+        created_at: msg.created_at.format("%d/%m/%Y %H:%M:%S UTC").to_string(),
+        status: msg.status,
+        edited_at: msg
+            .edited_at
+            .as_ref()
+            .map(|d| d.format("%d/%m/%Y %H:%M:%S UTC").to_string()),
+        deleted_at: msg
+            .deleted_at
+            .as_ref()
+            .map(|d| d.format("%d/%m/%Y %H:%M:%S UTC").to_string()),
+        body,
+    })
+    .into_response()
+}
+
+// ===================== Admin: Roles configurables, Permisos y Títulos =====================
+
+async fn admin_assign_role_id(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<AssignUserRoleIdRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "users.role.change").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(target) = state.db.find_user_by_id(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    };
+    if target.role == "owner" {
+        return json_err(StatusCode::FORBIDDEN, "No puedes cambiar el rol del Owner.");
+    }
+    if let (Some(ar_id), Some(tr_id)) = (actor.role_id, target.role_id) {
+        if let (Ok(Some(ar)), Ok(Some(tr))) =
+            (state.db.get_role(ar_id).await, state.db.get_role(tr_id).await)
+        {
+            if !crate::handlers::roles::manage::can_act_on_role(&actor, &ar, &target, &tr) {
+                return json_err(
+                    StatusCode::FORBIDDEN,
+                    "Tu jerarquía no permite modificar este usuario.",
+                );
+            }
+        }
+    } else if !actor.can_act_on(&target, ActionOnUser::ChangeRole) {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+
+    let Some(new_role) = state.db.get_role(req.role_id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Rol destino no encontrado.");
+    };
+    if new_role.is_protected() || new_role.role_key == "owner" {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No se puede asignar el rol protegido Owner.",
+        );
+    }
+
+    match state.db.assign_user_role(id, req.role_id).await {
+        Ok(_) => {
+            let _ = state
+                .db
+                .audit(
+                    Some(actor.id),
+                    "role_assign",
+                    Some(&format!("user={} role_id={}", target.username, req.role_id)),
+                    None,
+                )
+                .await;
+            Json(serde_json::json!({ "ok": true })).into_response()
+        }
+        Err(e) => json_err(StatusCode::BAD_REQUEST, format!("{e}")),
+    }
+}
+
+async fn build_admin_roles_payload(state: &AppState) -> AdminRolesPayload {
+    let roles_raw = state.db.list_roles().await.unwrap_or_default();
+    let webs_raw = state.db.list_all_webs().await.unwrap_or_default();
+
+    let mut roles = Vec::with_capacity(roles_raw.len());
+    for r in roles_raw {
+        let perms = state.db.role_perms(r.id).await.unwrap_or_default();
+        let web_ids = state.db.role_web_perms(r.id).await.unwrap_or_default();
+        let user_count = state.db.count_users_with_role(r.id).await.unwrap_or(0);
+        let resolved_color = resolve_hex_color(r.color.as_deref(), "#6b7280");
+        roles.push(AdminRoleDto {
+            id: r.id,
+            is_system: r.is_system(),
+            is_protected: r.is_protected(),
+            name: r.name,
+            role_key: r.role_key,
+            color: r.color.unwrap_or_default(),
+            resolved_color,
+            position: r.position,
+            description: r.description.unwrap_or_default(),
+            user_count,
+            perms,
+            web_ids,
+        });
+    }
+
+    let all_perms = PERMISSIONS
+        .iter()
+        .map(|p| PermissionDefDto {
+            key: p.key.to_string(),
+            category: p.category.to_string(),
+            label: p.label.to_string(),
+        })
+        .collect();
+
+    let all_webs = webs_raw
+        .into_iter()
+        .map(|w| AdminWebPermDto {
+            id: w.id,
+            icon: w.icon_emoji(),
+            name: w.name,
+            slug: w.slug,
+        })
+        .collect();
+
+    AdminRolesPayload {
+        roles,
+        all_perms,
+        all_webs,
+    }
+}
+
+async fn admin_roles_list(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "roles.manage").await {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para gestionar roles.",
+        );
+    }
+    Json(build_admin_roles_payload(&state).await).into_response()
+}
+
+async fn admin_roles_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SaveRoleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "roles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let name = req.name.trim();
+    if name.is_empty() || name.chars().count() > 32 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "El nombre del rol debe tener entre 1 y 32 caracteres.",
+        );
+    }
+    let color = req
+        .color
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| c.starts_with('#') && !c.is_empty() && c.len() <= 64)
+        .map(String::from);
+    let position = req.position.clamp(0, 999);
+    let desc = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(String::from);
+
+    if let Err(e) = state
+        .db
+        .create_role(name, color.as_deref(), position, desc.as_deref())
+        .await
+    {
+        return json_err(StatusCode::BAD_REQUEST, format!("Error creando rol: {e}"));
+    }
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "role_create",
+            Some(&format!("name={name}")),
+            None,
+        )
+        .await;
+    state.role_colors.refresh(&state.db).await;
+    Json(build_admin_roles_payload(&state).await).into_response()
+}
+
+async fn admin_roles_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<SaveRoleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "roles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(role) = state.db.get_role(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Rol no encontrado.");
+    };
+    let name = req.name.trim();
+    if name.is_empty() || name.chars().count() > 32 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "El nombre del rol debe tener entre 1 y 32 caracteres.",
+        );
+    }
+    let color = req
+        .color
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| c.starts_with('#') && !c.is_empty() && c.len() <= 64)
+        .map(String::from);
+    let position = if role.is_protected() {
+        role.position
+    } else {
+        req.position.clamp(0, 999)
+    };
+    let desc = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(String::from);
+
+    if let Err(e) = state
+        .db
+        .update_role(id, name, color.as_deref(), position, desc.as_deref())
+        .await
+    {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            format!("Error actualizando rol: {e}"),
+        );
+    }
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "role_update",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    state.role_colors.refresh(&state.db).await;
+    Json(build_admin_roles_payload(&state).await).into_response()
+}
+
+async fn admin_roles_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<DeleteRoleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "roles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    if actor.role_id == Some(id) {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "No puedes eliminar tu propio rol.",
+        );
+    }
+    let Some(role) = state.db.get_role(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Rol no encontrado.");
+    };
+    if role.is_system() {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "No se puede eliminar un rol del sistema.",
+        );
+    }
+
+    let user_count = state.db.count_users_with_role(id).await.unwrap_or(0);
+    if user_count > 0 {
+        let Some(target) = req.reassign_to else {
+            return json_err(
+                StatusCode::BAD_REQUEST,
+                "Este rol tiene usuarios asignados; indica a qué rol reasignarlos.",
+            );
+        };
+        if target == id {
+            return json_err(
+                StatusCode::BAD_REQUEST,
+                "El rol destino no puede ser el mismo que se elimina.",
+            );
+        }
+        match state.db.get_role(target).await {
+            Ok(Some(t)) if t.role_key != "owner" => {}
+            _ => return json_err(StatusCode::BAD_REQUEST, "Rol destino inválido."),
+        }
+        let _ = state.db.reassign_users_role(id, target).await;
+    }
+
+    if let Err(e) = state.db.delete_role(id).await {
+        return json_err(StatusCode::BAD_REQUEST, format!("{e}"));
+    }
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "role_delete",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    state.role_colors.refresh(&state.db).await;
+    Json(build_admin_roles_payload(&state).await).into_response()
+}
+
+async fn admin_roles_set_perms(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<SetRolePermsRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "roles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(role) = state.db.get_role(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Rol no encontrado.");
+    };
+    if role.is_protected() {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "No se pueden modificar los permisos del rol protegido Owner.",
+        );
+    }
+    let valid: std::collections::HashSet<&str> = PERMISSIONS.iter().map(|p| p.key).collect();
+    let filtered: Vec<String> = req
+        .perms
+        .into_iter()
+        .filter(|p| valid.contains(p.as_str()))
+        .collect();
+    let _ = state.db.set_role_perms(id, &filtered).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "role_perms",
+            Some(&format!("id={id},n={}", filtered.len())),
+            None,
+        )
+        .await;
+    Json(build_admin_roles_payload(&state).await).into_response()
+}
+
+async fn admin_roles_set_web_perms(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<SetRoleWebPermsRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "roles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(role) = state.db.get_role(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Rol no encontrado.");
+    };
+    if role.is_protected() {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "No se pueden modificar las secciones del rol protegido Owner.",
+        );
+    }
+    let _ = state.db.set_role_web_perms(id, &req.web_ids).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "role_web_perms",
+            Some(&format!("id={id},n={}", req.web_ids.len())),
+            None,
+        )
+        .await;
+    Json(build_admin_roles_payload(&state).await).into_response()
+}
+
+async fn build_admin_titles_payload(state: &AppState) -> AdminTitlesPayload {
+    let titles_raw = state.db.list_titles().await.unwrap_or_default();
+    let users_raw = state.db.list_users().await.unwrap_or_default();
+
+    let mut user_map: HashMap<i64, (String, String)> = HashMap::new();
+    let mut active_users = Vec::new();
+    for u in users_raw {
+        let disp = u.display();
+        user_map.insert(u.id, (u.username.clone(), disp.clone()));
+        if u.status == "active" {
+            let (_, role_disp) = state.db.role_display(&u).await;
+            active_users.push(UserSearchDto {
+                id: u.id,
+                username: u.username,
+                display: disp,
+                role_display: role_disp,
+            });
+        }
+    }
+
+    let mut titles = Vec::with_capacity(titles_raw.len());
+    for t in titles_raw {
+        let holder_rows: Vec<(i64,)> =
+            sqlx::query_as("SELECT user_id FROM user_titles WHERE title_id = ? ORDER BY user_id ASC")
+                .bind(t.id)
+                .fetch_all(&state.db.pool)
+                .await
+                .unwrap_or_default();
+        let holders = holder_rows
+            .into_iter()
+            .filter_map(|(uid,)| {
+                user_map.get(&uid).map(|(uname, disp)| TitleHolderDto {
+                    user_id: uid,
+                    username: uname.clone(),
+                    display: disp.clone(),
+                })
+            })
+            .collect();
+        let resolved_color = resolve_hex_color(t.color.as_deref(), "#e0a308");
+        titles.push(AdminTitleDto {
+            id: t.id,
+            name: t.name,
+            color: t.color.unwrap_or_default(),
+            resolved_color,
+            effect: t.effect,
+            description: t.description.unwrap_or_default(),
+            holders,
+        });
+    }
+
+    AdminTitlesPayload {
+        titles,
+        users: active_users,
+    }
+}
+
+async fn admin_titles_list(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "titles.manage").await {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            "No tienes permiso para gestionar títulos.",
+        );
+    }
+    Json(build_admin_titles_payload(&state).await).into_response()
+}
+
+fn clean_title_req(req: &SaveTitleRequest) -> (String, Option<String>, String, Option<String>) {
+    let name = req.name.trim().to_string();
+    let color = req
+        .color
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| !c.is_empty() && c.starts_with('#') && c.len() <= 64)
+        .map(String::from);
+    let effect = match req.effect.trim() {
+        e @ ("none" | "glow" | "shimmer" | "gradient") => e.to_string(),
+        _ => "none".to_string(),
+    };
+    let description = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(String::from);
+    (name, color, effect, description)
+}
+
+async fn admin_titles_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SaveTitleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "titles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let (name, color, effect, desc) = clean_title_req(&req);
+    if name.is_empty() || name.chars().count() > 32 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "El nombre del título debe tener entre 1 y 32 caracteres.",
+        );
+    }
+    if let Err(e) = state
+        .db
+        .create_title(&name, color.as_deref(), &effect, desc.as_deref())
+        .await
+    {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            format!("Error creando título: {e}"),
+        );
+    }
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "title_create",
+            Some(&format!("name={name}")),
+            None,
+        )
+        .await;
+    Json(build_admin_titles_payload(&state).await).into_response()
+}
+
+async fn admin_titles_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<SaveTitleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "titles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(existing) = state.db.get_title(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Título no encontrado.");
+    };
+    let (name, color_opt, effect, desc) = clean_title_req(&req);
+    if name.is_empty() || name.chars().count() > 32 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "El nombre del título debe tener entre 1 y 32 caracteres.",
+        );
+    }
+    let color = color_opt.or(existing.color);
+    let _ = state
+        .db
+        .update_title(id, &name, color.as_deref(), &effect, desc.as_deref())
+        .await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "title_update",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    Json(build_admin_titles_payload(&state).await).into_response()
+}
+
+async fn admin_titles_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "titles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.delete_title(id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "title_delete",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    Json(build_admin_titles_payload(&state).await).into_response()
+}
+
+async fn admin_titles_assign(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<TitleAssignRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "titles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    if state.db.get_title(id).await.ok().flatten().is_none() {
+        return json_err(StatusCode::NOT_FOUND, "Título no encontrado.");
+    }
+    if state
+        .db
+        .find_user_by_id(req.user_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
+        return json_err(StatusCode::NOT_FOUND, "Usuario no encontrado.");
+    }
+    let _ = state.db.assign_title(req.user_id, id, actor.id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "title_assign",
+            Some(&format!("title_id={id},user_id={}", req.user_id)),
+            None,
+        )
+        .await;
+    Json(build_admin_titles_payload(&state).await).into_response()
+}
+
+async fn admin_titles_revoke(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<TitleAssignRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "titles.manage").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.revoke_title(req.user_id, id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "title_revoke",
+            Some(&format!("title_id={id},user_id={}", req.user_id)),
+            None,
+        )
+        .await;
+    Json(build_admin_titles_payload(&state).await).into_response()
 }

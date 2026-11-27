@@ -112,6 +112,8 @@ pub struct UserSummary {
     pub is_guest: bool,
     pub can_access_admin: bool,
     pub bio: String,
+    #[serde(default)]
+    pub avatar_url: String,
     pub theme: ThemeKind,
 }
 
@@ -497,6 +499,8 @@ pub struct ProfilePayload {
     pub email: String,
     pub display_name: String,
     pub bio: String,
+    #[serde(default)]
+    pub avatar_url: String,
     pub role_display: String,
     pub created_at: String,
     pub last_login: String,
@@ -773,6 +777,8 @@ pub struct ChatGroupManageDto {
     pub conversation_id: i64,
     pub name: String,
     pub description: String,
+    #[serde(default)]
+    pub image_url: String,
     pub is_group: bool,
     pub owner_id: i64,
     pub my_user_id: i64,
@@ -876,6 +882,188 @@ pub struct UploadVideoRequest {
     pub filename: String,
     pub content_type: String,
     pub data_base64: String,
+}
+
+// ===================== Avatar y Perfil Público =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadAvatarRequest {
+    pub filename: String,
+    pub content_type: String,
+    pub data_base64: String,
+    #[serde(default)]
+    pub remove: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicTitleDto {
+    pub id: i64,
+    pub name: String,
+    pub effect: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicProfileDto {
+    pub id: i64,
+    pub username: String,
+    pub display: String,
+    pub avatar_url: String,
+    pub role_display: String,
+    pub role_color: String,
+    pub bio: String,
+    pub created_at: String,
+    pub is_self: bool,
+    pub is_friend: bool,
+    pub primary_title: Option<PublicTitleDto>,
+    pub visible_titles: Vec<PublicTitleDto>,
+}
+
+// ===================== Chat Multimedia, Info y Borrado Masivo =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadChatMediaRequest {
+    pub kind: String, // "image" | "file" | "voice"
+    pub filename: String,
+    pub content_type: String,
+    pub data_base64: String,
+    #[serde(default)]
+    pub duration: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadGroupImageRequest {
+    pub filename: String,
+    pub content_type: String,
+    pub data_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkDeleteMessagesRequest {
+    pub ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkDeleteMessagesResponse {
+    pub ok: Vec<i64>,
+    pub denied: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageInfoDto {
+    pub id: i64,
+    pub conversation_id: i64,
+    pub sender_name: String,
+    pub created_at: String,
+    pub status: String,
+    pub edited_at: Option<String>,
+    pub deleted_at: Option<String>,
+    pub body: String,
+}
+
+// ===================== Admin Roles y Títulos =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionDefDto {
+    pub key: String,
+    pub category: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminWebPermDto {
+    pub id: i64,
+    pub name: String,
+    pub slug: String,
+    pub icon: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminRoleDto {
+    pub id: i64,
+    pub name: String,
+    pub role_key: String,
+    pub color: String,
+    pub resolved_color: String,
+    pub position: i64,
+    pub description: String,
+    pub is_system: bool,
+    pub is_protected: bool,
+    pub user_count: i64,
+    pub perms: Vec<String>,
+    pub web_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminRolesPayload {
+    pub roles: Vec<AdminRoleDto>,
+    pub all_perms: Vec<PermissionDefDto>,
+    pub all_webs: Vec<AdminWebPermDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveRoleRequest {
+    pub name: String,
+    pub color: Option<String>,
+    pub position: i64,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteRoleRequest {
+    pub reassign_to: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetRolePermsRequest {
+    pub perms: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetRoleWebPermsRequest {
+    pub web_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssignUserRoleIdRequest {
+    pub role_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TitleHolderDto {
+    pub user_id: i64,
+    pub username: String,
+    pub display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminTitleDto {
+    pub id: i64,
+    pub name: String,
+    pub color: String,
+    pub resolved_color: String,
+    pub effect: String,
+    pub description: String,
+    pub holders: Vec<TitleHolderDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminTitlesPayload {
+    pub titles: Vec<AdminTitleDto>,
+    pub users: Vec<UserSearchDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveTitleRequest {
+    pub name: String,
+    pub color: Option<String>,
+    pub effect: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TitleAssignRequest {
+    pub user_id: i64,
 }
 
 pub fn base64_encode(input: &[u8]) -> String {

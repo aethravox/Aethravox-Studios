@@ -1,21 +1,25 @@
 use aethravox_core::{
     base64_encode, AddGroupMemberRequest, AdminBanRequest, AdminIpBansPayload, AdminOverviewDto,
-    AdminRoleRequest, AexosLinkRequest, AexosProfileDto, AexosSavePrefsRequest,
-    AexosSwitchRequest, ApiError, ArisChatDto, ArisCreateChatRequest, ArisCreditsDto,
-    ArisMessageDto, ArisMode, ArisSendRequest, ArisSendResponse, AssignMemberRankRequest,
-    AuthSuccess, CategoryRowDto, ChangePasswordRequest, ChatConversationDto, ChatGroupManageDto,
-    ChatMessageDto, CommunityDetailDto, CommunityDto, CreateCommunityGroupRequest,
-    CreateCommunityRequest, CreateGroupRankRequest, CreateGroupRequest, CreateIpBanRequest,
-    CreateTicketRequest, DocumentDto, DownloadAppDto, DownloadFileDto, DownloadPlatformDto,
-    EditMessageRequest, EmailIdBody, EmailRequestBody, EmailVerifyBody, EmailsPayload, FriendDto,
-    FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest,
-    LinkCodeDto, LinkConsumeRequest, LoginRequest, PendingFriendDto, PlaygroundGenRequest,
-    PlaygroundGenResult, ProfilePayload, RecoverRequest, RecoverResponse, RegisterRequest,
-    ReplyTicketRequest, ResetPasswordRequest, SendMessageRequest, StartDmRequest,
+    AdminRoleRequest, AdminRolesPayload, AdminTitlesPayload, AexosLinkRequest, AexosProfileDto,
+    AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto, ArisCreateChatRequest,
+    ArisCreditsDto, ArisMessageDto, ArisMode, ArisSendRequest, ArisSendResponse,
+    AssignMemberRankRequest, AssignUserRoleIdRequest, AuthSuccess, BulkDeleteMessagesRequest,
+    BulkDeleteMessagesResponse, CategoryRowDto, ChangePasswordRequest, ChatConversationDto,
+    ChatGroupManageDto, ChatMessageDto, ChatMessageInfoDto, CommunityDetailDto, CommunityDto,
+    CreateCommunityGroupRequest, CreateCommunityRequest, CreateGroupRankRequest,
+    CreateGroupRequest, CreateIpBanRequest, CreateTicketRequest, DeleteRoleRequest, DocumentDto,
+    DownloadAppDto, DownloadFileDto, DownloadPlatformDto, EditMessageRequest, EmailIdBody,
+    EmailRequestBody, EmailVerifyBody, EmailsPayload, FriendDto, FriendRequestBody,
+    FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest, LinkCodeDto,
+    LinkConsumeRequest, LoginRequest, PendingFriendDto, PlaygroundGenRequest, PlaygroundGenResult,
+    ProfilePayload, PublicProfileDto, RecoverRequest, RecoverResponse, RegisterRequest,
+    ReplyTicketRequest, ResetPasswordRequest, SaveRoleRequest, SaveTitleRequest,
+    SendMessageRequest, SetRolePermsRequest, SetRoleWebPermsRequest, StartDmRequest,
     StartDmResponse, SuspendUserRequest, SystemConfigDto, ThemeKind, ThemeSelectRequest,
-    TicketActionRequest, TicketDetailDto, TicketDto, TransferGroupOwnershipRequest,
-    UpdateGroupInfoRequest, UpdateProfileRequest, UpdateTitlesRequest, UploadVideoRequest,
-    UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto,
+    TicketActionRequest, TicketDetailDto, TicketDto, TitleAssignRequest,
+    TransferGroupOwnershipRequest, UpdateGroupInfoRequest, UpdateProfileRequest,
+    UpdateTitlesRequest, UploadAvatarRequest, UploadChatMediaRequest, UploadGroupImageRequest,
+    UploadVideoRequest, UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto,
 };
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -58,6 +62,11 @@ pub enum ApiEvent {
     ChatGroupManageLoaded(ChatGroupManageDto),
     ChatGroupActionOk(String),
     ChatGroupLeft(i64),
+    ChatMessageInfoLoaded(ChatMessageInfoDto),
+    ChatBulkDeleted {
+        ok: Vec<i64>,
+        denied: usize,
+    },
     ChatErr(String),
     ChatSendErr(String),
 
@@ -106,10 +115,12 @@ pub enum ApiEvent {
     SupportActionOk(String),
     SupportErr(String),
 
-    // Perfil y Sesiones
+    // Perfil, Perfil Público y Sesiones
     ProfileLoaded(ProfilePayload),
     ProfileActionOk(String),
     ProfileErr(String),
+    PublicProfileLoaded(PublicProfileDto),
+    PublicProfileErr(String),
 
     // aexTube
     VideosLoaded(Vec<VideoDto>),
@@ -130,6 +141,8 @@ pub enum ApiEvent {
     AdminOverviewLoaded(AdminOverviewDto),
     AdminIpBansLoaded(AdminIpBansPayload),
     AdminConfigLoaded(SystemConfigDto),
+    AdminRolesLoaded(AdminRolesPayload),
+    AdminTitlesLoaded(AdminTitlesPayload),
     AdminActionOk(String),
     AdminErr(String),
 
@@ -2597,6 +2610,865 @@ pub fn spawn_admin_config_save(
     });
 }
 
+// ===================== Avatar y Perfil Público =====================
+
+fn infer_mime_generic(filename: &str, ct: &str) -> String {
+    if !ct.trim().is_empty() {
+        return ct.trim().to_string();
+    }
+    let lower = filename.to_ascii_lowercase();
+    if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".bmp") {
+        "image/bmp"
+    } else if lower.ends_with(".mp4") {
+        "video/mp4"
+    } else if lower.ends_with(".webm") {
+        "video/webm"
+    } else if lower.ends_with(".mp3") {
+        "audio/mpeg"
+    } else if lower.ends_with(".wav") {
+        "audio/wav"
+    } else if lower.ends_with(".ogg") {
+        "audio/ogg"
+    } else if lower.ends_with(".pdf") {
+        "application/pdf"
+    } else if lower.ends_with(".zip") {
+        "application/zip"
+    } else if lower.ends_with(".txt") {
+        "text/plain"
+    } else if lower.ends_with(".json") {
+        "application/json"
+    } else {
+        "application/octet-stream"
+    }
+    .to_string()
+}
+
+pub fn spawn_upload_avatar_bytes(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    filename: String,
+    content_type: String,
+    bytes: Vec<u8>,
+) {
+    rt.spawn(async move {
+        if bytes.is_empty() {
+            let _ = tx.send(ApiEvent::ProfileErr("La imagen está vacía.".into()));
+            ctx.request_repaint();
+            return;
+        }
+        if bytes.len() > 5 * 1024 * 1024 {
+            let _ = tx.send(ApiEvent::ProfileErr("El avatar supera el límite de 5 MB.".into()));
+            ctx.request_repaint();
+            return;
+        }
+        let mime = infer_mime_generic(&filename, &content_type);
+        let req = UploadAvatarRequest {
+            filename,
+            content_type: mime,
+            data_base64: base64_encode(&bytes),
+            remove: false,
+        };
+        match post_json::<UploadAvatarRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/profile/avatar",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Avatar actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+#[allow(unused_variables)]
+pub fn spawn_upload_avatar_path(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    path: String,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = tx.send(ApiEvent::ProfileErr(
+            "En navegador web arrastra la imagen directamente al área de avatar.".into(),
+        ));
+        ctx.request_repaint();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rt.spawn(async move {
+            let trimmed = path.trim().trim_matches('"').to_string();
+            let bytes = match std::fs::read(&trimmed) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ProfileErr(format!(
+                        "No se pudo leer la imagen ({trimmed}): {e}"
+                    )));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            let filename = std::path::Path::new(&trimmed)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("avatar.png")
+                .to_string();
+            if bytes.is_empty() || bytes.len() > 5 * 1024 * 1024 {
+                let _ = tx.send(ApiEvent::ProfileErr(
+                    "El avatar debe pesar entre 1 byte y 5 MB.".into(),
+                ));
+                ctx.request_repaint();
+                return;
+            }
+            let mime = infer_mime_generic(&filename, "");
+            let req = UploadAvatarRequest {
+                filename,
+                content_type: mime,
+                data_base64: base64_encode(&bytes),
+                remove: false,
+            };
+            match post_json::<UploadAvatarRequest, serde_json::Value>(
+                &base_url,
+                "/api/v1/profile/avatar",
+                &token,
+                &req,
+            )
+            .await
+            {
+                Ok(_) => {
+                    let _ = tx.send(ApiEvent::ProfileActionOk("Avatar actualizado.".into()));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ProfileErr(e));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
+}
+
+pub fn spawn_remove_avatar(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        let req = UploadAvatarRequest {
+            filename: String::new(),
+            content_type: String::new(),
+            data_base64: String::new(),
+            remove: true,
+        };
+        match post_json::<UploadAvatarRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/profile/avatar",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Avatar eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_fetch_public_profile(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    username: String,
+) {
+    rt.spawn(async move {
+        let clean = username.trim().trim_start_matches('@');
+        let path = format!("/api/v1/users/{}/profile", encode_uri_component(clean));
+        match get_json::<PublicProfileDto>(&base_url, &path, &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::PublicProfileLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::PublicProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Chat Multimedia, Info, Grupo Imagen y Borrado Masivo =====================
+
+pub fn spawn_chat_upload_media_bytes(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    is_image: bool,
+    filename: String,
+    content_type: String,
+    bytes: Vec<u8>,
+) {
+    rt.spawn(async move {
+        if bytes.is_empty() {
+            let _ = tx.send(ApiEvent::ChatSendErr("El archivo está vacío.".into()));
+            ctx.request_repaint();
+            return;
+        }
+        let max_bytes = if is_image {
+            5 * 1024 * 1024
+        } else {
+            20 * 1024 * 1024
+        };
+        if bytes.len() > max_bytes {
+            let _ = tx.send(ApiEvent::ChatSendErr(format!(
+                "El archivo supera el límite de {} MB.",
+                max_bytes / (1024 * 1024)
+            )));
+            ctx.request_repaint();
+            return;
+        }
+        let mime = infer_mime_generic(&filename, &content_type);
+        let req = UploadChatMediaRequest {
+            kind: if is_image {
+                "image".to_string()
+            } else {
+                "file".to_string()
+            },
+            filename,
+            content_type: mime,
+            data_base64: base64_encode(&bytes),
+            duration: None,
+        };
+        let path = format!("/api/v1/chat/conversations/{conv_id}/upload");
+        match post_json::<UploadChatMediaRequest, ChatMessageDto>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(msg) => {
+                let _ = tx.send(ApiEvent::MessageSent(msg));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Adjunto enviado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatSendErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+#[allow(unused_variables)]
+pub fn spawn_chat_upload_media_path(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    is_image: bool,
+    path: String,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = tx.send(ApiEvent::ChatSendErr(
+            "En navegador web arrastra el archivo directamente al chat.".into(),
+        ));
+        ctx.request_repaint();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rt.spawn(async move {
+            let trimmed = path.trim().trim_matches('"').to_string();
+            let bytes = match std::fs::read(&trimmed) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ChatSendErr(format!(
+                        "No se pudo leer el archivo ({trimmed}): {e}"
+                    )));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            let max_bytes = if is_image {
+                5 * 1024 * 1024
+            } else {
+                20 * 1024 * 1024
+            };
+            if bytes.is_empty() || bytes.len() > max_bytes {
+                let _ = tx.send(ApiEvent::ChatSendErr(format!(
+                    "Tamaño inválido (máximo {} MB).",
+                    max_bytes / (1024 * 1024)
+                )));
+                ctx.request_repaint();
+                return;
+            }
+            let filename = std::path::Path::new(&trimmed)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(if is_image { "imagen.png" } else { "archivo.bin" })
+                .to_string();
+            let mime = infer_mime_generic(&filename, "");
+            let req = UploadChatMediaRequest {
+                kind: if is_image {
+                    "image".to_string()
+                } else {
+                    "file".to_string()
+                },
+                filename,
+                content_type: mime,
+                data_base64: base64_encode(&bytes),
+                duration: None,
+            };
+            let api_path = format!("/api/v1/chat/conversations/{conv_id}/upload");
+            match post_json::<UploadChatMediaRequest, ChatMessageDto>(
+                &base_url, &api_path, &token, &req,
+            )
+            .await
+            {
+                Ok(msg) => {
+                    let _ = tx.send(ApiEvent::MessageSent(msg));
+                    let _ = tx.send(ApiEvent::ChatGroupActionOk("Adjunto enviado.".into()));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ChatSendErr(e));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
+}
+
+pub fn spawn_chat_group_image_bytes(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    filename: String,
+    content_type: String,
+    bytes: Vec<u8>,
+) {
+    rt.spawn(async move {
+        if bytes.is_empty() || bytes.len() > 5 * 1024 * 1024 {
+            let _ = tx.send(ApiEvent::ChatErr(
+                "La imagen de grupo debe pesar máximo 5 MB.".into(),
+            ));
+            ctx.request_repaint();
+            return;
+        }
+        let mime = infer_mime_generic(&filename, &content_type);
+        let req = UploadGroupImageRequest {
+            filename,
+            content_type: mime,
+            data_base64: base64_encode(&bytes),
+        };
+        let path = format!("/api/v1/chat/conversations/{conv_id}/group_image");
+        match post_json::<UploadGroupImageRequest, ChatGroupManageDto>(
+            &base_url, &path, &token, &req,
+        )
+        .await
+        {
+            Ok(dto) => {
+                let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                let _ = tx.send(ApiEvent::ChatGroupActionOk("Imagen del grupo actualizada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+#[allow(unused_variables)]
+pub fn spawn_chat_group_image_path(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    path: String,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = tx.send(ApiEvent::ChatErr(
+            "En navegador web arrastra la imagen directamente al panel del grupo.".into(),
+        ));
+        ctx.request_repaint();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rt.spawn(async move {
+            let trimmed = path.trim().trim_matches('"').to_string();
+            let bytes = match std::fs::read(&trimmed) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ChatErr(format!(
+                        "No se pudo leer la imagen ({trimmed}): {e}"
+                    )));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            if bytes.is_empty() || bytes.len() > 5 * 1024 * 1024 {
+                let _ = tx.send(ApiEvent::ChatErr(
+                    "La imagen de grupo debe pesar máximo 5 MB.".into(),
+                ));
+                ctx.request_repaint();
+                return;
+            }
+            let filename = std::path::Path::new(&trimmed)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("grupo.png")
+                .to_string();
+            let mime = infer_mime_generic(&filename, "");
+            let req = UploadGroupImageRequest {
+                filename,
+                content_type: mime,
+                data_base64: base64_encode(&bytes),
+            };
+            let api_path = format!("/api/v1/chat/conversations/{conv_id}/group_image");
+            match post_json::<UploadGroupImageRequest, ChatGroupManageDto>(
+                &base_url, &api_path, &token, &req,
+            )
+            .await
+            {
+                Ok(dto) => {
+                    let _ = tx.send(ApiEvent::ChatGroupManageLoaded(dto));
+                    let _ = tx.send(ApiEvent::ChatGroupActionOk("Imagen del grupo actualizada.".into()));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ChatErr(e));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
+}
+
+pub fn spawn_chat_bulk_delete(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    ids: Vec<i64>,
+) {
+    rt.spawn(async move {
+        let req = BulkDeleteMessagesRequest { ids };
+        match post_json::<BulkDeleteMessagesRequest, BulkDeleteMessagesResponse>(
+            &base_url,
+            "/api/v1/chat/messages/bulk_delete",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::ChatBulkDeleted {
+                    ok: res.ok,
+                    denied: res.denied.len(),
+                });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_chat_message_info(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    msg_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/messages/{msg_id}/info");
+        match get_json::<ChatMessageInfoDto>(&base_url, &path, &token).await {
+            Ok(info) => {
+                let _ = tx.send(ApiEvent::ChatMessageInfoLoaded(info));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Admin Roles y Títulos =====================
+
+pub fn spawn_admin_assign_role_id(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    user_id: i64,
+    role_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/users/{user_id}/role_id");
+        let req = AssignUserRoleIdRequest { role_id };
+        match post_json::<AssignUserRoleIdRequest, serde_json::Value>(
+            &base_url, &path, &token, &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Rol asignado al usuario.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_roles(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<AdminRolesPayload>(&base_url, "/api/v1/admin/roles", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminRolesLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_create_role(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: SaveRoleRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<SaveRoleRequest, AdminRolesPayload>(
+            &base_url,
+            "/api/v1/admin/roles/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminRolesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Rol creado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_update_role(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    role_id: i64,
+    req: SaveRoleRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/roles/{role_id}/update");
+        match post_json::<SaveRoleRequest, AdminRolesPayload>(&base_url, &path, &token, &req).await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminRolesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Rol actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_delete_role(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    role_id: i64,
+    reassign_to: Option<i64>,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/roles/{role_id}/delete");
+        let req = DeleteRoleRequest { reassign_to };
+        match post_json::<DeleteRoleRequest, AdminRolesPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminRolesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Rol eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_set_role_perms(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    role_id: i64,
+    perms: Vec<String>,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/roles/{role_id}/perms");
+        let req = SetRolePermsRequest { perms };
+        match post_json::<SetRolePermsRequest, AdminRolesPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminRolesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Permisos del rol guardados.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_set_role_web_perms(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    role_id: i64,
+    web_ids: Vec<i64>,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/roles/{role_id}/web_perms");
+        let req = SetRoleWebPermsRequest { web_ids };
+        match post_json::<SetRoleWebPermsRequest, AdminRolesPayload>(
+            &base_url, &path, &token, &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminRolesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Secciones del rol guardadas.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_titles(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<AdminTitlesPayload>(&base_url, "/api/v1/admin/titles", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_create_title(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: SaveTitleRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<SaveTitleRequest, AdminTitlesPayload>(
+            &base_url,
+            "/api/v1/admin/titles/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Título creado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_update_title(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title_id: i64,
+    req: SaveTitleRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/titles/{title_id}/update");
+        match post_json::<SaveTitleRequest, AdminTitlesPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Título actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_delete_title(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/titles/{title_id}/delete");
+        match post_empty::<AdminTitlesPayload>(&base_url, &path, &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Título eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_assign_title(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title_id: i64,
+    user_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/titles/{title_id}/assign");
+        let req = TitleAssignRequest { user_id };
+        match post_json::<TitleAssignRequest, AdminTitlesPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Título asignado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_revoke_title(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title_id: i64,
+    user_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/titles/{title_id}/revoke");
+        let req = TitleAssignRequest { user_id };
+        match post_json::<TitleAssignRequest, AdminTitlesPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Título revocado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
 // ===================== Demo / Preview local =====================
 
 pub fn offline_demo_hub(username: &str, is_guest: bool, theme: ThemeKind) -> HubPayload {
@@ -2611,6 +3483,7 @@ pub fn offline_demo_hub(username: &str, is_guest: bool, theme: ThemeKind) -> Hub
         is_guest,
         can_access_admin: !is_guest,
         bio: "Modo vista previa local de Aethravox Desktop (egui).".to_string(),
+        avatar_url: String::new(),
         theme,
     };
 
