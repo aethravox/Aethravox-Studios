@@ -676,7 +676,7 @@ pub async fn publish_zen_package_core(
         ));
     }
     let pkg_name = raw_name.to_ascii_lowercase();
-    if is_reserved_zen_name(&pkg_name) {
+    if is_reserved_zen_name(&pkg_name) && actor.role != "owner" {
         return Err((
             StatusCode::FORBIDDEN,
             format!(
