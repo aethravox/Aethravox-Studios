@@ -182,7 +182,7 @@ No uses fetch externos ni imports; código puro HTML/CSS/JS limpio y funcional."
     }
 }
 
-async fn generate_single_completion(
+pub(crate) async fn generate_single_completion(
     state: &AppState,
     system_prompt: &str,
     user_prompt: &str,
@@ -221,7 +221,7 @@ async fn generate_single_completion(
         .map_err(|e| e.to_string())
 }
 
-fn parse_playground_output(raw: &str, prompt: &str) -> (String, String, String, String) {
+pub(crate) fn parse_playground_output(raw: &str, prompt: &str) -> (String, String, String, String) {
     // 1) Intentar extraer JSON directo o dentro de ```json ... ```
     let trimmed = raw.trim();
     let json_candidate = if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
@@ -280,7 +280,7 @@ fn extract_code_fence(text: &str, lang: &str) -> Option<String> {
     Some(rest[..end].trim().to_string())
 }
 
-fn fallback_playground_template(prompt: &str) -> (String, String, String, String) {
+pub(crate) fn fallback_playground_template(prompt: &str) -> (String, String, String, String) {
     let safe_title: String = prompt
         .chars()
         .filter(|&c| c != '<' && c != '>')

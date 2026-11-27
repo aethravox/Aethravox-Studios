@@ -43,6 +43,39 @@ pub enum ColorMode {
     Light,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceProfile {
+    #[default]
+    Auto,
+    Desktop,
+    Mobile,
+    Tv,
+    Pdi,
+}
+
+impl DeviceProfile {
+    pub fn label(&self) -> &'static str {
+        match self {
+            DeviceProfile::Auto => "Automático",
+            DeviceProfile::Desktop => "PC / Escritorio",
+            DeviceProfile::Mobile => "Móvil (Android / iPhone)",
+            DeviceProfile::Tv => "Smart TV / Android TV",
+            DeviceProfile::Pdi => "Pizarra Digital (PDI)",
+        }
+    }
+
+    pub fn from_str_opt(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "desktop" | "pc" => DeviceProfile::Desktop,
+            "mobile" | "movil" | "android" | "ios" | "iphone" => DeviceProfile::Mobile,
+            "tv" | "smarttv" | "androidtv" => DeviceProfile::Tv,
+            "pdi" | "whiteboard" | "pizarra" => DeviceProfile::Pdi,
+            _ => DeviceProfile::Auto,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiError {
     pub error: String,
@@ -129,6 +162,8 @@ pub struct HubPayload {
     pub stats: HubStatsDto,
 }
 
+// ===================== Aris IA =====================
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ArisMode {
@@ -145,6 +180,17 @@ impl ArisMode {
             ArisMode::Rapido => "Rápido",
             ArisMode::Pensando => "Pensando",
         }
+    }
+
+    pub fn api_mode(&self) -> &'static str {
+        match self {
+            ArisMode::Instantaneo => "instantaneo",
+            ArisMode::Rapido | ArisMode::Pensando => "rapido",
+        }
+    }
+
+    pub fn think(&self) -> bool {
+        matches!(self, ArisMode::Pensando)
     }
 }
 
@@ -164,6 +210,33 @@ pub struct ArisMessageDto {
     pub model: Option<String>,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ArisCreditsDto {
+    pub daily_limit: i64,
+    pub daily_used: i64,
+    pub remaining: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArisCreateChatRequest {
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArisSendRequest {
+    pub content: String,
+    pub mode: ArisMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArisSendResponse {
+    pub user_message: ArisMessageDto,
+    pub assistant_message: ArisMessageDto,
+    pub credits: ArisCreditsDto,
+}
+
+// ===================== Chat =====================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatConversationDto {
@@ -192,4 +265,405 @@ pub struct ThemeSelectRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendMessageRequest {
     pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartDmRequest {
+    pub username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartDmResponse {
+    pub conversation_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateGroupRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub members: Vec<String>,
+}
+
+// ===================== Amigos =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FriendDto {
+    pub id: i64,
+    pub username: String,
+    pub display: String,
+    pub online: bool,
+    pub role_display: String,
+    pub role_color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingFriendDto {
+    pub id: i64,
+    pub username: String,
+    pub display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSearchDto {
+    pub id: i64,
+    pub username: String,
+    pub display: String,
+    pub role_display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FriendsPayload {
+    pub friends: Vec<FriendDto>,
+    pub pending: Vec<PendingFriendDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FriendRequestBody {
+    pub username: String,
+}
+
+// ===================== Comunidades =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityDto {
+    pub id: i64,
+    pub name: String,
+    pub description: String,
+    pub icon: String,
+    pub is_member: bool,
+    pub is_owner: bool,
+    pub member_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityGroupDto {
+    pub id: i64,
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityDetailDto {
+    pub community: CommunityDto,
+    pub groups: Vec<CommunityGroupDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCommunityRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCommunityGroupRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InviteCommunityRequest {
+    pub user_ids: Vec<i64>,
+}
+
+// ===================== Documentos =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentDto {
+    pub id: i64,
+    pub title: String,
+    pub description: String,
+    pub file_name: String,
+    pub file_type: String,
+    pub icon: String,
+    pub size: String,
+    pub created_at: String,
+    pub has_preview: bool,
+    pub downloaded: i64,
+}
+
+// ===================== Asistencia / Tickets =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TicketDto {
+    pub id: i64,
+    pub ticket_type: String,
+    pub subject: String,
+    pub body: String,
+    pub status: String,
+    pub resolucion: String,
+    pub created_at: String,
+    pub owner_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TicketMessageDto {
+    pub id: i64,
+    pub body: String,
+    pub sender_name: String,
+    pub is_admin: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TicketDetailDto {
+    pub ticket: TicketDto,
+    pub reclamado_por_nombre: String,
+    pub is_admin: bool,
+    pub messages: Vec<TicketMessageDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTicketRequest {
+    pub ticket_type: String,
+    pub subject: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplyTicketRequest {
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TicketActionRequest {
+    pub action: String, // "claim" | "resolve" | "reject" | "close"
+}
+
+// ===================== Descargas =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadFileDto {
+    pub id: i64,
+    pub version: String,
+    pub orig_name: String,
+    pub size_mb: String,
+    pub created_at: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadAppDto {
+    pub slug: String,
+    pub name: String,
+    pub files: Vec<DownloadFileDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadPlatformDto {
+    pub key: String,
+    pub name: String,
+    pub icon: String,
+    pub coming_soon: bool,
+    pub apps: Vec<DownloadAppDto>,
+}
+
+// ===================== Perfil, Títulos y Sesiones =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TitleDto {
+    pub id: i64,
+    pub name: String,
+    pub effect: String,
+    pub description: String,
+    pub selected: bool,
+    pub is_primary: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDto {
+    pub token_prefix: String,
+    pub token: String,
+    pub is_current: bool,
+    pub remember: bool,
+    pub created_at: String,
+    pub last_seen: String,
+    pub expires: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkedDeviceDto {
+    pub token: String,
+    pub device_name: String,
+    pub created_at: String,
+    pub last_seen: String,
+    pub expires: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfilePayload {
+    pub username: String,
+    pub email: String,
+    pub display_name: String,
+    pub bio: String,
+    pub role_display: String,
+    pub created_at: String,
+    pub last_login: String,
+    pub usage: String,
+    pub titles: Vec<TitleDto>,
+    pub sessions: Vec<SessionDto>,
+    pub linked_devices: Vec<LinkedDeviceDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub display_name: String,
+    pub bio: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTitlesRequest {
+    pub primary_id: Option<i64>,
+    pub visible_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current: String,
+    pub new_password: String,
+}
+
+// ===================== aexTube =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoDto {
+    pub id: i64,
+    pub user_id: i64,
+    pub author: String,
+    pub title: String,
+    pub description: String,
+    pub is_short: bool,
+    pub file_path: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+    pub likes: i64,
+    pub dislikes: i64,
+    pub views: i64,
+    pub created_at: String,
+    pub user_reaction: Option<String>,
+    pub subscribed: bool,
+    pub channel_subscribers: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoReactRequest {
+    pub kind: String, // "like" | "dislike"
+}
+
+// ===================== Playground =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaygroundGenRequest {
+    pub prompt: String,
+    pub current_html: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaygroundGenResult {
+    pub html: String,
+    pub css: String,
+    pub js: String,
+    pub note: String,
+    pub model: String,
+    pub provider: String,
+}
+
+// ===================== aexOS =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AexosProfileDto {
+    pub user_id: i64,
+    pub is_primary: bool,
+    pub username: String,
+    pub display_name: String,
+    pub role_display: String,
+    pub can_admin: bool,
+    pub wallpaper: String,
+    pub show_desktop_icons: bool,
+    pub pinned_apps_json: String,
+    pub files_json: String,
+    pub notes_text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AexosLinkRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AexosSwitchRequest {
+    pub user_id: i64,
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AexosSavePrefsRequest {
+    pub profile_user_id: i64,
+    pub wallpaper: String,
+    pub show_desktop_icons: bool,
+    pub pinned_apps_json: String,
+    pub files_json: String,
+    pub notes_text: String,
+}
+
+// ===================== Admin =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminUserDto {
+    pub id: i64,
+    pub username: String,
+    pub display: String,
+    pub email: String,
+    pub role: String,
+    pub status: String,
+    pub last_login: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminWebDto {
+    pub id: i64,
+    pub slug: String,
+    pub name: String,
+    pub icon: String,
+    pub is_active: bool,
+    pub is_public: bool,
+    pub tag: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminAuditDto {
+    pub id: i64,
+    pub username: String,
+    pub action: String,
+    pub detail: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminOverviewDto {
+    pub total_users: i64,
+    pub owner_count: i64,
+    pub admin_count: i64,
+    pub staff_count: i64,
+    pub user_count: i64,
+    pub web_count: i64,
+    pub audit_total: i64,
+    pub visits_7d: i64,
+    pub users: Vec<AdminUserDto>,
+    pub webs: Vec<AdminWebDto>,
+    pub audit: Vec<AdminAuditDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminRoleRequest {
+    pub role: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminBanRequest {
+    pub reason: String,
+    pub permanent: bool,
+    pub duration_hours: Option<i64>,
 }

@@ -1,4 +1,4 @@
-use aethravox_core::{ColorMode, ThemeKind};
+use aethravox_core::{ColorMode, DeviceProfile, ThemeKind};
 use egui::{Color32, FontId, Rounding, Stroke, Style, TextStyle, Visuals};
 
 /// Paleta completa de Aethravox Studios traducida directamente desde
@@ -120,19 +120,64 @@ impl Palette {
 }
 
 pub fn apply_theme(ctx: &egui::Context, theme: ThemeKind, mode: ColorMode) -> Palette {
+    apply_theme_for_device(ctx, theme, mode, DeviceProfile::Desktop)
+}
+
+pub fn apply_theme_for_device(
+    ctx: &egui::Context,
+    theme: ThemeKind,
+    mode: ColorMode,
+    profile: DeviceProfile,
+) -> Palette {
     let p = Palette::from(theme, mode);
 
     let mut style = Style::default();
-    style.spacing.item_spacing = egui::vec2(10.0, 10.0);
-    style.spacing.button_padding = egui::vec2(14.0, 8.0);
-    style.spacing.window_margin = egui::Margin::same(16.0);
-    style.spacing.interact_size = egui::vec2(38.0, 32.0);
-
-    style.text_styles.insert(TextStyle::Heading, FontId::proportional(22.0));
-    style.text_styles.insert(TextStyle::Body, FontId::proportional(14.5));
-    style.text_styles.insert(TextStyle::Button, FontId::proportional(14.0));
-    style.text_styles.insert(TextStyle::Small, FontId::proportional(12.0));
-    style.text_styles.insert(TextStyle::Monospace, FontId::monospace(13.5));
+    match profile {
+        DeviceProfile::Tv => {
+            style.spacing.item_spacing = egui::vec2(14.0, 14.0);
+            style.spacing.button_padding = egui::vec2(20.0, 12.0);
+            style.spacing.window_margin = egui::Margin::same(22.0);
+            style.spacing.interact_size = egui::vec2(52.0, 46.0);
+            style.text_styles.insert(TextStyle::Heading, FontId::proportional(28.0));
+            style.text_styles.insert(TextStyle::Body, FontId::proportional(18.0));
+            style.text_styles.insert(TextStyle::Button, FontId::proportional(17.0));
+            style.text_styles.insert(TextStyle::Small, FontId::proportional(14.0));
+            style.text_styles.insert(TextStyle::Monospace, FontId::monospace(16.0));
+        }
+        DeviceProfile::Pdi => {
+            style.spacing.item_spacing = egui::vec2(13.0, 13.0);
+            style.spacing.button_padding = egui::vec2(18.0, 11.0);
+            style.spacing.window_margin = egui::Margin::same(18.0);
+            style.spacing.interact_size = egui::vec2(50.0, 44.0);
+            style.text_styles.insert(TextStyle::Heading, FontId::proportional(26.0));
+            style.text_styles.insert(TextStyle::Body, FontId::proportional(17.0));
+            style.text_styles.insert(TextStyle::Button, FontId::proportional(16.0));
+            style.text_styles.insert(TextStyle::Small, FontId::proportional(13.5));
+            style.text_styles.insert(TextStyle::Monospace, FontId::monospace(15.0));
+        }
+        DeviceProfile::Mobile => {
+            style.spacing.item_spacing = egui::vec2(10.0, 10.0);
+            style.spacing.button_padding = egui::vec2(14.0, 10.0);
+            style.spacing.window_margin = egui::Margin::same(12.0);
+            style.spacing.interact_size = egui::vec2(44.0, 42.0);
+            style.text_styles.insert(TextStyle::Heading, FontId::proportional(21.0));
+            style.text_styles.insert(TextStyle::Body, FontId::proportional(15.5));
+            style.text_styles.insert(TextStyle::Button, FontId::proportional(15.0));
+            style.text_styles.insert(TextStyle::Small, FontId::proportional(12.5));
+            style.text_styles.insert(TextStyle::Monospace, FontId::monospace(13.5));
+        }
+        DeviceProfile::Auto | DeviceProfile::Desktop => {
+            style.spacing.item_spacing = egui::vec2(10.0, 10.0);
+            style.spacing.button_padding = egui::vec2(14.0, 8.0);
+            style.spacing.window_margin = egui::Margin::same(16.0);
+            style.spacing.interact_size = egui::vec2(38.0, 32.0);
+            style.text_styles.insert(TextStyle::Heading, FontId::proportional(22.0));
+            style.text_styles.insert(TextStyle::Body, FontId::proportional(14.5));
+            style.text_styles.insert(TextStyle::Button, FontId::proportional(14.0));
+            style.text_styles.insert(TextStyle::Small, FontId::proportional(12.0));
+            style.text_styles.insert(TextStyle::Monospace, FontId::monospace(13.5));
+        }
+    }
 
     let mut visuals = match mode {
         ColorMode::Dark => Visuals::dark(),
@@ -147,7 +192,10 @@ pub fn apply_theme(ctx: &egui::Context, theme: ThemeKind, mode: ColorMode) -> Pa
     visuals.window_rounding = Rounding::same(12.0);
     visuals.window_stroke = Stroke::new(1.0_f32, p.border_subtle);
     visuals.selection.bg_fill = p.accent_primary.gamma_multiply(0.28);
-    visuals.selection.stroke = Stroke::new(1.0_f32, p.accent_primary);
+    visuals.selection.stroke = Stroke::new(
+        if profile == DeviceProfile::Tv { 2.5_f32 } else { 1.0_f32 },
+        p.accent_primary,
+    );
 
     visuals.widgets.noninteractive.bg_fill = p.bg_surface;
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, p.border_subtle);
@@ -159,13 +207,14 @@ pub fn apply_theme(ctx: &egui::Context, theme: ThemeKind, mode: ColorMode) -> Pa
     visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, p.text_primary);
     visuals.widgets.inactive.rounding = Rounding::same(8.0);
 
+    let hover_w = if profile == DeviceProfile::Tv { 2.6_f32 } else { 1.2_f32 };
     visuals.widgets.hovered.bg_fill = p.bg_elevated;
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.2_f32, p.accent_primary);
+    visuals.widgets.hovered.bg_stroke = Stroke::new(hover_w, p.accent_primary);
     visuals.widgets.hovered.fg_stroke = Stroke::new(1.2_f32, p.text_primary);
     visuals.widgets.hovered.rounding = Rounding::same(8.0);
 
     visuals.widgets.active.bg_fill = p.accent_primary.gamma_multiply(0.22);
-    visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, p.accent_primary);
+    visuals.widgets.active.bg_stroke = Stroke::new(2.0_f32, p.accent_primary);
     visuals.widgets.active.fg_stroke = Stroke::new(1.5_f32, p.text_primary);
     visuals.widgets.active.rounding = Rounding::same(8.0);
 

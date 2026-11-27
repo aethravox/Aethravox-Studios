@@ -12,36 +12,51 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
         return;
     };
 
+    let mobile = app.is_mobile_layout(ui.ctx());
+
     egui::ScrollArea::vertical().show(ui, |ui| {
         // Hero summary bar
         card_frame(p).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.heading(format!("Hola, {}", hub.user.display));
-                    ui.label(
-                        egui::RichText::new("Bienvenido al estudio nativo de Aethravox Studios")
-                            .color(p.text_muted),
-                    );
-                });
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    stat_chip(ui, p, "Docs", hub.stats.doc_count);
-                    stat_chip(ui, p, "En línea", hub.stats.online_count);
+            if mobile {
+                ui.heading(format!("Hola, {}", hub.user.display));
+                ui.label(
+                    egui::RichText::new("Estudio nativo de Aethravox Studios")
+                        .small()
+                        .color(p.text_muted),
+                );
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
                     stat_chip(ui, p, "Mensajes", hub.stats.chat_unread);
+                    stat_chip(ui, p, "En línea", hub.stats.online_count);
+                    stat_chip(ui, p, "Docs", hub.stats.doc_count);
                 });
-            });
+            } else {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.heading(format!("Hola, {}", hub.user.display));
+                        ui.label(
+                            egui::RichText::new("Bienvenido al estudio nativo de Aethravox Studios")
+                                .color(p.text_muted),
+                        );
+                    });
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        stat_chip(ui, p, "Docs", hub.stats.doc_count);
+                        stat_chip(ui, p, "En línea", hub.stats.online_count);
+                        stat_chip(ui, p, "Mensajes", hub.stats.chat_unread);
+                    });
+                });
+            }
 
             ui.add_space(12.0);
 
             // Search + category filter bar
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add(
                     egui::TextEdit::singleline(&mut app.hub_search)
-                        .desired_width(260.0)
+                        .desired_width(ui.available_width().min(260.0))
                         .hint_text("Buscar aplicación o herramienta…"),
                 );
-
-                ui.separator();
 
                 let all_active = app.hub_cat_filter == "all";
                 if ui.selectable_label(all_active, "Todas").clicked() {
@@ -147,7 +162,8 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
         }
 
         if let Some(w) = clicked_app {
-            app.open_app(&w);
+            let ctx = ui.ctx().clone();
+            app.open_app(&ctx, &w);
         }
     });
 }

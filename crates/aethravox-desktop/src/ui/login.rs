@@ -6,29 +6,32 @@ use crate::app::AethravoxApp;
 use crate::theme::{card_frame, primary_button, Palette};
 
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &Palette) {
-    ui.vertical_centered(|ui| {
-        ui.add_space(48.0);
+    let mobile = app.is_mobile_layout(ctx);
+    egui::ScrollArea::vertical().id_salt("login_scroll").show(ui, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add_space(if mobile { 20.0 } else { 48.0 });
 
-        ui.label(
-            egui::RichText::new("AETHRAVOX STUDIOS")
-                .size(28.0)
-                .strong()
-                .color(p.accent_primary),
-        );
-        ui.label(
-            egui::RichText::new("AI Engineers · App Dev · Games")
-                .small()
-                .color(p.text_muted),
-        );
-        ui.add_space(24.0);
+            ui.label(
+                egui::RichText::new("AETHRAVOX STUDIOS")
+                    .size(if mobile { 23.0 } else { 28.0 })
+                    .strong()
+                    .color(p.accent_primary),
+            );
+            ui.label(
+                egui::RichText::new("AI Engineers · App Dev · Games")
+                    .small()
+                    .color(p.text_muted),
+            );
+            ui.add_space(if mobile { 14.0 } else { 24.0 });
 
-        egui::Frame::none()
-            .fill(p.bg_surface)
-            .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
-            .rounding(Rounding::same(14.0))
-            .inner_margin(egui::Margin::same(24.0))
-            .show(ui, |ui| {
-                ui.set_width(380.0);
+            let card_w = (ui.available_width() - 24.0).clamp(260.0, 390.0);
+            egui::Frame::none()
+                .fill(p.bg_surface)
+                .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
+                .rounding(Rounding::same(14.0))
+                .inner_margin(egui::Margin::same(if mobile { 16.0 } else { 24.0 }))
+                .show(ui, |ui| {
+                    ui.set_width(card_w);
 
                 ui.horizontal(|ui| {
                     if ui
@@ -146,7 +149,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                 ui.separator();
                 ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("Modo local (Preview)").clicked() {
                         let name: String = if app.login_username.trim().is_empty() {
                             "Aethravox".to_string()
@@ -158,22 +161,21 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     if ui.button("Entrar como Invitado").clicked() {
                         app.enter_offline_demo("Invitado", true);
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let icon = match app.color_mode {
-                            ColorMode::Dark => "☀ Claro",
-                            ColorMode::Light => "🌙 Oscuro",
+                    let icon = match app.color_mode {
+                        ColorMode::Dark => "☀ Claro",
+                        ColorMode::Light => "🌙 Oscuro",
+                    };
+                    if ui.button(icon).clicked() {
+                        let next = match app.color_mode {
+                            ColorMode::Dark => ColorMode::Light,
+                            ColorMode::Light => ColorMode::Dark,
                         };
-                        if ui.button(icon).clicked() {
-                            let next = match app.color_mode {
-                                ColorMode::Dark => ColorMode::Light,
-                                ColorMode::Light => ColorMode::Dark,
-                            };
-                            app.set_color_mode(ctx, next);
-                        }
-                    });
+                        app.set_color_mode(ctx, next);
+                    }
                 });
             });
 
         let _ = card_frame;
+        });
     });
 }

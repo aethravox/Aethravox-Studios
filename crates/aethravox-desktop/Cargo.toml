@@ -2,8 +2,12 @@
 name = "aethravox-desktop"
 version = "0.1.0"
 edition = "2021"
-description = "Aethravox Studios — Native Desktop Client (egui / eframe)"
+description = "Aethravox Studios — Native Multi-Device Client (PC, Android, iOS, Smart TV, PDI)"
 authors = ["Aethravox Studios"]
+
+[lib]
+name = "aethravox_desktop"
+crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 aethravox-core = { path = "../aethravox-core" }
@@ -13,3 +17,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[target.'cfg(target_os = "android")'.dependencies]
+winit = "0.30"

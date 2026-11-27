@@ -1,16 +1,23 @@
 use aethravox_core::{
-    ArisChatDto, ArisMessageDto, ArisMode, ChatConversationDto, ChatMessageDto, ColorMode,
-    HubPayload, ThemeKind, WebAppDto,
+    AdminOverviewDto, AexosProfileDto, ArisChatDto, ArisCreditsDto, ArisMessageDto, ArisMode,
+    ChatConversationDto, ChatMessageDto, ColorMode, CommunityDetailDto, CommunityDto,
+    DeviceProfile, DocumentDto, DownloadPlatformDto, FriendsPayload, HubPayload, ProfilePayload,
+    ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto, WebAppDto,
 };
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use crate::api::{
-    demo_aris_chats, demo_chat_conversations, demo_chat_messages, offline_demo_hub,
-    spawn_fetch_conversations, spawn_fetch_messages, spawn_mark_read, spawn_send_message,
-    ApiEvent,
+    demo_aexos_profiles, demo_aris_chats, demo_chat_conversations, demo_chat_messages,
+    demo_communities, demo_docs, demo_downloads, demo_friends, demo_tickets, demo_videos,
+    offline_demo_hub, spawn_admin_overview, spawn_aexos_profiles, spawn_aris_chats,
+    spawn_aris_credits, spawn_aris_messages, spawn_community_detail, spawn_community_inviteable,
+    spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
+    spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages, spawn_fetch_profile,
+    spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read, spawn_save_theme,
+    spawn_send_message, spawn_ticket_detail, ApiEvent,
 };
-use crate::theme::{apply_theme, Palette};
+use crate::theme::{apply_theme_for_device, Palette};
 use crate::ui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,9 +26,18 @@ pub enum Route {
     Hub,
     Aris,
     Chat,
+    Friends,
+    Communities,
+    Docs,
     NeonCanvas,
+    AexTube,
+    Playground,
+    Aexos,
+    Downloads,
+    Support,
+    Transmit,
     Settings,
-    Placeholder(&'static str),
+    Admin,
 }
 
 #[derive(Debug, Clone)]
@@ -42,10 +58,15 @@ pub struct AethravoxApp {
     pub route: Route,
     pub offline_mode: bool,
 
-    // Tema visual
+    // Tema visual y dispositivo
     pub theme: ThemeKind,
     pub color_mode: ColorMode,
+    pub device_profile: DeviceProfile,
+    pub last_applied_profile: DeviceProfile,
     pub sidebar_collapsed: bool,
+    pub mobile_menu_open: bool,
+    pub mobile_detail_open: bool,
+    pub fullscreen: bool,
 
     // Login / Register state
     pub auth_tab_register: bool,
@@ -70,6 +91,11 @@ pub struct AethravoxApp {
     pub chat_sending: bool,
     pub chat_pending: Option<String>,
     pub chat_last_poll: Option<Instant>,
+    pub chat_new_panel: bool,
+    pub chat_dm_username: String,
+    pub chat_group_name: String,
+    pub chat_group_desc: String,
+    pub chat_group_members: String,
 
     // Aris state
     pub aris_chats: Vec<ArisChatDto>,
@@ -77,27 +103,138 @@ pub struct AethravoxApp {
     pub aris_messages: Vec<ArisMessageDto>,
     pub aris_mode: ArisMode,
     pub aris_draft: String,
+    pub aris_credits: ArisCreditsDto,
+    pub aris_busy: bool,
+    pub aris_error: Option<String>,
 
-    // Neon Canvas state
+    // Amigos state
+    pub friends: FriendsPayload,
+    pub friends_search_q: String,
+    pub friends_search_results: Vec<UserSearchDto>,
+    pub friends_direct_user: String,
+    pub friends_error: Option<String>,
+
+    // Comunidades state
+    pub communities: Vec<CommunityDto>,
+    pub active_community: Option<CommunityDetailDto>,
+    pub community_inviteable: Vec<UserSearchDto>,
+    pub community_invite_selected: Vec<i64>,
+    pub community_new_name: String,
+    pub community_new_desc: String,
+    pub community_new_icon: String,
+    pub community_group_name: String,
+    pub community_group_desc: String,
+    pub communities_error: Option<String>,
+
+    // Documentos y Descargas state
+    pub docs: Vec<DocumentDto>,
+    pub docs_search: String,
+    pub docs_error: Option<String>,
+    pub downloads: Vec<DownloadPlatformDto>,
+    pub downloads_error: Option<String>,
+
+    // Asistencia / Tickets state
+    pub tickets: Vec<TicketDto>,
+    pub active_ticket: Option<TicketDetailDto>,
+    pub ticket_type: String,
+    pub ticket_subject: String,
+    pub ticket_body: String,
+    pub ticket_reply_draft: String,
+    pub support_error: Option<String>,
+
+    // Perfil y Ajustes state
+    pub settings_tab_profile: bool,
+    pub profile: Option<ProfilePayload>,
+    pub profile_display_name: String,
+    pub profile_bio: String,
+    pub profile_selected_titles: Vec<i64>,
+    pub profile_primary_title: Option<i64>,
+    pub pw_current: String,
+    pub pw_new: String,
+    pub profile_error: Option<String>,
+
+    // aexTube state
+    pub videos: Vec<VideoDto>,
+    pub aextube_filter: String,
+    pub aextube_error: Option<String>,
+
+    // Playground state
+    pub pg_tab: usize,
+    pub pg_html: String,
+    pub pg_css: String,
+    pub pg_js: String,
+    pub pg_prompt: String,
+    pub pg_note: String,
+    pub pg_busy: bool,
+    pub pg_error: Option<String>,
+
+    // aexOS state
+    pub aexos_profiles: Vec<AexosProfileDto>,
+    pub aexos_active_user_id: i64,
+    pub aexos_link_open: bool,
+    pub aexos_link_user: String,
+    pub aexos_link_pass: String,
+    pub aexos_switch_pass: String,
+    pub aexos_switch_target: Option<i64>,
+    pub aexos_error: Option<String>,
+    pub aexos_new_file_name: String,
+
+    // Transmitir state
+    pub transmit_room: String,
+
+    // Admin state
+    pub admin_overview: Option<AdminOverviewDto>,
+    pub admin_tab: usize,
+    pub admin_ban_target: Option<(i64, String)>,
+    pub admin_ban_reason: String,
+    pub admin_ban_permanent: bool,
+    pub admin_ban_hours: String,
+    pub admin_error: Option<String>,
+
+    // Neon Canvas / PDI state
     pub neon_strokes: Vec<NeonStroke>,
     pub neon_active_stroke: Option<NeonStroke>,
     pub neon_color: egui::Color32,
     pub neon_width: f32,
+    pub neon_board_mode: u8,
 
     // Status toast
     pub status_banner: Option<String>,
 }
 
 impl AethravoxApp {
+    #[allow(dead_code)]
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         tx: mpsc::UnboundedSender<ApiEvent>,
         rx: mpsc::UnboundedReceiver<ApiEvent>,
         rt: tokio::runtime::Handle,
     ) -> Self {
+        Self::new_with_profile(cc, tx, rx, rt, DeviceProfile::Auto)
+    }
+
+    pub fn new_with_profile(
+        cc: &eframe::CreationContext<'_>,
+        tx: mpsc::UnboundedSender<ApiEvent>,
+        rx: mpsc::UnboundedReceiver<ApiEvent>,
+        rt: tokio::runtime::Handle,
+        initial_profile: DeviceProfile,
+    ) -> Self {
         let theme = ThemeKind::Aethravox;
         let color_mode = ColorMode::Dark;
-        apply_theme(&cc.egui_ctx, theme, color_mode);
+        let resolved = if initial_profile == DeviceProfile::Auto {
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            {
+                DeviceProfile::Mobile
+            }
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                DeviceProfile::Desktop
+            }
+        } else {
+            initial_profile
+        };
+        apply_theme_for_device(&cc.egui_ctx, theme, color_mode, resolved);
 
         let (aris_chats, aris_messages) = demo_aris_chats();
 
@@ -111,7 +248,12 @@ impl AethravoxApp {
             offline_mode: false,
             theme,
             color_mode,
-            sidebar_collapsed: false,
+            device_profile: initial_profile,
+            last_applied_profile: resolved,
+            sidebar_collapsed: matches!(initial_profile, DeviceProfile::Tv),
+            mobile_menu_open: false,
+            mobile_detail_open: false,
+            fullscreen: matches!(initial_profile, DeviceProfile::Tv | DeviceProfile::Pdi),
             auth_tab_register: false,
             login_username: String::new(),
             login_password: String::new(),
@@ -130,24 +272,140 @@ impl AethravoxApp {
             chat_sending: false,
             chat_pending: None,
             chat_last_poll: None,
+            chat_new_panel: false,
+            chat_dm_username: String::new(),
+            chat_group_name: String::new(),
+            chat_group_desc: String::new(),
+            chat_group_members: String::new(),
             aris_chats,
             active_aris_chat_id: 1,
             aris_messages,
             aris_mode: ArisMode::Instantaneo,
             aris_draft: String::new(),
+            aris_credits: ArisCreditsDto {
+                daily_limit: 120,
+                daily_used: 0,
+                remaining: 120,
+            },
+            aris_busy: false,
+            aris_error: None,
+            friends: demo_friends(),
+            friends_search_q: String::new(),
+            friends_search_results: Vec::new(),
+            friends_direct_user: String::new(),
+            friends_error: None,
+            communities: demo_communities(),
+            active_community: None,
+            community_inviteable: Vec::new(),
+            community_invite_selected: Vec::new(),
+            community_new_name: String::new(),
+            community_new_desc: String::new(),
+            community_new_icon: String::new(),
+            community_group_name: String::new(),
+            community_group_desc: String::new(),
+            communities_error: None,
+            docs: demo_docs(),
+            docs_search: String::new(),
+            docs_error: None,
+            downloads: demo_downloads(),
+            downloads_error: None,
+            tickets: demo_tickets(),
+            active_ticket: None,
+            ticket_type: "bug".to_string(),
+            ticket_subject: String::new(),
+            ticket_body: String::new(),
+            ticket_reply_draft: String::new(),
+            support_error: None,
+            settings_tab_profile: false,
+            profile: None,
+            profile_display_name: String::new(),
+            profile_bio: String::new(),
+            profile_selected_titles: Vec::new(),
+            profile_primary_title: None,
+            pw_current: String::new(),
+            pw_new: String::new(),
+            profile_error: None,
+            videos: demo_videos(),
+            aextube_filter: "all".to_string(),
+            aextube_error: None,
+            pg_tab: 0,
+            pg_html: "<div class=\"hero\">\n  <h1>Hola Aethravox</h1>\n  <p>Edita este HTML, CSS o JS y ábrelo en vivo.</p>\n</div>".into(),
+            pg_css: "body { background:#06030c; color:#f8f8fc; font-family:sans-serif; padding:40px; }\nh1 { color:#e0a308; }".into(),
+            pg_js: "console.log('Playground listo');".into(),
+            pg_prompt: String::new(),
+            pg_note: String::new(),
+            pg_busy: false,
+            pg_error: None,
+            aexos_profiles: demo_aexos_profiles("Aethravox"),
+            aexos_active_user_id: 1,
+            aexos_link_open: false,
+            aexos_link_user: String::new(),
+            aexos_link_pass: String::new(),
+            aexos_switch_pass: String::new(),
+            aexos_switch_target: None,
+            aexos_error: None,
+            aexos_new_file_name: String::new(),
+            transmit_room: "estudio-01".to_string(),
+            admin_overview: None,
+            admin_tab: 0,
+            admin_ban_target: None,
+            admin_ban_reason: String::new(),
+            admin_ban_permanent: false,
+            admin_ban_hours: "24".to_string(),
+            admin_error: None,
             neon_strokes: Vec::new(),
             neon_active_stroke: None,
             neon_color: egui::Color32::from_rgb(0, 212, 255),
             neon_width: 4.0,
+            neon_board_mode: 0,
             status_banner: None,
         }
     }
 
+    pub fn resolved_device(&self, ctx: &egui::Context) -> DeviceProfile {
+        if self.device_profile != DeviceProfile::Auto {
+            return self.device_profile;
+        }
+        let w = ctx.screen_rect().width();
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            if w > 0.0 && w < 900.0 {
+                return DeviceProfile::Mobile;
+            }
+        }
+        if w > 0.0 && w < 760.0 {
+            DeviceProfile::Mobile
+        } else {
+            DeviceProfile::Desktop
+        }
+    }
+
+    pub fn is_mobile_layout(&self, ctx: &egui::Context) -> bool {
+        self.resolved_device(ctx) == DeviceProfile::Mobile || ctx.screen_rect().width() < 760.0
+    }
+
+    pub fn set_device_profile(&mut self, ctx: &egui::Context, profile: DeviceProfile) {
+        self.device_profile = profile;
+        let resolved = self.resolved_device(ctx);
+        self.last_applied_profile = resolved;
+        apply_theme_for_device(ctx, self.theme, self.color_mode, resolved);
+        if matches!(resolved, DeviceProfile::Tv | DeviceProfile::Pdi) && !self.fullscreen {
+            self.fullscreen = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+        }
+    }
+
+    pub fn toggle_fullscreen(&mut self, ctx: &egui::Context) {
+        self.fullscreen = !self.fullscreen;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+    }
+
     pub fn set_theme(&mut self, ctx: &egui::Context, theme: ThemeKind) {
         self.theme = theme;
-        apply_theme(ctx, self.theme, self.color_mode);
+        let resolved = self.resolved_device(ctx);
+        apply_theme_for_device(ctx, self.theme, self.color_mode, resolved);
         if !self.offline_mode {
-            crate::api::spawn_save_theme(
+            spawn_save_theme(
                 &self.rt,
                 self.tx.clone(),
                 ctx.clone(),
@@ -160,7 +418,8 @@ impl AethravoxApp {
 
     pub fn set_color_mode(&mut self, ctx: &egui::Context, mode: ColorMode) {
         self.color_mode = mode;
-        apply_theme(ctx, self.theme, self.color_mode);
+        let resolved = self.resolved_device(ctx);
+        apply_theme_for_device(ctx, self.theme, self.color_mode, resolved);
     }
 
     pub fn enter_offline_demo(&mut self, username: &str, is_guest: bool) {
@@ -173,37 +432,189 @@ impl AethravoxApp {
         self.chat_messages = demo_chat_messages();
         self.active_conv_id = 1;
         self.chat_error = None;
+        let (ac, am) = demo_aris_chats();
+        self.aris_chats = ac;
+        self.aris_messages = am;
+        self.active_aris_chat_id = 1;
+        self.friends = demo_friends();
+        self.communities = demo_communities();
+        self.docs = demo_docs();
+        self.downloads = demo_downloads();
+        self.tickets = demo_tickets();
+        self.videos = demo_videos();
+        self.aexos_profiles = demo_aexos_profiles(username);
+        self.aexos_active_user_id = 1;
         self.route = Route::Hub;
     }
 
-    pub fn open_app(&mut self, app: &WebAppDto) {
+    pub fn navigate_to(&mut self, ctx: &egui::Context, route: Route) {
+        self.route = route;
+        self.mobile_menu_open = false;
+        self.mobile_detail_open = false;
+        if self.offline_mode {
+            return;
+        }
+        let has_tok = self.token.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
+        match route {
+            Route::Hub => {
+                spawn_fetch_hub(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Aris if has_tok => {
+                spawn_aris_chats(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+                spawn_aris_credits(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Chat if has_tok => {
+                spawn_fetch_conversations(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Friends if has_tok => {
+                spawn_fetch_friends(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Communities => {
+                spawn_fetch_communities(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Docs => {
+                spawn_fetch_docs(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Downloads => {
+                spawn_fetch_downloads(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Support => {
+                spawn_fetch_tickets(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::AexTube => {
+                spawn_fetch_videos(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Aexos if has_tok => {
+                spawn_aexos_profiles(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Settings if has_tok && self.settings_tab_profile => {
+                spawn_fetch_profile(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            Route::Admin if has_tok => {
+                spawn_admin_overview(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    pub fn open_app(&mut self, ctx: &egui::Context, app: &WebAppDto) {
         if !app.clickable {
             self.locked_modal = Some((app.name.clone(), app.lock_message.clone()));
             return;
         }
-        match app.slug.as_str() {
-            "aris" => self.route = Route::Aris,
-            "chat" => self.route = Route::Chat,
-            "neon-canvas" => self.route = Route::NeonCanvas,
-            "dashboard" | "perfil" => self.route = Route::Settings,
-            "friends" => self.route = Route::Placeholder("Amigos"),
-            "communities" => self.route = Route::Placeholder("Comunidades"),
-            "docs" => self.route = Route::Placeholder("Documentos"),
-            "aexos" => self.route = Route::Placeholder("aexOS Desktop"),
-            "aextube" => self.route = Route::Placeholder("aexTube"),
-            "playground" => self.route = Route::Placeholder("Playground"),
-            "transmitir" => self.route = Route::Placeholder("Transmitir"),
-            "descargas" => self.route = Route::Placeholder("Descargas"),
-            "support" => self.route = Route::Placeholder("Asistencia"),
-            _ => self.route = Route::Placeholder("Sección en migración a egui"),
-        }
+        let target = match app.slug.as_str() {
+            "aris" => Route::Aris,
+            "chat" => Route::Chat,
+            "friends" => Route::Friends,
+            "communities" => Route::Communities,
+            "docs" => Route::Docs,
+            "neon-canvas" => Route::NeonCanvas,
+            "aextube" => Route::AexTube,
+            "playground" => Route::Playground,
+            "aexos" => Route::Aexos,
+            "descargas" => Route::Downloads,
+            "support" => Route::Support,
+            "transmitir" => Route::Transmit,
+            "dashboard" | "perfil" => Route::Settings,
+            "admin" => Route::Admin,
+            other => {
+                self.status_banner = Some(format!("Sección /{other} en preparación."));
+                Route::Hub
+            }
+        };
+        self.navigate_to(ctx, target);
     }
 
     pub fn logout(&mut self) {
+        if !self.offline_mode && self.token.is_some() {
+            spawn_logout(&self.rt, self.server_url.clone(), self.token.clone());
+        }
         self.token = None;
         self.hub = None;
         self.offline_mode = false;
         self.login_password.clear();
+        self.profile = None;
+        self.admin_overview = None;
+        self.active_community = None;
+        self.active_ticket = None;
         self.reset_chat_state();
         self.route = Route::Login;
     }
@@ -343,10 +754,14 @@ impl AethravoxApp {
                     self.offline_mode = false;
                     self.token = Some(auth.token.clone());
                     self.reset_chat_state();
+                    self.aris_chats.clear();
+                    self.aris_messages.clear();
+                    self.active_aris_chat_id = 0;
                     self.theme = auth.user.theme;
-                    apply_theme(ctx, self.theme, self.color_mode);
+                    let resolved = self.resolved_device(ctx);
+                    apply_theme_for_device(ctx, self.theme, self.color_mode, resolved);
                     self.route = Route::Hub;
-                    crate::api::spawn_fetch_hub(
+                    spawn_fetch_hub(
                         &self.rt,
                         self.tx.clone(),
                         ctx.clone(),
@@ -360,7 +775,8 @@ impl AethravoxApp {
                 }
                 ApiEvent::HubLoaded(hub) => {
                     self.theme = hub.user.theme;
-                    apply_theme(ctx, self.theme, self.color_mode);
+                    let resolved = self.resolved_device(ctx);
+                    apply_theme_for_device(ctx, self.theme, self.color_mode, resolved);
                     self.hub = Some(hub);
                 }
                 ApiEvent::HubErr(msg) => {
@@ -370,6 +786,8 @@ impl AethravoxApp {
                 ApiEvent::StatusNote(note) => {
                     self.status_banner = Some(note);
                 }
+
+                // Chat
                 ApiEvent::ConversationsLoaded(list) => {
                     self.chat_error = None;
                     self.conversations = list;
@@ -395,8 +813,18 @@ impl AethravoxApp {
                     if !self.chat_messages.iter().any(|m| m.id == msg.id) {
                         self.chat_messages.push(msg);
                     }
-                    // Refrescar enseguida la lista y los mensajes.
                     self.chat_last_poll = None;
+                }
+                ApiEvent::ChatRoomOpened(conv_id) => {
+                    self.chat_last_poll = None;
+                    spawn_fetch_conversations(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                    self.chat_open_conversation(ctx, conv_id);
                 }
                 ApiEvent::ChatErr(msg) => {
                     self.chat_error = Some(msg);
@@ -410,6 +838,324 @@ impl AethravoxApp {
                         }
                     }
                 }
+
+                // Aris IA
+                ApiEvent::ArisCreditsLoaded(c) => {
+                    self.aris_credits = c;
+                }
+                ApiEvent::ArisChatsLoaded(list) => {
+                    self.aris_error = None;
+                    self.aris_chats = list;
+                    let exists = self
+                        .aris_chats
+                        .iter()
+                        .any(|c| c.id == self.active_aris_chat_id);
+                    if !exists {
+                        if let Some(first) = self.aris_chats.first().map(|c| c.id) {
+                            self.active_aris_chat_id = first;
+                            spawn_aris_messages(
+                                &self.rt,
+                                self.tx.clone(),
+                                ctx.clone(),
+                                self.server_url.clone(),
+                                self.token.clone(),
+                                first,
+                            );
+                        } else {
+                            self.active_aris_chat_id = 0;
+                            self.aris_messages.clear();
+                        }
+                    }
+                }
+                ApiEvent::ArisChatCreated(chat) => {
+                    self.aris_error = None;
+                    self.active_aris_chat_id = chat.id;
+                    self.aris_chats.insert(0, chat);
+                    self.aris_messages.clear();
+                }
+                ApiEvent::ArisChatDeleted(cid) => {
+                    self.aris_chats.retain(|c| c.id != cid);
+                    if self.active_aris_chat_id == cid {
+                        self.active_aris_chat_id =
+                            self.aris_chats.first().map(|c| c.id).unwrap_or(0);
+                        self.aris_messages.clear();
+                        if self.active_aris_chat_id > 0 {
+                            spawn_aris_messages(
+                                &self.rt,
+                                self.tx.clone(),
+                                ctx.clone(),
+                                self.server_url.clone(),
+                                self.token.clone(),
+                                self.active_aris_chat_id,
+                            );
+                        }
+                    }
+                }
+                ApiEvent::ArisChatPinned { chat_id, pinned } => {
+                    if let Some(c) = self.aris_chats.iter_mut().find(|c| c.id == chat_id) {
+                        c.pinned = pinned;
+                    }
+                }
+                ApiEvent::ArisMessagesLoaded { chat_id, messages } => {
+                    if chat_id == self.active_aris_chat_id {
+                        self.aris_messages = messages;
+                    }
+                }
+                ApiEvent::ArisReplyOk { chat_id, res } => {
+                    self.aris_busy = false;
+                    self.aris_error = None;
+                    self.aris_credits = res.credits;
+                    if chat_id == self.active_aris_chat_id {
+                        self.aris_messages.push(res.assistant_message);
+                        spawn_aris_messages(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                            chat_id,
+                        );
+                    }
+                }
+                ApiEvent::ArisErr(e) => {
+                    self.aris_busy = false;
+                    self.aris_error = Some(e);
+                }
+
+                // Amigos
+                ApiEvent::FriendsLoaded(p) => {
+                    self.friends_error = None;
+                    self.friends = p;
+                }
+                ApiEvent::FriendSearchLoaded(list) => {
+                    self.friends_search_results = list;
+                }
+                ApiEvent::FriendsActionOk(msg) => {
+                    self.friends_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_friends(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::FriendsErr(e) => {
+                    self.friends_error = Some(e);
+                }
+
+                // Comunidades
+                ApiEvent::CommunitiesLoaded(list) => {
+                    self.communities_error = None;
+                    self.communities = list;
+                }
+                ApiEvent::CommunityDetailLoaded(detail) => {
+                    self.communities_error = None;
+                    self.active_community = Some(detail);
+                }
+                ApiEvent::CommunityInviteableLoaded(list) => {
+                    self.community_inviteable = list;
+                    self.community_invite_selected.clear();
+                }
+                ApiEvent::CommunitiesActionOk(msg) => {
+                    self.communities_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_communities(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                    if let Some(cid) = self.active_community.as_ref().map(|d| d.community.id) {
+                        spawn_community_detail(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                            cid,
+                        );
+                        spawn_community_inviteable(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                            cid,
+                        );
+                    }
+                }
+                ApiEvent::CommunitiesErr(e) => {
+                    self.communities_error = Some(e);
+                }
+
+                // Docs y Downloads
+                ApiEvent::DocsLoaded(list) => {
+                    self.docs_error = None;
+                    self.docs = list;
+                }
+                ApiEvent::DocsErr(e) => {
+                    self.docs_error = Some(e);
+                }
+                ApiEvent::DownloadsLoaded(list) => {
+                    self.downloads_error = None;
+                    self.downloads = list;
+                }
+                ApiEvent::DownloadsErr(e) => {
+                    self.downloads_error = Some(e);
+                }
+
+                // Support / Tickets
+                ApiEvent::TicketsLoaded(list) => {
+                    self.support_error = None;
+                    self.tickets = list;
+                }
+                ApiEvent::TicketDetailLoaded(detail) => {
+                    self.support_error = None;
+                    self.active_ticket = Some(detail);
+                }
+                ApiEvent::SupportActionOk(msg) => {
+                    self.support_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_tickets(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                    if let Some(tid) = self.active_ticket.as_ref().map(|d| d.ticket.id) {
+                        spawn_ticket_detail(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                            tid,
+                        );
+                    }
+                }
+                ApiEvent::SupportErr(e) => {
+                    self.support_error = Some(e);
+                }
+
+                // Perfil
+                ApiEvent::ProfileLoaded(p) => {
+                    self.profile_error = None;
+                    self.profile_display_name = p.display_name.clone();
+                    self.profile_bio = p.bio.clone();
+                    self.profile_selected_titles = p
+                        .titles
+                        .iter()
+                        .filter(|t| t.selected)
+                        .map(|t| t.id)
+                        .collect();
+                    self.profile_primary_title =
+                        p.titles.iter().find(|t| t.is_primary).map(|t| t.id);
+                    self.profile = Some(p);
+                }
+                ApiEvent::ProfileActionOk(msg) => {
+                    self.profile_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_profile(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                    spawn_fetch_hub(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::ProfileErr(e) => {
+                    self.profile_error = Some(e);
+                }
+
+                // aexTube
+                ApiEvent::VideosLoaded(list) => {
+                    self.aextube_error = None;
+                    self.videos = list;
+                }
+                ApiEvent::AextubeActionOk(msg) => {
+                    self.aextube_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_fetch_videos(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::AextubeErr(e) => {
+                    self.aextube_error = Some(e);
+                }
+
+                // Playground
+                ApiEvent::PlaygroundGenOk(res) => {
+                    self.pg_busy = false;
+                    self.pg_error = None;
+                    self.pg_html = res.html;
+                    self.pg_css = res.css;
+                    self.pg_js = res.js;
+                    self.pg_note = format!("{} ({} · {})", res.note, res.model, res.provider);
+                }
+                ApiEvent::PlaygroundGenErr(e) => {
+                    self.pg_busy = false;
+                    self.pg_error = Some(e);
+                }
+
+                // aexOS
+                ApiEvent::AexosProfilesLoaded(list) => {
+                    self.aexos_error = None;
+                    let keep = list
+                        .iter()
+                        .any(|p| p.user_id == self.aexos_active_user_id);
+                    if !keep {
+                        self.aexos_active_user_id =
+                            list.first().map(|p| p.user_id).unwrap_or(0);
+                    }
+                    self.aexos_profiles = list;
+                }
+                ApiEvent::AexosSwitched(uid) => {
+                    self.aexos_error = None;
+                    self.aexos_active_user_id = uid;
+                    self.status_banner = Some("Perfil de aexOS cambiado.".into());
+                }
+                ApiEvent::AexosActionOk(msg) => {
+                    self.aexos_error = None;
+                    self.status_banner = Some(msg);
+                }
+                ApiEvent::AexosErr(e) => {
+                    self.aexos_error = Some(e);
+                }
+
+                // Admin
+                ApiEvent::AdminOverviewLoaded(ov) => {
+                    self.admin_error = None;
+                    self.admin_overview = Some(ov);
+                }
+                ApiEvent::AdminActionOk(msg) => {
+                    self.admin_error = None;
+                    self.status_banner = Some(msg);
+                    spawn_admin_overview(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::AdminErr(e) => {
+                    self.admin_error = Some(e);
+                }
             }
         }
     }
@@ -419,6 +1165,28 @@ impl eframe::App for AethravoxApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events(ctx);
         self.chat_poll(ctx);
+
+        let resolved = self.resolved_device(ctx);
+        if resolved != self.last_applied_profile {
+            self.last_applied_profile = resolved;
+            apply_theme_for_device(ctx, self.theme, self.color_mode, resolved);
+        }
+
+        // Navegación rápida atrás (Esc en TV/Android Back o PDI)
+        if self.route != Route::Login
+            && self.route != Route::Hub
+            && matches!(resolved, DeviceProfile::Tv | DeviceProfile::Mobile)
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            if self.mobile_menu_open {
+                self.mobile_menu_open = false;
+            } else if self.mobile_detail_open {
+                self.mobile_detail_open = false;
+            } else {
+                self.navigate_to(ctx, Route::Hub);
+            }
+        }
+
         let p: Palette = Palette::from(self.theme, self.color_mode);
 
         if self.route == Route::Login {
@@ -430,63 +1198,135 @@ impl eframe::App for AethravoxApp {
             return;
         }
 
+        let mobile = self.is_mobile_layout(ctx);
+        let safe_top = if cfg!(any(target_os = "android", target_os = "ios")) {
+            14.0
+        } else {
+            8.0
+        };
+        let top_h = if mobile {
+            58.0 + safe_top
+        } else if matches!(resolved, DeviceProfile::Tv | DeviceProfile::Pdi) {
+            62.0
+        } else {
+            54.0
+        };
+
         // Top header bar
         egui::TopBottomPanel::top("top_header")
-            .exact_height(54.0)
+            .exact_height(top_h)
             .frame(
                 egui::Frame::none()
                     .fill(p.bg_surface)
                     .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
-                    .inner_margin(egui::Margin::symmetric(16.0, 8.0)),
+                    .inner_margin(egui::Margin {
+                        left: 14.0,
+                        right: 14.0,
+                        top: safe_top,
+                        bottom: 8.0,
+                    }),
             )
             .show(ctx, |ui| {
                 ui::sidebar::show_topbar(self, ui, ctx, &p);
             });
 
-        // Left navigation sidebar
-        let side_w = if self.sidebar_collapsed { 64.0 } else { 228.0 };
-        egui::SidePanel::left("left_sidebar")
-            .resizable(false)
-            .exact_width(side_w)
-            .frame(
-                egui::Frame::none()
-                    .fill(p.bg_surface)
-                    .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
-                    .inner_margin(egui::Margin::same(10.0)),
-            )
-            .show(ctx, |ui| {
-                ui::sidebar::show_sidebar(self, ui, ctx, &p);
-            });
+        if mobile {
+            let safe_bottom = if cfg!(any(target_os = "android", target_os = "ios")) {
+                14.0
+            } else {
+                6.0
+            };
+            egui::TopBottomPanel::bottom("mobile_nav")
+                .exact_height(56.0 + safe_bottom)
+                .frame(
+                    egui::Frame::none()
+                        .fill(p.bg_surface)
+                        .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
+                        .inner_margin(egui::Margin {
+                            left: 8.0,
+                            right: 8.0,
+                            top: 6.0,
+                            bottom: safe_bottom,
+                        }),
+                )
+                .show(ctx, |ui| {
+                    ui::sidebar::show_mobile_bottom_bar(self, ui, ctx, &p);
+                });
+        } else {
+            // Left navigation sidebar (PC / TV / PDI)
+            let side_w = if self.sidebar_collapsed {
+                68.0
+            } else if matches!(resolved, DeviceProfile::Tv | DeviceProfile::Pdi) {
+                268.0
+            } else {
+                228.0
+            };
+            egui::SidePanel::left("left_sidebar")
+                .resizable(false)
+                .exact_width(side_w)
+                .frame(
+                    egui::Frame::none()
+                        .fill(p.bg_surface)
+                        .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
+                        .inner_margin(egui::Margin::same(10.0)),
+                )
+                .show(ctx, |ui| {
+                    ui::sidebar::show_sidebar(self, ui, ctx, &p);
+                });
+        }
 
+        if resolved == DeviceProfile::Tv {
+            egui::TopBottomPanel::bottom("tv_hint_bar")
+                .exact_height(32.0)
+                .frame(
+                    egui::Frame::none()
+                        .fill(p.bg_surface)
+                        .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
+                        .inner_margin(egui::Margin::symmetric(16.0, 4.0)),
+                )
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(
+                                "📺 Modo TV · Usa cruceta / Tab + Enter para seleccionar · Esc / Atrás vuelve al Hub",
+                            )
+                            .small()
+                            .color(p.text_muted),
+                        );
+                    });
+                });
+        }
+
+        let content_margin = if mobile { 10.0 } else { 22.0 };
         // Main workspace panel
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::none()
                     .fill(p.bg_base)
-                    .inner_margin(egui::Margin::same(22.0)),
+                    .inner_margin(egui::Margin::same(content_margin)),
             )
-            .show(ctx, |ui| match self.route {
-                Route::Login => {}
-                Route::Hub => ui::hub::show(self, ui, &p),
-                Route::Aris => ui::aris::show(self, ui, &p),
-                Route::Chat => ui::chat::show(self, ui, &p),
-                Route::NeonCanvas => ui::neon_canvas::show(self, ui, &p),
-                Route::Settings => ui::settings::show(self, ui, ctx, &p),
-                Route::Placeholder(title) => {
-                    crate::theme::card_frame(&p).show(ui, |ui| {
-                        ui.heading(title);
-                        ui.add_space(6.0);
-                        ui.label(
-                            egui::RichText::new(
-                                "Módulo preparado para migración nativa en egui dentro del workspace.",
-                            )
-                            .color(p.text_muted),
-                        );
-                        ui.add_space(12.0);
-                        if ui.button("← Volver al Hub").clicked() {
-                            self.route = Route::Hub;
-                        }
-                    });
+            .show(ctx, |ui| {
+                if mobile && self.mobile_menu_open {
+                    ui::sidebar::show_mobile_drawer(self, ui, ctx, &p);
+                    return;
+                }
+                match self.route {
+                    Route::Login => {}
+                    Route::Hub => ui::hub::show(self, ui, &p),
+                    Route::Aris => ui::aris::show(self, ui, &p),
+                    Route::Chat => ui::chat::show(self, ui, &p),
+                    Route::Friends => ui::friends::show(self, ui, &p),
+                    Route::Communities => ui::communities::show(self, ui, &p),
+                    Route::Docs => ui::docs::show(self, ui, &p),
+                    Route::NeonCanvas => ui::neon_canvas::show(self, ui, &p),
+                    Route::AexTube => ui::aextube::show(self, ui, &p),
+                    Route::Playground => ui::playground::show(self, ui, &p),
+                    Route::Aexos => ui::aexos::show(self, ui, &p),
+                    Route::Downloads => ui::downloads::show(self, ui, &p),
+                    Route::Support => ui::support::show(self, ui, &p),
+                    Route::Transmit => ui::transmit::show(self, ui, &p),
+                    Route::Settings => ui::settings::show(self, ui, ctx, &p),
+                    Route::Admin => ui::admin::show(self, ui, &p),
                 }
             });
 

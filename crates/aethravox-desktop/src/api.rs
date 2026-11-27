@@ -1,8 +1,18 @@
 use aethravox_core::{
-    ApiError, ArisChatDto, ArisMessageDto, AuthSuccess, CategoryRowDto, ChatConversationDto,
-    ChatMessageDto, HubPayload, HubStatsDto, LoginRequest, RegisterRequest, SendMessageRequest,
-    ThemeKind, ThemeSelectRequest, UserSummary, WebAppDto,
+    AdminBanRequest, AdminOverviewDto, AdminRoleRequest, AexosLinkRequest, AexosProfileDto,
+    AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto, ArisCreateChatRequest,
+    ArisCreditsDto, ArisMessageDto, ArisMode, ArisSendRequest, ArisSendResponse, AuthSuccess,
+    CategoryRowDto, ChangePasswordRequest, ChatConversationDto, ChatMessageDto, CommunityDetailDto,
+    CommunityDto, CreateCommunityGroupRequest, CreateCommunityRequest, CreateGroupRequest,
+    CreateTicketRequest, DocumentDto, DownloadAppDto, DownloadFileDto, DownloadPlatformDto,
+    FriendDto, FriendRequestBody, FriendsPayload, HubPayload, HubStatsDto, InviteCommunityRequest,
+    LoginRequest, PendingFriendDto, PlaygroundGenRequest, PlaygroundGenResult, ProfilePayload,
+    RegisterRequest, ReplyTicketRequest, SendMessageRequest, StartDmRequest, StartDmResponse,
+    ThemeKind, ThemeSelectRequest, TicketActionRequest, TicketDetailDto, TicketDto,
+    UpdateProfileRequest, UpdateTitlesRequest, UserSearchDto, UserSummary, VideoDto,
+    VideoReactRequest, WebAppDto,
 };
+use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug, Clone)]
 pub enum ApiEvent {
@@ -14,15 +24,206 @@ pub enum ApiEvent {
     ThemeSaved(ThemeKind),
     #[allow(dead_code)]
     StatusNote(String),
+
+    // Chat
     ConversationsLoaded(Vec<ChatConversationDto>),
     MessagesLoaded {
         conv_id: i64,
         messages: Vec<ChatMessageDto>,
     },
     MessageSent(ChatMessageDto),
+    ChatRoomOpened(i64),
     ChatErr(String),
     ChatSendErr(String),
+
+    // Aris IA
+    ArisCreditsLoaded(ArisCreditsDto),
+    ArisChatsLoaded(Vec<ArisChatDto>),
+    ArisChatCreated(ArisChatDto),
+    ArisChatDeleted(i64),
+    ArisChatPinned {
+        chat_id: i64,
+        pinned: bool,
+    },
+    ArisMessagesLoaded {
+        chat_id: i64,
+        messages: Vec<ArisMessageDto>,
+    },
+    ArisReplyOk {
+        chat_id: i64,
+        res: ArisSendResponse,
+    },
+    ArisErr(String),
+
+    // Amigos
+    FriendsLoaded(FriendsPayload),
+    FriendSearchLoaded(Vec<UserSearchDto>),
+    FriendsActionOk(String),
+    FriendsErr(String),
+
+    // Comunidades
+    CommunitiesLoaded(Vec<CommunityDto>),
+    CommunityDetailLoaded(CommunityDetailDto),
+    CommunityInviteableLoaded(Vec<UserSearchDto>),
+    CommunitiesActionOk(String),
+    CommunitiesErr(String),
+
+    // Documentos y Descargas
+    DocsLoaded(Vec<DocumentDto>),
+    DocsErr(String),
+    DownloadsLoaded(Vec<DownloadPlatformDto>),
+    DownloadsErr(String),
+
+    // Asistencia / Tickets
+    TicketsLoaded(Vec<TicketDto>),
+    TicketDetailLoaded(TicketDetailDto),
+    SupportActionOk(String),
+    SupportErr(String),
+
+    // Perfil y Sesiones
+    ProfileLoaded(ProfilePayload),
+    ProfileActionOk(String),
+    ProfileErr(String),
+
+    // aexTube
+    VideosLoaded(Vec<VideoDto>),
+    AextubeActionOk(String),
+    AextubeErr(String),
+
+    // Playground
+    PlaygroundGenOk(PlaygroundGenResult),
+    PlaygroundGenErr(String),
+
+    // aexOS
+    AexosProfilesLoaded(Vec<AexosProfileDto>),
+    AexosSwitched(i64),
+    AexosActionOk(String),
+    AexosErr(String),
+
+    // Admin
+    AdminOverviewLoaded(AdminOverviewDto),
+    AdminActionOk(String),
+    AdminErr(String),
 }
+
+fn encode_uri_component(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.as_bytes() {
+        let is_unreserved = matches!(
+            b,
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~'
+        );
+        if is_unreserved {
+            out.push(*b as char);
+        } else {
+            out.push_str(&format!("%{:02X}", b));
+        }
+    }
+    out
+}
+
+async fn read_error(resp: reqwest::Response) -> String {
+    let status = resp.status();
+    resp.json::<ApiError>()
+        .await
+        .map(|e| e.error)
+        .unwrap_or_else(|_| format!("HTTP {status}"))
+}
+
+async fn get_json<T: DeserializeOwned>(
+    base_url: &str,
+    path: &str,
+    token: &Option<String>,
+) -> Result<T, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let mut req = client.get(&url);
+    if let Some(tok) = token {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
+    match req.send().await {
+        Ok(resp) if resp.status().is_success() => resp
+            .json::<T>()
+            .await
+            .map_err(|e| format!("Error parseando respuesta: {e}")),
+        Ok(resp) => Err(read_error(resp).await),
+        Err(e) => Err(format!("Servidor no disponible: {e}")),
+    }
+}
+
+async fn post_json<B: Serialize, T: DeserializeOwned>(
+    base_url: &str,
+    path: &str,
+    token: &Option<String>,
+    body: &B,
+) -> Result<T, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let mut req = client.post(&url).json(body);
+    if let Some(tok) = token {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
+    match req.send().await {
+        Ok(resp) if resp.status().is_success() => resp
+            .json::<T>()
+            .await
+            .map_err(|e| format!("Error parseando respuesta: {e}")),
+        Ok(resp) => Err(read_error(resp).await),
+        Err(e) => Err(format!("Servidor no disponible: {e}")),
+    }
+}
+
+async fn post_empty<T: DeserializeOwned>(
+    base_url: &str,
+    path: &str,
+    token: &Option<String>,
+) -> Result<T, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let mut req = client.post(&url);
+    if let Some(tok) = token {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
+    match req.send().await {
+        Ok(resp) if resp.status().is_success() => resp
+            .json::<T>()
+            .await
+            .map_err(|e| format!("Error parseando respuesta: {e}")),
+        Ok(resp) => Err(read_error(resp).await),
+        Err(e) => Err(format!("Servidor no disponible: {e}")),
+    }
+}
+
+async fn delete_json<T: DeserializeOwned>(
+    base_url: &str,
+    path: &str,
+    token: &Option<String>,
+) -> Result<T, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let mut req = client.delete(&url);
+    if let Some(tok) = token {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
+    match req.send().await {
+        Ok(resp) if resp.status().is_success() => resp
+            .json::<T>()
+            .await
+            .map_err(|e| format!("Error parseando respuesta: {e}")),
+        Ok(resp) => Err(read_error(resp).await),
+        Err(e) => Err(format!("Servidor no disponible: {e}")),
+    }
+}
+
+// ===================== Auth & Hub =====================
 
 pub fn spawn_login(
     rt: &tokio::runtime::Handle,
@@ -35,24 +236,17 @@ pub fn spawn_login(
         let client = reqwest::Client::new();
         let url = format!("{}/api/v1/auth/login", base_url.trim_end_matches('/'));
         match client.post(&url).json(&req).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    match resp.json::<AuthSuccess>().await {
-                        Ok(data) => {
-                            let _ = tx.send(ApiEvent::AuthOk(data));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(ApiEvent::AuthErr(format!("Error parseando respuesta: {e}")));
-                        }
-                    }
-                } else {
-                    let msg = resp
-                        .json::<ApiError>()
-                        .await
-                        .map(|e| e.error)
-                        .unwrap_or_else(|_| "Credenciales inválidas.".into());
-                    let _ = tx.send(ApiEvent::AuthErr(msg));
+            Ok(resp) if resp.status().is_success() => match resp.json::<AuthSuccess>().await {
+                Ok(data) => {
+                    let _ = tx.send(ApiEvent::AuthOk(data));
                 }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AuthErr(format!("Error parseando respuesta: {e}")));
+                }
+            },
+            Ok(resp) => {
+                let msg = read_error(resp).await;
+                let _ = tx.send(ApiEvent::AuthErr(msg));
             }
             Err(e) => {
                 let _ = tx.send(ApiEvent::AuthErr(format!(
@@ -75,24 +269,17 @@ pub fn spawn_register(
         let client = reqwest::Client::new();
         let url = format!("{}/api/v1/auth/register", base_url.trim_end_matches('/'));
         match client.post(&url).json(&req).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    match resp.json::<AuthSuccess>().await {
-                        Ok(data) => {
-                            let _ = tx.send(ApiEvent::AuthOk(data));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(ApiEvent::AuthErr(format!("Error parseando respuesta: {e}")));
-                        }
-                    }
-                } else {
-                    let msg = resp
-                        .json::<ApiError>()
-                        .await
-                        .map(|e| e.error)
-                        .unwrap_or_else(|_| "No se pudo registrar.".into());
-                    let _ = tx.send(ApiEvent::AuthErr(msg));
+            Ok(resp) if resp.status().is_success() => match resp.json::<AuthSuccess>().await {
+                Ok(data) => {
+                    let _ = tx.send(ApiEvent::AuthOk(data));
                 }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AuthErr(format!("Error parseando respuesta: {e}")));
+                }
+            },
+            Ok(resp) => {
+                let msg = read_error(resp).await;
+                let _ = tx.send(ApiEvent::AuthErr(msg));
             }
             Err(e) => {
                 let _ = tx.send(ApiEvent::AuthErr(format!(
@@ -104,6 +291,15 @@ pub fn spawn_register(
     });
 }
 
+pub fn spawn_logout(rt: &tokio::runtime::Handle, base_url: String, token: Option<String>) {
+    rt.spawn(async move {
+        if token.as_ref().map(|t| !t.is_empty()).unwrap_or(false) {
+            let _: Result<serde_json::Value, _> =
+                post_empty(&base_url, "/api/v1/auth/logout", &token).await;
+        }
+    });
+}
+
 pub fn spawn_fetch_hub(
     rt: &tokio::runtime::Handle,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
@@ -112,28 +308,12 @@ pub fn spawn_fetch_hub(
     token: Option<String>,
 ) {
     rt.spawn(async move {
-        let client = reqwest::Client::new();
-        let url = format!("{}/api/v1/hub", base_url.trim_end_matches('/'));
-        let mut req = client.get(&url);
-        if let Some(tok) = token {
-            if !tok.is_empty() {
-                req = req.bearer_auth(tok);
-            }
-        }
-        match req.send().await {
-            Ok(resp) if resp.status().is_success() => match resp.json::<HubPayload>().await {
-                Ok(hub) => {
-                    let _ = tx.send(ApiEvent::HubLoaded(hub));
-                }
-                Err(e) => {
-                    let _ = tx.send(ApiEvent::HubErr(format!("Error parseando hub: {e}")));
-                }
-            },
-            Ok(resp) => {
-                let _ = tx.send(ApiEvent::HubErr(format!("HTTP {}", resp.status())));
+        match get_json::<HubPayload>(&base_url, "/api/v1/hub", &token).await {
+            Ok(hub) => {
+                let _ = tx.send(ApiEvent::HubLoaded(hub));
             }
             Err(e) => {
-                let _ = tx.send(ApiEvent::HubErr(format!("Servidor no disponible: {e}")));
+                let _ = tx.send(ApiEvent::HubErr(e));
             }
         }
         ctx.request_repaint();
@@ -149,19 +329,16 @@ pub fn spawn_save_theme(
     theme: ThemeKind,
 ) {
     rt.spawn(async move {
-        if let Some(tok) = token {
-            if !tok.is_empty() {
-                let client = reqwest::Client::new();
-                let url = format!("{}/api/v1/theme", base_url.trim_end_matches('/'));
-                let _ = client
-                    .post(&url)
-                    .bearer_auth(tok)
-                    .json(&ThemeSelectRequest {
-                        theme: theme.as_str().to_string(),
-                    })
-                    .send()
-                    .await;
-            }
+        if token.as_ref().map(|t| !t.is_empty()).unwrap_or(false) {
+            let _: Result<serde_json::Value, _> = post_json(
+                &base_url,
+                "/api/v1/theme",
+                &token,
+                &ThemeSelectRequest {
+                    theme: theme.as_str().to_string(),
+                },
+            )
+            .await;
         }
         let _ = tx.send(ApiEvent::ThemeSaved(theme));
         ctx.request_repaint();
@@ -169,37 +346,6 @@ pub fn spawn_save_theme(
 }
 
 // ===================== Chat =====================
-
-async fn read_error(resp: reqwest::Response) -> String {
-    let status = resp.status();
-    resp.json::<ApiError>()
-        .await
-        .map(|e| e.error)
-        .unwrap_or_else(|_| format!("HTTP {status}"))
-}
-
-async fn get_json<T: serde::de::DeserializeOwned>(
-    base_url: &str,
-    path: &str,
-    token: &Option<String>,
-) -> Result<T, String> {
-    let client = reqwest::Client::new();
-    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
-    let mut req = client.get(&url);
-    if let Some(tok) = token {
-        if !tok.is_empty() {
-            req = req.bearer_auth(tok);
-        }
-    }
-    match req.send().await {
-        Ok(resp) if resp.status().is_success() => resp
-            .json::<T>()
-            .await
-            .map_err(|e| format!("Error parseando respuesta: {e}")),
-        Ok(resp) => Err(read_error(resp).await),
-        Err(e) => Err(format!("Servidor no disponible: {e}")),
-    }
-}
 
 pub fn spawn_fetch_conversations(
     rt: &tokio::runtime::Handle,
@@ -255,36 +401,20 @@ pub fn spawn_send_message(
     body: String,
 ) {
     rt.spawn(async move {
-        let client = reqwest::Client::new();
-        let url = format!(
-            "{}/api/v1/chat/conversations/{}/messages",
-            base_url.trim_end_matches('/'),
-            conv_id
-        );
-        let mut req = client.post(&url).json(&SendMessageRequest { body });
-        if let Some(tok) = token {
-            if !tok.is_empty() {
-                req = req.bearer_auth(tok);
-            }
-        }
-        match req.send().await {
-            Ok(resp) if resp.status().is_success() => match resp.json::<ChatMessageDto>().await {
-                Ok(msg) => {
-                    let _ = tx.send(ApiEvent::MessageSent(msg));
-                }
-                Err(e) => {
-                    let _ = tx.send(ApiEvent::ChatSendErr(format!(
-                        "Error parseando respuesta: {e}"
-                    )));
-                }
-            },
-            Ok(resp) => {
-                let _ = tx.send(ApiEvent::ChatSendErr(read_error(resp).await));
+        let path = format!("/api/v1/chat/conversations/{conv_id}/messages");
+        match post_json::<SendMessageRequest, ChatMessageDto>(
+            &base_url,
+            &path,
+            &token,
+            &SendMessageRequest { body },
+        )
+        .await
+        {
+            Ok(msg) => {
+                let _ = tx.send(ApiEvent::MessageSent(msg));
             }
             Err(e) => {
-                let _ = tx.send(ApiEvent::ChatSendErr(format!(
-                    "Servidor no disponible: {e}"
-                )));
+                let _ = tx.send(ApiEvent::ChatSendErr(e));
             }
         }
         ctx.request_repaint();
@@ -298,23 +428,1220 @@ pub fn spawn_mark_read(
     conv_id: i64,
 ) {
     rt.spawn(async move {
-        let client = reqwest::Client::new();
-        let url = format!(
-            "{}/api/v1/chat/conversations/{}/read",
-            base_url.trim_end_matches('/'),
-            conv_id
-        );
-        let mut req = client.post(&url);
-        if let Some(tok) = token {
-            if !tok.is_empty() {
-                req = req.bearer_auth(tok);
-            }
-        }
-        let _ = req.send().await;
+        let path = format!("/api/v1/chat/conversations/{conv_id}/read");
+        let _: Result<serde_json::Value, _> = post_empty(&base_url, &path, &token).await;
     });
 }
 
-/// Datos locales por defecto para probar el cliente desktop de inmediato sin servidor.
+pub fn spawn_start_dm(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    username: String,
+) {
+    rt.spawn(async move {
+        match post_json::<StartDmRequest, StartDmResponse>(
+            &base_url,
+            "/api/v1/chat/dm",
+            &token,
+            &StartDmRequest { username },
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::ChatRoomOpened(res.conversation_id));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_create_group(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: CreateGroupRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<CreateGroupRequest, StartDmResponse>(
+            &base_url,
+            "/api/v1/chat/group",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::ChatRoomOpened(res.conversation_id));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Aris IA =====================
+
+pub fn spawn_aris_credits(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        if let Ok(c) = get_json::<ArisCreditsDto>(&base_url, "/api/v1/aris/credits", &token).await {
+            let _ = tx.send(ApiEvent::ArisCreditsLoaded(c));
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aris_chats(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<ArisChatDto>>(&base_url, "/api/v1/aris/chats", &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::ArisChatsLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ArisErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aris_create_chat(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title: Option<String>,
+) {
+    rt.spawn(async move {
+        match post_json::<ArisCreateChatRequest, ArisChatDto>(
+            &base_url,
+            "/api/v1/aris/chats",
+            &token,
+            &ArisCreateChatRequest { title },
+        )
+        .await
+        {
+            Ok(chat) => {
+                let _ = tx.send(ApiEvent::ArisChatCreated(chat));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ArisErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aris_delete_chat(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    chat_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aris/chats/{chat_id}");
+        match delete_json::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ArisChatDeleted(chat_id));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ArisErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aris_pin_chat(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    chat_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aris/chats/{chat_id}/pin");
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(v) => {
+                let pinned = v.get("pinned").and_then(|b| b.as_bool()).unwrap_or(false);
+                let _ = tx.send(ApiEvent::ArisChatPinned { chat_id, pinned });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ArisErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aris_messages(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    chat_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aris/chats/{chat_id}/messages");
+        match get_json::<Vec<ArisMessageDto>>(&base_url, &path, &token).await {
+            Ok(messages) => {
+                let _ = tx.send(ApiEvent::ArisMessagesLoaded { chat_id, messages });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ArisErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aris_send(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    chat_id: i64,
+    content: String,
+    mode: ArisMode,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aris/chats/{chat_id}/send");
+        match post_json::<ArisSendRequest, ArisSendResponse>(
+            &base_url,
+            &path,
+            &token,
+            &ArisSendRequest { content, mode },
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::ArisReplyOk { chat_id, res });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ArisErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Amigos =====================
+
+pub fn spawn_fetch_friends(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<FriendsPayload>(&base_url, "/api/v1/friends", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::FriendsLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::FriendsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_search_friends(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    query: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/friends/search?q={}", encode_uri_component(&query));
+        match get_json::<Vec<UserSearchDto>>(&base_url, &path, &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::FriendSearchLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::FriendsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_send_friend_request(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    username: String,
+) {
+    rt.spawn(async move {
+        match post_json::<FriendRequestBody, serde_json::Value>(
+            &base_url,
+            "/api/v1/friends/request",
+            &token,
+            &FriendRequestBody {
+                username: username.clone(),
+            },
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::FriendsActionOk(format!(
+                    "Solicitud enviada a @{username}."
+                )));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::FriendsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_friend_action(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    action: &'static str, // "accept" | "reject" | "remove"
+    target_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/friends/{action}/{target_id}");
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let msg = match action {
+                    "accept" => "Solicitud aceptada.",
+                    "reject" => "Solicitud rechazada.",
+                    _ => "Amigo eliminado.",
+                };
+                let _ = tx.send(ApiEvent::FriendsActionOk(msg.to_string()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::FriendsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Comunidades =====================
+
+pub fn spawn_fetch_communities(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<CommunityDto>>(&base_url, "/api/v1/communities", &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::CommunitiesLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::CommunitiesErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_create_community(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: CreateCommunityRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<CreateCommunityRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/communities/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::CommunitiesActionOk("Comunidad creada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::CommunitiesErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_community_detail(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/communities/{id}");
+        match get_json::<CommunityDetailDto>(&base_url, &path, &token).await {
+            Ok(detail) => {
+                let _ = tx.send(ApiEvent::CommunityDetailLoaded(detail));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::CommunitiesErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_community_membership(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    id: i64,
+    join: bool,
+) {
+    rt.spawn(async move {
+        let path = if join {
+            format!("/api/v1/communities/{id}/join")
+        } else {
+            format!("/api/v1/communities/{id}/leave")
+        };
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let msg = if join {
+                    "Te has unido a la comunidad."
+                } else {
+                    "Has salido de la comunidad."
+                };
+                let _ = tx.send(ApiEvent::CommunitiesActionOk(msg.into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::CommunitiesErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_community_create_group(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    community_id: i64,
+    req: CreateCommunityGroupRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/communities/{community_id}/group");
+        match post_json::<CreateCommunityGroupRequest, serde_json::Value>(
+            &base_url,
+            &path,
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::CommunitiesActionOk("Grupo creado en la comunidad.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::CommunitiesErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_community_inviteable(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    community_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/communities/{community_id}/inviteable");
+        if let Ok(list) = get_json::<Vec<UserSearchDto>>(&base_url, &path, &token).await {
+            let _ = tx.send(ApiEvent::CommunityInviteableLoaded(list));
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_community_invite(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    community_id: i64,
+    user_ids: Vec<i64>,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/communities/{community_id}/invite");
+        match post_json::<InviteCommunityRequest, serde_json::Value>(
+            &base_url,
+            &path,
+            &token,
+            &InviteCommunityRequest { user_ids },
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::CommunitiesActionOk("Invitaciones enviadas.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::CommunitiesErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Documentos & Descargas =====================
+
+pub fn spawn_fetch_docs(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<DocumentDto>>(&base_url, "/api/v1/docs", &token).await {
+            Ok(docs) => {
+                let _ = tx.send(ApiEvent::DocsLoaded(docs));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::DocsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_fetch_downloads(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<DownloadPlatformDto>>(&base_url, "/api/v1/downloads", &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::DownloadsLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::DownloadsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Asistencia / Tickets =====================
+
+pub fn spawn_fetch_tickets(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<TicketDto>>(&base_url, "/api/v1/support/tickets", &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::TicketsLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::SupportErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_create_ticket(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: CreateTicketRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<CreateTicketRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/support/tickets",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::SupportActionOk("Ticket enviado correctamente.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::SupportErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_ticket_detail(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/support/tickets/{id}");
+        match get_json::<TicketDetailDto>(&base_url, &path, &token).await {
+            Ok(d) => {
+                let _ = tx.send(ApiEvent::TicketDetailLoaded(d));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::SupportErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_reply_ticket(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    id: i64,
+    body: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/support/tickets/{id}/reply");
+        match post_json::<ReplyTicketRequest, serde_json::Value>(
+            &base_url,
+            &path,
+            &token,
+            &ReplyTicketRequest { body },
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::SupportActionOk("Respuesta enviada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::SupportErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_ticket_action(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    id: i64,
+    action: &str,
+) {
+    let action = action.to_string();
+    rt.spawn(async move {
+        let path = format!("/api/v1/support/tickets/{id}/action");
+        match post_json::<TicketActionRequest, serde_json::Value>(
+            &base_url,
+            &path,
+            &token,
+            &TicketActionRequest { action },
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::SupportActionOk("Estado del ticket actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::SupportErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Perfil, Títulos y Sesiones =====================
+
+pub fn spawn_fetch_profile(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<ProfilePayload>(&base_url, "/api/v1/profile", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::ProfileLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_update_profile(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: UpdateProfileRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<UpdateProfileRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/profile/update",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Perfil actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_update_titles(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: UpdateTitlesRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<UpdateTitlesRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/profile/titles",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Títulos guardados.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_change_password(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: ChangePasswordRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<ChangePasswordRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/profile/password",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Contraseña actualizada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_revoke_session(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    target_token: String,
+) {
+    rt.spawn(async move {
+        let path = format!(
+            "/api/v1/profile/sessions/{}/revoke",
+            encode_uri_component(&target_token)
+        );
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Sesión revocada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_revoke_device(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    target_token: String,
+) {
+    rt.spawn(async move {
+        let path = format!(
+            "/api/v1/profile/devices/{}/revoke",
+            encode_uri_component(&target_token)
+        );
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::ProfileActionOk("Dispositivo desvinculado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ProfileErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== aexTube =====================
+
+pub fn spawn_fetch_videos(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<VideoDto>>(&base_url, "/api/v1/aextube/videos", &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::VideosLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AextubeErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_react_video(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    video_id: i64,
+    kind: &str,
+) {
+    let kind = kind.to_string();
+    rt.spawn(async move {
+        let path = format!("/api/v1/aextube/videos/{video_id}/react");
+        match post_json::<VideoReactRequest, serde_json::Value>(
+            &base_url,
+            &path,
+            &token,
+            &VideoReactRequest { kind },
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AextubeActionOk("Reacción actualizada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AextubeErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_view_video(
+    rt: &tokio::runtime::Handle,
+    base_url: String,
+    token: Option<String>,
+    video_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aextube/videos/{video_id}/view");
+        let _: Result<serde_json::Value, _> = post_empty(&base_url, &path, &token).await;
+    });
+}
+
+pub fn spawn_subscribe_channel(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    author: String,
+) {
+    rt.spawn(async move {
+        let path = format!(
+            "/api/v1/aextube/channels/{}/subscribe",
+            encode_uri_component(&author)
+        );
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AextubeActionOk("Suscripción actualizada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AextubeErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_delete_video(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    video_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aextube/videos/{video_id}");
+        match delete_json::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AextubeActionOk("Vídeo eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AextubeErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Playground =====================
+
+pub fn spawn_playground_generate(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: PlaygroundGenRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<PlaygroundGenRequest, PlaygroundGenResult>(
+            &base_url,
+            "/api/v1/aris/playground/generate",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::PlaygroundGenOk(res));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::PlaygroundGenErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== aexOS =====================
+
+pub fn spawn_aexos_profiles(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<AexosProfileDto>>(&base_url, "/api/v1/aexos/profiles", &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::AexosProfilesLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AexosErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aexos_link(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AexosLinkRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<AexosLinkRequest, Vec<AexosProfileDto>>(
+            &base_url,
+            "/api/v1/aexos/link",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::AexosProfilesLoaded(list));
+                let _ = tx.send(ApiEvent::AexosActionOk("Cuenta vinculada a aexOS.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AexosErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aexos_switch(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AexosSwitchRequest,
+) {
+    rt.spawn(async move {
+        let target_id = req.user_id;
+        match post_json::<AexosSwitchRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/aexos/switch",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AexosSwitched(target_id));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AexosErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aexos_save_prefs(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AexosSavePrefsRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<AexosSavePrefsRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/aexos/prefs",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AexosActionOk("Preferencias de aexOS guardadas.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AexosErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_aexos_delete(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    profile_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/aexos/profiles/{profile_id}");
+        match delete_json::<Vec<AexosProfileDto>>(&base_url, &path, &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::AexosProfilesLoaded(list));
+                let _ = tx.send(ApiEvent::AexosActionOk("Perfil desvinculado de aexOS.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AexosErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Admin =====================
+
+pub fn spawn_admin_overview(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<AdminOverviewDto>(&base_url, "/api/v1/admin/overview", &token).await {
+            Ok(data) => {
+                let _ = tx.send(ApiEvent::AdminOverviewLoaded(data));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_set_role(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    user_id: i64,
+    role: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/users/{user_id}/role");
+        match post_json::<AdminRoleRequest, serde_json::Value>(
+            &base_url,
+            &path,
+            &token,
+            &AdminRoleRequest { role },
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Rol actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_ban_user(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    user_id: i64,
+    req: AdminBanRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/users/{user_id}/ban");
+        match post_json::<AdminBanRequest, serde_json::Value>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Usuario sancionado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_simple_action(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    path: String,
+    ok_msg: &'static str,
+) {
+    rt.spawn(async move {
+        match post_empty::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk(ok_msg.into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+// ===================== Demo / Preview local =====================
+
 pub fn offline_demo_hub(username: &str, is_guest: bool, theme: ThemeKind) -> HubPayload {
     let user = UserSummary {
         id: if is_guest { 0 } else { 1 },
@@ -493,4 +1820,129 @@ pub fn demo_aris_chats() -> (Vec<ArisChatDto>, Vec<ArisMessageDto>) {
             created_at: "Ahora".into(),
         }],
     )
+}
+
+pub fn demo_friends() -> FriendsPayload {
+    FriendsPayload {
+        friends: vec![FriendDto {
+            id: 2,
+            username: "aris".into(),
+            display: "Aris Core".into(),
+            online: true,
+            role_display: "Staff".into(),
+            role_color: "#00d4ff".into(),
+        }],
+        pending: vec![PendingFriendDto {
+            id: 3,
+            username: "shadow_dev".into(),
+            display: "Shadow Dev".into(),
+        }],
+    }
+}
+
+pub fn demo_communities() -> Vec<CommunityDto> {
+    vec![CommunityDto {
+        id: 1,
+        name: "Aethravox Core".into(),
+        description: "Comunidad principal de ingeniería, Rust, IA y videojuegos.".into(),
+        icon: "🌐".into(),
+        is_member: true,
+        is_owner: true,
+        member_count: 12,
+    }]
+}
+
+pub fn demo_docs() -> Vec<DocumentDto> {
+    vec![DocumentDto {
+        id: 1,
+        title: "Guía de Arquitectura Aethravox".into(),
+        description: "Resumen técnico del backend Axum + cliente nativo egui.".into(),
+        file_name: "aethravox_arch.pdf".into(),
+        file_type: "pdf".into(),
+        icon: "📕".into(),
+        size: "1.4 MB".into(),
+        created_at: "26/11/2026".into(),
+        has_preview: true,
+        downloaded: 42,
+    }]
+}
+
+pub fn demo_downloads() -> Vec<DownloadPlatformDto> {
+    vec![
+        DownloadPlatformDto {
+            key: "linux".into(),
+            name: "Linux".into(),
+            icon: "🐧".into(),
+            coming_soon: false,
+            apps: vec![DownloadAppDto {
+                slug: "aethravox-desktop".into(),
+                name: "Aethravox Desktop".into(),
+                files: vec![DownloadFileDto {
+                    id: 1,
+                    version: "0.1.0".into(),
+                    orig_name: "aethravox-desktop-linux-x86_64.tar.gz".into(),
+                    size_mb: "8.2 MB".into(),
+                    created_at: "2026-11-26".into(),
+                    url: "/descargas".into(),
+                }],
+            }],
+        },
+        DownloadPlatformDto {
+            key: "windows".into(),
+            name: "Windows".into(),
+            icon: "🪟".into(),
+            coming_soon: false,
+            apps: vec![],
+        },
+    ]
+}
+
+pub fn demo_tickets() -> Vec<TicketDto> {
+    vec![TicketDto {
+        id: 1,
+        ticket_type: "sugerencia".into(),
+        subject: "Cliente nativo en egui".into(),
+        body: "Vista previa de ticket en modo demostración local.".into(),
+        status: "open".into(),
+        resolucion: String::new(),
+        created_at: "26/11/2026 13:00".into(),
+        owner_name: "demo".into(),
+    }]
+}
+
+pub fn demo_videos() -> Vec<VideoDto> {
+    vec![VideoDto {
+        id: 1,
+        user_id: 1,
+        author: "Aethravox".into(),
+        title: "Presentación Aethravox Desktop en Rust".into(),
+        description: "Demostración del cliente nativo egui conectado a Axum.".into(),
+        is_short: false,
+        file_path: "/aextube".into(),
+        mime_type: "video/mp4".into(),
+        size_bytes: 12_400_000,
+        likes: 24,
+        dislikes: 0,
+        views: 180,
+        created_at: "Hoy".into(),
+        user_reaction: None,
+        subscribed: false,
+        channel_subscribers: 5,
+    }]
+}
+
+pub fn demo_aexos_profiles(username: &str) -> Vec<AexosProfileDto> {
+    vec![AexosProfileDto {
+        user_id: 1,
+        is_primary: true,
+        username: username.into(),
+        display_name: username.into(),
+        role_display: "Owner".into(),
+        can_admin: true,
+        wallpaper: "nebula".into(),
+        show_desktop_icons: true,
+        pinned_apps_json: "[\"aris\",\"chat\",\"neon-canvas\",\"docs\"]".into(),
+        files_json: "[]".into(),
+        notes_text: "Notas rápidas de aexOS en cliente nativo egui.".into(),
+    }]
 }

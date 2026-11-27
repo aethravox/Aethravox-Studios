@@ -1,7 +1,17 @@
+pub mod admin;
+pub mod aexos;
+pub mod aextube;
 pub mod aris;
 pub mod chat;
+pub mod communities;
+pub mod docs;
+pub mod downloads;
+pub mod friends;
 pub mod hub;
 pub mod login;
 pub mod neon_canvas;
+pub mod playground;
 pub mod settings;
 pub mod sidebar;
+pub mod support;
+pub mod transmit;
