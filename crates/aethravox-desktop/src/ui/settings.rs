@@ -907,7 +907,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     spawn_upload_avatar_bytes(
                         &app.rt,
                         app.tx.clone(),
-                        ctx,
+                        ctx.clone(),
                         app.server_url.clone(),
                         app.token.clone(),
                         filename,
@@ -919,7 +919,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     spawn_upload_avatar_path(
                         &app.rt,
                         app.tx.clone(),
-                        ctx,
+                        ctx.clone(),
                         app.server_url.clone(),
                         app.token.clone(),
                         path,
@@ -929,7 +929,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     spawn_remove_avatar(
                         &app.rt,
                         app.tx.clone(),
-                        ctx,
+                        ctx.clone(),
                         app.server_url.clone(),
                         app.token.clone(),
                     );
