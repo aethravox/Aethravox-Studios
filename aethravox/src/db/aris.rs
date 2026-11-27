@@ -1136,3 +1136,10 @@ impl Db {
         clear_rotation_logs(&self.pool).await
     }
 }
+
+    pub async fn reset_api_cooldowns(&self) -> Result<()> {
+        sqlx::query("UPDATE api_keys SET rate_limited_until = NULL, last_error = NULL")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }

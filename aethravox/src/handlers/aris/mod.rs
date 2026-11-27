@@ -148,6 +148,9 @@ impl ApiKeyRow {
             .unwrap_or_default()
     }
 
+    pub fn masked_key(&self) -> String {
+        self.api_key_masked()
+    }
     pub fn api_key_masked(&self) -> String {
         let chars: Vec<char> = self.api_key.chars().collect();
         if chars.len() <= 8 {
