@@ -4,8 +4,8 @@ members = [
     "crates/aethravox-core",
     "crates/aethravox-desktop",
     "aethravox",
+    "aethramail",
 ]
-exclude = ["aethramail"]
 
 [profile.release]
 opt-level = 3

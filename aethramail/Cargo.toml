@@ -50,6 +50,3 @@ rustls-pemfile = "2"
 # (axum 0.7::serve solo acepta TcpListener; replicamos su loop interno).
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
-
-[profile.release]
-opt-level = 3
