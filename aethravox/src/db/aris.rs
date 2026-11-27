@@ -1135,11 +1135,12 @@ impl Db {
     pub async fn clear_rotation_logs(&self) -> Result<(), sqlx::Error> {
         clear_rotation_logs(&self.pool).await
     }
-}
-
-    pub async fn reset_api_cooldowns(&self) -> Result<()> {
+    pub async fn reset_api_cooldowns(&self) -> anyhow::Result<()> {
         sqlx::query("UPDATE api_keys SET rate_limited_until = NULL, last_error = NULL")
             .execute(&self.pool)
             .await?;
         Ok(())
     }
+}
+
+

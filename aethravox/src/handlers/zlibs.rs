@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use aethravox_core::{
     ZLibAccountPayload, ZLibCreateTokenRequest, ZLibCreateTokenResponse, ZLibFileInput,
-    ZLibPackageDetailDto, ZLibPackageDto, ZLibPublishRequest, ZLibPublishResponse, ZLibTokenDto,
+    ZLibPackageDto, ZLibPublishRequest, ZLibPublishResponse, ZLibTokenDto,
     ZLibVersionDto,
 };
 use askama::Template;
