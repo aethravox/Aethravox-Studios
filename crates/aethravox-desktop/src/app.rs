@@ -1,10 +1,11 @@
 use aethravox_core::{
-    AdminIpBansPayload, AdminOverviewDto, AdminRolesPayload, AdminTitlesPayload, AexosProfileDto,
+    AdminApisPayload, AdminDownloadRowDto, AdminIpBansPayload, AdminOverviewDto, AdminRolesPayload,
+    AdminTitlesPayload, AexosProfileDto,
     ArisChatDto, ArisCreditsDto, ArisMessageDto, ArisMode, ChatConversationDto, ChatGroupManageDto,
     ChatMessageDto, ChatMessageInfoDto, ColorMode, CommunityDetailDto, CommunityDto, DeviceProfile,
     DocumentDto, DownloadPlatformDto, EmailsPayload, FriendsPayload, HubPayload, LinkCodeDto,
     ProfilePayload, PublicProfileDto, SystemConfigDto, ThemeKind, TicketDetailDto, TicketDto,
-    UserSearchDto, VideoDto, WebAppDto,
+    UserIpHistoryDto, UserSearchDto, VideoDto, WebAppDto,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -13,8 +14,9 @@ use tokio::sync::mpsc;
 use crate::api::{
     demo_aexos_profiles, demo_aris_chats, demo_chat_conversations, demo_chat_messages,
     demo_communities, demo_docs, demo_downloads, demo_friends, demo_tickets, demo_videos,
-    offline_demo_hub, spawn_admin_config_get, spawn_admin_ip_bans, spawn_admin_overview,
-    spawn_admin_roles, spawn_admin_titles, spawn_aexos_profiles, spawn_aris_chats,
+    offline_demo_hub, spawn_admin_apis, spawn_admin_config_get, spawn_admin_docs_list,
+    spawn_admin_downloads_list, spawn_admin_ip_bans, spawn_admin_overview, spawn_admin_roles,
+    spawn_admin_titles, spawn_aexos_profiles, spawn_aris_chats,
     spawn_aris_credits, spawn_aris_messages, spawn_community_detail, spawn_community_inviteable,
     spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
     spawn_fetch_emails, spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages,
@@ -292,6 +294,73 @@ pub struct AethravoxApp {
     pub admin_title_effect: String,
     pub admin_title_desc: String,
     pub admin_title_assign_user: HashMap<i64, i64>,
+    // Admin Users Create + IP History
+    pub admin_new_user_open: bool,
+    pub admin_new_user_name: String,
+    pub admin_new_user_email: String,
+    pub admin_new_user_pass: String,
+    pub admin_new_user_role: String,
+    pub admin_user_ips_target: Option<(i64, String)>,
+    pub admin_user_ips_list: Vec<UserIpHistoryDto>,
+    // Admin Webs Create + HTML + Tag
+    pub admin_web_create_open: bool,
+    pub admin_web_new_slug: String,
+    pub admin_web_new_name: String,
+    pub admin_web_new_desc: String,
+    pub admin_web_new_icon: String,
+    pub admin_web_new_type: String,
+    pub admin_web_new_url: String,
+    pub admin_web_new_html: String,
+    pub admin_web_new_public: bool,
+    pub admin_web_html_target: Option<(i64, String)>,
+    pub admin_web_html_draft: String,
+    pub admin_web_tag_target: Option<(i64, String)>,
+    pub admin_web_tag_value: String,
+    pub admin_web_tag_msg: String,
+    pub admin_web_tag_opens: String,
+    // Admin APIs Aris & Rotación
+    pub admin_apis: Option<AdminApisPayload>,
+    pub admin_apis_key_provider_id: i64,
+    pub admin_apis_key_text: String,
+    pub admin_apis_key_label: String,
+    pub admin_apis_key_cap: String,
+    pub admin_apis_key_caps_draft: HashMap<i64, String>,
+    pub admin_apis_key_test_msg: HashMap<i64, (bool, String)>,
+    pub admin_apis_prov_editing_id: Option<i64>,
+    pub admin_apis_prov_name: String,
+    pub admin_apis_prov_type: String,
+    pub admin_apis_prov_url: String,
+    pub admin_apis_prov_model: String,
+    pub admin_apis_cfg_rot_enabled: bool,
+    pub admin_apis_cfg_rot_strat: String,
+    pub admin_apis_cfg_cooldown: String,
+    pub admin_apis_cfg_failover: bool,
+    pub admin_apis_cfg_ollama: String,
+    pub admin_apis_cfg_hourly: String,
+    pub admin_apis_cfg_daily: String,
+    pub admin_apis_cfg_credits: String,
+    pub admin_apis_cfg_mail_url: String,
+    pub admin_apis_cfg_sys_prompt: String,
+    // Admin Docs CRUD
+    pub admin_docs: Option<Vec<DocumentDto>>,
+    pub admin_doc_up_title: String,
+    pub admin_doc_up_desc: String,
+    pub admin_doc_up_path: String,
+    pub admin_doc_up_dropped_name: Option<String>,
+    pub admin_doc_up_dropped_bytes: Option<Vec<u8>>,
+    pub admin_doc_edit_id: Option<i64>,
+    pub admin_doc_edit_title: String,
+    pub admin_doc_edit_desc: String,
+    // Admin Downloads CRUD
+    pub admin_downloads: Option<Vec<AdminDownloadRowDto>>,
+    pub admin_dl_platform: String,
+    pub admin_dl_slug: String,
+    pub admin_dl_name: String,
+    pub admin_dl_version: String,
+    pub admin_dl_notes: String,
+    pub admin_dl_path: String,
+    pub admin_dl_dropped_name: Option<String>,
+    pub admin_dl_dropped_bytes: Option<Vec<u8>>,
     pub admin_error: Option<String>,
 
     // Neon Canvas / PDI state
@@ -357,7 +426,7 @@ impl AethravoxApp {
             rt,
             tx,
             rx,
-            server_url: "https://aethravoxstudios.duckdns.org".to_string(),
+            server_url: default_server_url(),
             token: None,
             route: Route::Login,
             offline_mode: false,
@@ -567,6 +636,68 @@ impl AethravoxApp {
             admin_title_effect: "none".to_string(),
             admin_title_desc: String::new(),
             admin_title_assign_user: HashMap::new(),
+            admin_new_user_open: false,
+            admin_new_user_name: String::new(),
+            admin_new_user_email: String::new(),
+            admin_new_user_pass: String::new(),
+            admin_new_user_role: "usuario".to_string(),
+            admin_user_ips_target: None,
+            admin_user_ips_list: Vec::new(),
+            admin_web_create_open: false,
+            admin_web_new_slug: String::new(),
+            admin_web_new_name: String::new(),
+            admin_web_new_desc: String::new(),
+            admin_web_new_icon: "🧩".to_string(),
+            admin_web_new_type: "external".to_string(),
+            admin_web_new_url: String::new(),
+            admin_web_new_html: String::new(),
+            admin_web_new_public: false,
+            admin_web_html_target: None,
+            admin_web_html_draft: String::new(),
+            admin_web_tag_target: None,
+            admin_web_tag_value: "activo".to_string(),
+            admin_web_tag_msg: String::new(),
+            admin_web_tag_opens: String::new(),
+            admin_apis: None,
+            admin_apis_key_provider_id: 1,
+            admin_apis_key_text: String::new(),
+            admin_apis_key_label: String::new(),
+            admin_apis_key_cap: String::new(),
+            admin_apis_key_caps_draft: HashMap::new(),
+            admin_apis_key_test_msg: HashMap::new(),
+            admin_apis_prov_editing_id: None,
+            admin_apis_prov_name: String::new(),
+            admin_apis_prov_type: "openai_compat".to_string(),
+            admin_apis_prov_url: String::new(),
+            admin_apis_prov_model: String::new(),
+            admin_apis_cfg_rot_enabled: true,
+            admin_apis_cfg_rot_strat: "round_robin".to_string(),
+            admin_apis_cfg_cooldown: "60".to_string(),
+            admin_apis_cfg_failover: true,
+            admin_apis_cfg_ollama: "http://127.0.0.1:11434".to_string(),
+            admin_apis_cfg_hourly: "30".to_string(),
+            admin_apis_cfg_daily: "150".to_string(),
+            admin_apis_cfg_credits: "120".to_string(),
+            admin_apis_cfg_mail_url: String::new(),
+            admin_apis_cfg_sys_prompt: String::new(),
+            admin_docs: None,
+            admin_doc_up_title: String::new(),
+            admin_doc_up_desc: String::new(),
+            admin_doc_up_path: String::new(),
+            admin_doc_up_dropped_name: None,
+            admin_doc_up_dropped_bytes: None,
+            admin_doc_edit_id: None,
+            admin_doc_edit_title: String::new(),
+            admin_doc_edit_desc: String::new(),
+            admin_downloads: None,
+            admin_dl_platform: "windows".to_string(),
+            admin_dl_slug: String::new(),
+            admin_dl_name: String::new(),
+            admin_dl_version: "1.0.0".to_string(),
+            admin_dl_notes: String::new(),
+            admin_dl_path: String::new(),
+            admin_dl_dropped_name: None,
+            admin_dl_dropped_bytes: None,
             admin_error: None,
             neon_strokes: Vec::new(),
             neon_active_stroke: None,
@@ -1565,6 +1696,64 @@ impl AethravoxApp {
                     self.admin_error = None;
                     self.admin_titles = Some(p);
                 }
+                ApiEvent::AdminUserIpsLoaded { user_id, ips } => {
+                    self.admin_error = None;
+                    if let Some((tid, _)) = &self.admin_user_ips_target {
+                        if *tid == user_id {
+                            self.admin_user_ips_list = ips;
+                        }
+                    }
+                }
+                ApiEvent::AdminApisLoaded(p) => {
+                    self.admin_error = None;
+                    if self.admin_apis_key_provider_id == 0
+                        || !p.providers.iter().any(|pr| pr.id == self.admin_apis_key_provider_id)
+                    {
+                        if let Some(first) = p.providers.first() {
+                            self.admin_apis_key_provider_id = first.id;
+                        }
+                    }
+                    for k in &p.keys {
+                        self.admin_apis_key_caps_draft.entry(k.id).or_insert_with(|| {
+                            k.daily_cap.map(|c| c.to_string()).unwrap_or_default()
+                        });
+                    }
+                    self.admin_apis_cfg_rot_enabled = p.config.rotation_enabled;
+                    self.admin_apis_cfg_rot_strat = p.config.rotation_strategy.clone();
+                    self.admin_apis_cfg_cooldown = p.config.cooldown_minutes.to_string();
+                    self.admin_apis_cfg_failover = p.config.auto_failover;
+                    self.admin_apis_cfg_ollama = p.config.ollama_url.clone();
+                    self.admin_apis_cfg_hourly = p.config.hourly_limit.to_string();
+                    self.admin_apis_cfg_daily = p.config.daily_limit.to_string();
+                    self.admin_apis_cfg_credits = p.config.daily_credits_limit.to_string();
+                    self.admin_apis_cfg_mail_url = p.config.aethramail_url.clone();
+                    self.admin_apis_cfg_sys_prompt = p.config.system_prompt.clone();
+                    self.admin_apis = Some(p);
+                }
+                ApiEvent::AdminApiKeyTested { key_id, res } => {
+                    self.admin_error = None;
+                    let msg = if res.ok {
+                        format!(
+                            "{} ({} ms): {}",
+                            if res.healthy { "OK" } else { "Fallo" },
+                            res.latency_ms,
+                            res.detail
+                        )
+                    } else {
+                        res.error.unwrap_or_else(|| "Error desconocido".into())
+                    };
+                    self.admin_apis_key_test_msg
+                        .insert(key_id, (res.ok && res.healthy, msg));
+                }
+                ApiEvent::AdminDocsLoaded(docs) => {
+                    self.admin_error = None;
+                    self.admin_docs = Some(docs.clone());
+                    self.docs = docs;
+                }
+                ApiEvent::AdminDownloadsLoaded(rows) => {
+                    self.admin_error = None;
+                    self.admin_downloads = Some(rows);
+                }
                 ApiEvent::AdminActionOk(msg) => {
                     self.admin_error = None;
                     self.status_banner = Some(msg);
@@ -1601,6 +1790,30 @@ impl AethravoxApp {
                         );
                     } else if self.admin_tab == 6 {
                         spawn_admin_titles(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    } else if self.admin_tab == 7 {
+                        spawn_admin_apis(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    } else if self.admin_tab == 8 {
+                        spawn_admin_docs_list(
+                            &self.rt,
+                            self.tx.clone(),
+                            ctx.clone(),
+                            self.server_url.clone(),
+                            self.token.clone(),
+                        );
+                    } else if self.admin_tab == 9 {
+                        spawn_admin_downloads_list(
                             &self.rt,
                             self.tx.clone(),
                             ctx.clone(),
@@ -2046,4 +2259,16 @@ impl eframe::App for AethravoxApp {
             }
         }
     }
+}
+
+fn default_server_url() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(origin) = web_sys::window().and_then(|w| w.location().origin().ok()) {
+            if !origin.is_empty() && origin != "null" {
+                return origin;
+            }
+        }
+    }
+    "https://aethravox-studios.duckdns.org".to_string()
 }

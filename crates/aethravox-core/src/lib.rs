@@ -634,6 +634,24 @@ pub struct AdminWebDto {
     pub is_active: bool,
     pub is_public: bool,
     pub tag: String,
+    #[serde(default)]
+    pub is_system: bool,
+    #[serde(default)]
+    pub is_core: bool,
+    #[serde(default)]
+    pub is_custom: bool,
+    #[serde(default)]
+    pub has_html: bool,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub html_content: String,
+    #[serde(default)]
+    pub tag_raw: String,
+    #[serde(default)]
+    pub tag_message: String,
+    #[serde(default)]
+    pub tag_opens_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1064,6 +1082,191 @@ pub struct SaveTitleRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TitleAssignRequest {
     pub user_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminCreateUserRequest {
+    pub username: String,
+    pub email: String,
+    pub password: String,
+    pub role: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserIpHistoryDto {
+    pub ip: String,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub times_used: i64,
+    pub is_first_time: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminCreateWebRequest {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub url_type: String,
+    pub url: String,
+    pub html_content: Option<String>,
+    pub is_public: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminWebHtmlRequest {
+    pub html_content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminWebTagRequest {
+    pub tag: Option<String>,
+    pub tag_message: Option<String>,
+    pub tag_opens_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminApiProviderDto {
+    pub id: i64,
+    pub name: String,
+    pub provider_type: String,
+    pub base_url: String,
+    pub default_model: String,
+    pub is_preset: bool,
+    pub priority: i64,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminApiKeyDto {
+    pub id: i64,
+    pub provider_id: i64,
+    pub masked_key: String,
+    pub label: String,
+    pub is_active: bool,
+    pub total_uses: i64,
+    pub daily_uses: i64,
+    pub daily_cap: Option<i64>,
+    pub rate_limited_until: Option<String>,
+    pub last_error: Option<String>,
+    pub last_used_at: Option<String>,
+    pub provider_name: String,
+    pub provider_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminRotationLogDto {
+    pub id: i64,
+    pub source: String,
+    pub channel_label: String,
+    pub provider_name: String,
+    pub key_label: String,
+    pub model: String,
+    pub status: String,
+    pub latency_ms: i64,
+    pub detail: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminApisConfigDto {
+    pub rotation_enabled: bool,
+    pub rotation_strategy: String,
+    pub cooldown_minutes: i64,
+    pub auto_failover: bool,
+    pub ollama_url: String,
+    pub hourly_limit: i64,
+    pub daily_limit: i64,
+    pub daily_credits_limit: i64,
+    pub aethramail_url: String,
+    pub system_prompt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminApisPayload {
+    pub keys: Vec<AdminApiKeyDto>,
+    pub providers: Vec<AdminApiProviderDto>,
+    pub logs: Vec<AdminRotationLogDto>,
+    pub config: AdminApisConfigDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminAddApiKeyRequest {
+    pub provider_id: i64,
+    pub api_key: String,
+    pub label: Option<String>,
+    pub daily_cap: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminToggleRequest {
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminKeyCapRequest {
+    pub daily_cap: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminSaveProviderRequest {
+    pub name: String,
+    pub provider_type: String,
+    pub base_url: String,
+    pub default_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminReorderProviderRequest {
+    pub delta: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminTestApiKeyResult {
+    pub ok: bool,
+    pub healthy: bool,
+    pub detail: String,
+    pub latency_ms: i64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminUploadDocRequest {
+    pub title: String,
+    pub description: Option<String>,
+    pub file_name: String,
+    pub data_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminUpdateDocRequest {
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminDownloadRowDto {
+    pub id: i64,
+    pub platform: String,
+    pub app_slug: String,
+    pub app_name: String,
+    pub version: String,
+    pub orig_name: String,
+    pub size_bytes: i64,
+    pub notes: String,
+    pub is_active: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminCreateDownloadRequest {
+    pub platform: String,
+    pub app_slug: String,
+    pub app_name: String,
+    pub version: String,
+    pub notes: Option<String>,
+    pub file_name: String,
+    pub data_base64: String,
 }
 
 pub fn base64_encode(input: &[u8]) -> String {

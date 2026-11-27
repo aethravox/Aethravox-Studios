@@ -3,7 +3,12 @@ use std::collections::HashMap;
 use aethravox_core::{
     base64_decode, AddGroupMemberRequest, AdminAuditDto, AdminBanRequest, AdminIpBansPayload,
     AdminOverviewDto, AdminRoleDto, AdminRoleRequest, AdminRolesPayload, AdminTitleDto,
-    AdminTitlesPayload, AdminUserDto, AdminWebDto, AdminWebPermDto, AexosLinkRequest,
+    AdminAddApiKeyRequest, AdminApiKeyDto, AdminApiProviderDto, AdminApisConfigDto,
+    AdminApisPayload, AdminCreateDownloadRequest, AdminCreateUserRequest, AdminCreateWebRequest,
+    AdminDownloadRowDto, AdminKeyCapRequest, AdminReorderProviderRequest, AdminRotationLogDto,
+    AdminSaveProviderRequest, AdminTestApiKeyResult, AdminTitlesPayload, AdminToggleRequest,
+    AdminUpdateDocRequest, AdminUploadDocRequest, AdminUserDto, AdminWebDto, AdminWebHtmlRequest,
+    AdminWebPermDto, AdminWebTagRequest, AexosLinkRequest,
     AexosProfileDto, AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto,
     ArisCreateChatRequest, ArisCreditsDto, ArisMessageDto, ArisSendRequest, ArisSendResponse,
     AssignMemberRankRequest, AssignUserRoleIdRequest, AuthSuccess, BulkDeleteMessagesRequest,
@@ -23,7 +28,7 @@ use aethravox_core::{
     TicketActionRequest, TicketDetailDto, TicketDto, TicketMessageDto, TitleAssignRequest,
     TitleDto, TitleHolderDto, TransferGroupOwnershipRequest, UpdateGroupInfoRequest,
     UpdateProfileRequest, UpdateTitlesRequest, UploadAvatarRequest, UploadChatMediaRequest,
-    UploadGroupImageRequest, UploadVideoRequest, UserEmailDto, UserSearchDto, UserSummary,
+    UploadGroupImageRequest, UploadVideoRequest, UserEmailDto, UserIpHistoryDto, UserSearchDto, UserSummary,
     VideoDto, VideoReactRequest, WebAppDto,
 };
 use axum::{
@@ -263,6 +268,60 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/admin/titles/:id/delete", post(admin_titles_delete))
         .route("/api/v1/admin/titles/:id/assign", post(admin_titles_assign))
         .route("/api/v1/admin/titles/:id/revoke", post(admin_titles_revoke))
+        // Admin Users extra & Webs CRUD
+        .route("/api/v1/admin/users/create", post(admin_create_user))
+        .route("/api/v1/admin/users/:id/ips", get(admin_user_ips))
+        .route("/api/v1/admin/webs/create", post(admin_create_web))
+        .route("/api/v1/admin/webs/:id/html", post(admin_update_web_html))
+        .route("/api/v1/admin/webs/:id/tag", post(admin_set_web_tag))
+        .route("/api/v1/admin/webs/:id", delete(admin_delete_web))
+        // Admin APIs Aris & Rotación
+        .route("/api/v1/admin/apis", get(admin_apis_get))
+        .route("/api/v1/admin/apis/keys", post(admin_apis_add_key))
+        .route(
+            "/api/v1/admin/apis/keys/reset-cooldowns",
+            post(admin_apis_reset_cooldowns),
+        )
+        .route(
+            "/api/v1/admin/apis/keys/:id/toggle",
+            post(admin_apis_toggle_key),
+        )
+        .route("/api/v1/admin/apis/keys/:id/cap", post(admin_apis_update_key_cap))
+        .route("/api/v1/admin/apis/keys/:id/test", post(admin_apis_test_key))
+        .route("/api/v1/admin/apis/keys/:id", delete(admin_apis_delete_key))
+        .route("/api/v1/admin/apis/providers", post(admin_apis_add_provider))
+        .route(
+            "/api/v1/admin/apis/providers/:id/update",
+            post(admin_apis_update_provider),
+        )
+        .route(
+            "/api/v1/admin/apis/providers/:id/toggle",
+            post(admin_apis_toggle_provider),
+        )
+        .route(
+            "/api/v1/admin/apis/providers/:id/priority",
+            post(admin_apis_reorder_provider),
+        )
+        .route(
+            "/api/v1/admin/apis/providers/:id",
+            delete(admin_apis_delete_provider),
+        )
+        .route("/api/v1/admin/apis/config", post(admin_apis_save_config))
+        .route("/api/v1/admin/apis/logs", delete(admin_apis_clear_logs))
+        // Admin Docs CRUD
+        .route("/api/v1/admin/docs/upload", post(admin_docs_upload))
+        .route("/api/v1/admin/docs/:id/update", post(admin_docs_update))
+        .route(
+            "/api/v1/admin/docs/:id/regenerate",
+            post(admin_docs_regenerate),
+        )
+        // Admin Descargas CRUD
+        .route("/api/v1/admin/downloads", get(admin_downloads_list))
+        .route(
+            "/api/v1/admin/downloads/create",
+            post(admin_downloads_create),
+        )
+        .route("/api/v1/admin/downloads/:id", delete(admin_downloads_delete))
 }
 
 fn json_err(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -2682,6 +2741,18 @@ async fn admin_overview(State(state): State<AppState>, headers: HeaderMap) -> Re
             is_active: w.is_active != 0,
             is_public: w.is_public != 0,
             tag: w.tag_label().to_string(),
+            is_system: crate::handlers::admin::is_system_slug(&w.slug),
+            is_core: crate::handlers::admin::is_core_slug(&w.slug),
+            is_custom: w.is_custom != 0,
+            has_html: w.html_content.as_deref().is_some_and(|h| !h.is_empty()),
+            url: w.url.clone(),
+            html_content: w.html_content.clone().unwrap_or_default(),
+            tag_raw: w.tag.clone().unwrap_or_else(|| "activo".to_string()),
+            tag_message: w.tag_message.clone().unwrap_or_default(),
+            tag_opens_at: w
+                .tag_opens_at
+                .map(|d| d.format("%Y-%m-%dT%H:%M").to_string())
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -5617,4 +5688,1312 @@ async fn admin_titles_revoke(
         )
         .await;
     Json(build_admin_titles_payload(&state).await).into_response()
+}
+
+
+// ===================== Admin Extra: Users, Webs, APIs Aris, Docs, Descargas =====================
+
+async fn admin_create_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminCreateUserRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let role = req.role.trim().to_string();
+    let target = User {
+        id: 0,
+        username: req.username.trim().to_string(),
+        email: req.email.trim().to_string(),
+        password_hash: String::new(),
+        role: role.clone(),
+        avatar_url: None,
+        created_at: chrono::Utc::now(),
+        last_login_at: None,
+        total_seconds: 0,
+        display_name: None,
+        bio: None,
+        status: "active".into(),
+        last_ip: None,
+        role_id: None,
+        primary_title_id: None,
+        visible_title_1: None,
+        visible_title_2: None,
+        visible_title_3: None,
+    };
+    if !state.db.user_has_perm(&actor, "users.create").await
+        || !actor.can_act_on(&target, ActionOnUser::CreateUser)
+    {
+        return json_err(
+            StatusCode::FORBIDDEN,
+            format!("No puedes crear usuarios con rol '{role}'."),
+        );
+    }
+    if let Err(e) = validate_username(&target.username) {
+        return json_err(StatusCode::BAD_REQUEST, e);
+    }
+    if let Err(e) = validate_email(&target.email) {
+        return json_err(StatusCode::BAD_REQUEST, e);
+    }
+    if let Err(e) = validate_password(&req.password) {
+        return json_err(StatusCode::BAD_REQUEST, e);
+    }
+    if state
+        .db
+        .find_user_by_username(&target.username)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        return json_err(
+            StatusCode::CONFLICT,
+            "Ese nombre de usuario ya está en uso.",
+        );
+    }
+    if state
+        .db
+        .find_user_by_email(&target.email)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        return json_err(StatusCode::CONFLICT, "Ese email ya está registrado.");
+    }
+    match state
+        .db
+        .create_user(&target.username, &target.email, &req.password)
+        .await
+    {
+        Ok(uid) => {
+            if role != "usuario" && is_role(&role) {
+                let _ = state.db.set_user_role(uid, &role).await;
+            }
+            let _ = state
+                .db
+                .audit(
+                    Some(actor.id),
+                    "user_create",
+                    Some(&format!("{} ({})", target.username, role)),
+                    None,
+                )
+                .await;
+            Json(serde_json::json!({ "ok": true, "id": uid })).into_response()
+        }
+        Err(e) => json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al crear cuenta: {e}"),
+        ),
+    }
+}
+
+async fn admin_user_ips(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(user_id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "users.ip.view").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let ips = state.db.list_user_ips(user_id).await.unwrap_or_default();
+    let out: Vec<UserIpHistoryDto> = ips
+        .into_iter()
+        .map(|h| UserIpHistoryDto {
+            ip: h.ip,
+            first_seen: h.first_seen.format("%d/%m/%Y %H:%M").to_string(),
+            last_seen: h.last_seen.format("%d/%m/%Y %H:%M").to_string(),
+            times_used: h.times_used,
+            is_first_time: h.times_used == 1,
+        })
+        .collect();
+    Json(out).into_response()
+}
+
+async fn admin_create_web(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminCreateWebRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "webs.create").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let slug = req.slug.trim();
+    if let Err(e) = crate::models::validate_slug(slug) {
+        return json_err(StatusCode::BAD_REQUEST, e);
+    }
+    if crate::handlers::admin::is_system_slug(slug) {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "No se puede usar un slug reservado del sistema.",
+        );
+    }
+    let name = req.name.trim();
+    if name.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El nombre es obligatorio.");
+    }
+    let url_type = req.url_type.trim();
+    let (html_content, url_to_save) = match url_type {
+        "custom" => {
+            let html = req.html_content.as_deref().unwrap_or("").trim();
+            if html.is_empty() {
+                return json_err(
+                    StatusCode::BAD_REQUEST,
+                    "El HTML personalizado no puede estar vacío.",
+                );
+            }
+            (Some(html.to_string()), format!("/{slug}"))
+        }
+        _ => {
+            let u = req.url.trim();
+            if u.is_empty() {
+                return json_err(StatusCode::BAD_REQUEST, "La URL es obligatoria.");
+            }
+            (None, u.to_string())
+        }
+    };
+    let desc = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let icon = req
+        .icon
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    match state
+        .db
+        .create_web(
+            slug,
+            name,
+            desc,
+            icon,
+            &url_to_save,
+            req.is_public,
+            true,
+            html_content.as_deref(),
+        )
+        .await
+    {
+        Ok(id) => {
+            let _ = state
+                .db
+                .audit(
+                    Some(actor.id),
+                    "web_create",
+                    Some(&format!("{name} ({slug}) [{url_type}]")),
+                    None,
+                )
+                .await;
+            Json(serde_json::json!({ "ok": true, "id": id })).into_response()
+        }
+        Err(e) => json_err(
+            StatusCode::BAD_REQUEST,
+            format!("Error creando sección: {e}"),
+        ),
+    }
+}
+
+async fn admin_update_web_html(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<AdminWebHtmlRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "webs.html.edit").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(web) = state.db.get_web_by_id(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Sección no encontrada.");
+    };
+    if web.is_custom == 0 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Solo las secciones personalizadas permiten editar su HTML.",
+        );
+    }
+    let _ = state
+        .db
+        .update_web_html(id, req.html_content.trim())
+        .await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "web_html_updated",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn admin_set_web_tag(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<AdminWebTagRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "webs.tag").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let tag = req
+        .tag
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "activo")
+        .map(str::to_string);
+    let tag_message = req
+        .tag_message
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let tag_opens_at = match tag.as_deref() {
+        Some(t)
+            if matches!(
+                t,
+                "próximamente" | "proximamente" | "mantenimiento" | "en_proceso" | "proceso"
+            ) =>
+        {
+            req.tag_opens_at
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .and_then(crate::handlers::admin::parse_local_datetime_to_utc)
+        }
+        _ => None,
+    };
+    let _ = sqlx::query(
+        "UPDATE webs SET tag = ?, tag_message = ?, tag_opens_at = ? WHERE id = ?",
+    )
+    .bind(tag.as_deref())
+    .bind(&tag_message)
+    .bind(tag_opens_at)
+    .bind(id)
+    .execute(&state.db.pool)
+    .await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "web_tag_change",
+            Some(&format!("id={id} tag={tag:?}")),
+            None,
+        )
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn admin_delete_web(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "webs.delete").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(web) = state.db.get_web_by_id(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Sección no encontrada.");
+    };
+    if crate::handlers::admin::is_system_slug(&web.slug) {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Las secciones del sistema no se pueden eliminar.",
+        );
+    }
+    let _ = state.db.delete_web(id).await;
+    let _ = state
+        .db
+        .audit(Some(actor.id), "web_delete", Some(&format!("id={id}")), None)
+        .await;
+    Json(serde_json::json!({ "ok": true })).into_response()
+}
+
+async fn build_admin_apis_payload(state: &AppState) -> AdminApisPayload {
+    let keys_raw = state.db.list_api_keys().await.unwrap_or_default();
+    let providers_raw = state.db.list_api_providers_full().await.unwrap_or_default();
+    let logs_raw = state.db.list_rotation_logs(50).await.unwrap_or_default();
+
+    let rotation_enabled = state
+        .db
+        .aris_get_config("rotation_enabled")
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.trim() != "0" && v.trim() != "false")
+        .unwrap_or(true);
+    let rotation_strategy = state
+        .db
+        .aris_get_config("rotation_strategy")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "round_robin".to_string());
+    let cooldown_minutes = state
+        .db
+        .aris_get_config("cooldown_minutes")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(60);
+    let auto_failover = state
+        .db
+        .aris_get_config("auto_failover")
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.trim() != "0" && v.trim() != "false")
+        .unwrap_or(true);
+    let ollama_url = state
+        .db
+        .aris_get_config("ollama_url")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let hourly_limit = state
+        .db
+        .aris_get_config("hourly_limit")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(30);
+    let daily_limit = state
+        .db
+        .aris_get_config("daily_limit")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(150);
+    let daily_credits_limit = state
+        .db
+        .aris_get_config("daily_credits_limit")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok())
+        .map(|n| n.max(10))
+        .unwrap_or(120);
+    let aethramail_url = state
+        .db
+        .aris_get_config("aethramail_url")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let system_prompt = state
+        .db
+        .aris_get_config("system_prompt")
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+
+    AdminApisPayload {
+        keys: keys_raw
+            .into_iter()
+            .map(|k| {
+                let masked = k.masked_key();
+                AdminApiKeyDto {
+                    id: k.id,
+                    provider_id: k.provider_id,
+                    masked_key: masked,
+                    label: k.label,
+                    is_active: k.is_active != 0,
+                    total_uses: k.total_uses,
+                    daily_uses: k.daily_uses,
+                    daily_cap: k.daily_cap,
+                    rate_limited_until: k.rate_limited_until,
+                    last_error: k.last_error,
+                    last_used_at: k.last_used_at,
+                    provider_name: k.provider_name,
+                    provider_type: k.provider_type,
+                }
+            })
+            .collect(),
+        providers: providers_raw
+            .into_iter()
+            .map(|p| AdminApiProviderDto {
+                id: p.id,
+                name: p.name,
+                provider_type: p.provider_type,
+                base_url: p.base_url,
+                default_model: p.default_model,
+                is_preset: p.is_preset != 0,
+                priority: p.priority,
+                is_active: p.is_active != 0,
+            })
+            .collect(),
+        logs: logs_raw
+            .into_iter()
+            .map(|l| AdminRotationLogDto {
+                id: l.id,
+                source: l.source,
+                channel_label: l.channel_label,
+                provider_name: l.provider_name,
+                key_label: l.key_label,
+                model: l.model,
+                status: l.status,
+                latency_ms: l.latency_ms,
+                detail: l.detail,
+                created_at: l.created_at,
+            })
+            .collect(),
+        config: AdminApisConfigDto {
+            rotation_enabled,
+            rotation_strategy,
+            cooldown_minutes,
+            auto_failover,
+            ollama_url,
+            hourly_limit,
+            daily_limit,
+            daily_credits_limit,
+            aethramail_url,
+            system_prompt,
+        },
+    }
+}
+
+async fn admin_apis_get(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_add_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminAddApiKeyRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let lines: Vec<&str> = req
+        .api_key
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    if lines.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "Introduce al menos una API key.");
+    }
+    let base_label = req
+        .label
+        .as_deref()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .unwrap_or("key")
+        .to_string();
+    let daily_cap = req.daily_cap.filter(|&c| c > 0);
+    if lines.len() == 1 {
+        if let Err(e) = state
+            .db
+            .add_api_key(req.provider_id, lines[0], &base_label, daily_cap)
+            .await
+        {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error añadiendo key: {e}"),
+            );
+        }
+    } else {
+        for (idx, line) in lines.iter().enumerate() {
+            let lbl = format!("{} #{}", base_label, idx + 1);
+            let _ = state
+                .db
+                .add_api_key(req.provider_id, line, &lbl, daily_cap)
+                .await;
+        }
+    }
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_toggle_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(key_id): Path<i64>,
+    Json(req): Json<AdminToggleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.toggle_api_key(key_id, req.active).await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_update_key_cap(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(key_id): Path<i64>,
+    Json(req): Json<AdminKeyCapRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let cap = req.daily_cap.filter(|&c| c > 0);
+    let _ = state.db.update_api_key_daily_cap(key_id, cap).await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_test_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(key_id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    match crate::handlers::aris::external::test_api_key(&state.db.pool, key_id).await {
+        Ok((healthy, detail, latency_ms)) => Json(AdminTestApiKeyResult {
+            ok: true,
+            healthy,
+            detail,
+            latency_ms,
+            error: None,
+        })
+        .into_response(),
+        Err(e) => Json(AdminTestApiKeyResult {
+            ok: false,
+            healthy: false,
+            detail: String::new(),
+            latency_ms: 0,
+            error: Some(e),
+        })
+        .into_response(),
+    }
+}
+
+async fn admin_apis_delete_key(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(key_id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.delete_api_key(key_id).await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_reset_cooldowns(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.reset_api_cooldowns().await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_add_provider(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminSaveProviderRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let name = req.name.trim();
+    let provider_type = req.provider_type.trim();
+    let base_url = req.base_url.trim();
+    let default_model = req
+        .default_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or("default");
+    if name.is_empty() || base_url.is_empty() || provider_type.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "Campos incompletos.");
+    }
+    if let Err(e) = state
+        .db
+        .add_api_provider(name, provider_type, base_url, default_model)
+        .await
+    {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error creando proveedor: {e}"),
+        );
+    }
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_update_provider(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(provider_id): Path<i64>,
+    Json(req): Json<AdminSaveProviderRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let name = req.name.trim();
+    let provider_type = req.provider_type.trim();
+    let base_url = req.base_url.trim();
+    let default_model = req
+        .default_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or("default");
+    if name.is_empty() || base_url.is_empty() || provider_type.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "Campos incompletos.");
+    }
+    let _ = state
+        .db
+        .update_api_provider(provider_id, name, provider_type, base_url, default_model)
+        .await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_toggle_provider(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(provider_id): Path<i64>,
+    Json(req): Json<AdminToggleRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.toggle_api_provider(provider_id, req.active).await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_reorder_provider(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(provider_id): Path<i64>,
+    Json(req): Json<AdminReorderProviderRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let delta = if req.delta < 0 { -1 } else { 1 };
+    let _ = state
+        .db
+        .move_api_provider_priority(provider_id, delta)
+        .await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_delete_provider(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(provider_id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let providers = state
+        .db
+        .list_api_providers_full()
+        .await
+        .unwrap_or_default();
+    if providers
+        .into_iter()
+        .any(|p| p.id == provider_id && p.is_preset == 1)
+    {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Los proveedores preset no se pueden eliminar.",
+        );
+    }
+    let _ = state.db.delete_api_provider(provider_id).await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_save_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminApisConfigDto>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state
+        .db
+        .aris_set_config(
+            "rotation_enabled",
+            if req.rotation_enabled { "1" } else { "0" },
+        )
+        .await;
+    let strat = match req.rotation_strategy.trim() {
+        "least_used" => "least_used",
+        "provider_order" => "provider_order",
+        _ => "round_robin",
+    };
+    let _ = state.db.aris_set_config("rotation_strategy", strat).await;
+    let _ = state
+        .db
+        .aris_set_config(
+            "cooldown_minutes",
+            &req.cooldown_minutes.clamp(1, 1440).to_string(),
+        )
+        .await;
+    let _ = state
+        .db
+        .aris_set_config("auto_failover", if req.auto_failover { "1" } else { "0" })
+        .await;
+    if !req.ollama_url.trim().is_empty() {
+        let _ = state
+            .db
+            .aris_set_config("ollama_url", req.ollama_url.trim())
+            .await;
+    }
+    let _ = state
+        .db
+        .aris_set_config("hourly_limit", &req.hourly_limit.max(1).to_string())
+        .await;
+    let _ = state
+        .db
+        .aris_set_config("daily_limit", &req.daily_limit.max(1).to_string())
+        .await;
+    let _ = state
+        .db
+        .aris_set_config(
+            "daily_credits_limit",
+            &req.daily_credits_limit.max(10).to_string(),
+        )
+        .await;
+    let _ = state
+        .db
+        .aris_set_config("aethramail_url", req.aethramail_url.trim())
+        .await;
+    if !req.system_prompt.trim().is_empty() {
+        let _ = state
+            .db
+            .aris_set_config("system_prompt", req.system_prompt.trim())
+            .await;
+    }
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn admin_apis_clear_logs(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "admin.apis").await {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let _ = state.db.clear_rotation_logs().await;
+    Json(build_admin_apis_payload(&state).await).into_response()
+}
+
+async fn build_docs_dtos(state: &AppState) -> Vec<DocumentDto> {
+    let docs = state.db.list_documents().await.unwrap_or_default();
+    docs.into_iter()
+        .map(|d| DocumentDto {
+            id: d.id,
+            title: d.title.clone(),
+            description: d.description.clone().unwrap_or_default(),
+            file_name: d.file_name.clone(),
+            file_type: d.file_type.clone(),
+            icon: d.icon().to_string(),
+            size: d.human_size(),
+            created_at: d.created_at.format("%d/%m/%Y").to_string(),
+            has_preview: d.has_preview(),
+            downloaded: d.downloaded,
+        })
+        .collect()
+}
+
+async fn admin_docs_upload(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminUploadDocRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "docs.create").await
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let title = req.title.trim().to_string();
+    if title.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El título es obligatorio.");
+    }
+    let file_name = req.file_name.trim().to_string();
+    if file_name.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "Debes seleccionar un archivo.");
+    }
+    let ftype = crate::docs::FileType::from_filename(&file_name);
+    if ftype == crate::docs::FileType::Unknown {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Tipo de archivo no soportado. Solo PDF, DOCX y PPTX.",
+        );
+    }
+    let bytes = match base64_decode(&req.data_base64) {
+        Ok(b) if !b.is_empty() => b,
+        Ok(_) => return json_err(StatusCode::BAD_REQUEST, "El archivo está vacío."),
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, e),
+    };
+    const MAX_DOC_BYTES: usize = 100 * 1024 * 1024;
+    if bytes.len() > MAX_DOC_BYTES {
+        return json_err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "El archivo supera el límite de 100 MB.",
+        );
+    }
+    let description = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let doc_id = match state
+        .db
+        .create_document(
+            &title,
+            description.as_deref(),
+            &file_name,
+            "",
+            ftype.as_str(),
+            bytes.len() as i64,
+        )
+        .await
+    {
+        Ok(id) => id,
+        Err(e) => {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error creando documento: {e}"),
+            )
+        }
+    };
+    let safe_name = crate::docs::sanitize_filename(&file_name);
+    let disk_path = format!("data/files/{doc_id}_{safe_name}");
+    if std::fs::create_dir_all("data/files").is_err()
+        || std::fs::write(&disk_path, &bytes).is_err()
+    {
+        let _ = state.db.delete_document(doc_id).await;
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error guardando archivo en disco.",
+        );
+    }
+    let _ = sqlx::query("UPDATE documents SET file_path = ? WHERE id = ?")
+        .bind(&disk_path)
+        .bind(doc_id)
+        .execute(&state.db.pool)
+        .await;
+    if ftype == crate::docs::FileType::Pdf {
+        let _ = state
+            .db
+            .set_document_preview(doc_id, Some(&disk_path), "ready")
+            .await;
+    } else {
+        let state_clone = state.clone();
+        let disk_path_clone = disk_path.clone();
+        tokio::spawn(async move {
+            let input = std::path::PathBuf::from(&disk_path_clone);
+            let out_dir = std::path::PathBuf::from("data/previews");
+            match crate::docs::convert_to_pdf(&input, &out_dir) {
+                Ok(pdf_path) => {
+                    let final_path = out_dir.join(format!("{doc_id}.pdf"));
+                    if final_path.exists() {
+                        let _ = std::fs::remove_file(&final_path);
+                    }
+                    if pdf_path != final_path {
+                        let _ = std::fs::rename(&pdf_path, &final_path);
+                    }
+                    let _ = state_clone
+                        .db
+                        .set_document_preview(
+                            doc_id,
+                            Some(&format!("data/previews/{doc_id}.pdf")),
+                            "ready",
+                        )
+                        .await;
+                }
+                Err(_) => {
+                    let _ = state_clone
+                        .db
+                        .set_document_preview(doc_id, None, "failed")
+                        .await;
+                }
+            }
+        });
+    }
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "doc_upload",
+            Some(&format!("id={doc_id} {title}")),
+            None,
+        )
+        .await;
+    Json(build_docs_dtos(&state).await).into_response()
+}
+
+async fn admin_docs_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<AdminUpdateDocRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "docs.edit").await
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let title = req.title.trim();
+    if title.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El título es obligatorio.");
+    }
+    let desc = req
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let _ = state.db.update_document(id, title, desc).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "doc_edit",
+            Some(&format!("id={id} {title}")),
+            None,
+        )
+        .await;
+    Json(build_docs_dtos(&state).await).into_response()
+}
+
+async fn admin_docs_regenerate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.user_has_perm(&actor, "docs.edit").await
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let Some(doc) = state.db.get_document(id).await.ok().flatten() else {
+        return json_err(StatusCode::NOT_FOUND, "Documento no encontrado.");
+    };
+    if doc.file_type == "pdf" {
+        return json_err(StatusCode::BAD_REQUEST, "El documento ya es PDF.");
+    }
+    let _ = state
+        .db
+        .set_document_preview(id, None, "converting")
+        .await;
+    let state_clone = state.clone();
+    let disk_path = doc.file_path.clone();
+    tokio::spawn(async move {
+        let input = std::path::PathBuf::from(&disk_path);
+        let out_dir = std::path::PathBuf::from("data/previews");
+        match crate::docs::convert_to_pdf(&input, &out_dir) {
+            Ok(pdf_path) => {
+                let final_path = out_dir.join(format!("{id}.pdf"));
+                if final_path.exists() {
+                    let _ = std::fs::remove_file(&final_path);
+                }
+                if pdf_path != final_path {
+                    let _ = std::fs::rename(&pdf_path, &final_path);
+                }
+                let _ = state_clone
+                    .db
+                    .set_document_preview(
+                        id,
+                        Some(&format!("data/previews/{id}.pdf")),
+                        "ready",
+                    )
+                    .await;
+            }
+            Err(_) => {
+                let _ = state_clone
+                    .db
+                    .set_document_preview(id, None, "failed")
+                    .await;
+            }
+        }
+    });
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "doc_regenerate_preview",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    Json(build_docs_dtos(&state).await).into_response()
+}
+
+async fn build_admin_downloads_dtos(state: &AppState) -> Vec<AdminDownloadRowDto> {
+    let rows = state.db.list_all_downloads().await.unwrap_or_default();
+    rows.into_iter()
+        .map(|r| AdminDownloadRowDto {
+            id: r.id,
+            platform: r.platform,
+            app_slug: r.app_slug,
+            app_name: r.app_name,
+            version: r.version,
+            orig_name: r.orig_name,
+            size_bytes: r.size_bytes,
+            notes: r.notes.unwrap_or_default(),
+            is_active: r.is_active != 0,
+            created_at: r.created_at.chars().take(10).collect(),
+        })
+        .collect()
+}
+
+async fn admin_downloads_list(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if actor.role != "owner"
+        && actor.role != "admin"
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    Json(build_admin_downloads_dtos(&state).await).into_response()
+}
+
+async fn admin_downloads_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<AdminCreateDownloadRequest>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if actor.role != "owner"
+        && actor.role != "admin"
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    let platform = req.platform.trim();
+    if !["windows", "linux", "android", "macos", "ios"].contains(&platform) {
+        return json_err(StatusCode::BAD_REQUEST, "Plataforma inválida.");
+    }
+    let slug: String = req
+        .app_slug
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .take(48)
+        .collect::<String>()
+        .to_lowercase();
+    let app_name = req.app_name.trim();
+    let version = req.version.trim();
+    if slug.is_empty() || app_name.is_empty() {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Slug y nombre de aplicación son obligatorios.",
+        );
+    }
+    let base_name = req
+        .file_name
+        .trim()
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("archivo");
+    let safe_orig: String = base_name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '_' || *c == '-')
+        .take(96)
+        .collect();
+    let lower = safe_orig.to_lowercase();
+    const OK_EXT: &[&str] = &[
+        ".exe", ".msi", ".deb", ".rpm", ".appimage", ".apk", ".dmg", ".ipa", ".zip", ".tar.gz",
+        ".bin",
+    ];
+    if !OK_EXT.iter().any(|e| lower.ends_with(e)) {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Extensión de archivo no permitida.",
+        );
+    }
+    let bytes = match base64_decode(&req.data_base64) {
+        Ok(b) if !b.is_empty() => b,
+        Ok(_) => return json_err(StatusCode::BAD_REQUEST, "El archivo está vacío."),
+        Err(e) => return json_err(StatusCode::BAD_REQUEST, e),
+    };
+    const MAX_DL_BYTES: usize = 150 * 1024 * 1024;
+    if bytes.len() > MAX_DL_BYTES {
+        return json_err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "El archivo supera el límite de 150 MB.",
+        );
+    }
+    let hex = crate::db::random_hex(16);
+    let stored = format!("{hex}_{safe_orig}");
+    let path = format!("data/downloads/{stored}");
+    if std::fs::create_dir_all("data/downloads").is_err() || std::fs::write(&path, &bytes).is_err() {
+        return json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error escribiendo el archivo en disco.",
+        );
+    }
+    let notes = req
+        .notes
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    match state
+        .db
+        .create_download(
+            platform,
+            &slug,
+            app_name,
+            version,
+            &stored,
+            &safe_orig,
+            bytes.len() as i64,
+            notes,
+        )
+        .await
+    {
+        Ok(id) => {
+            let _ = state
+                .db
+                .audit(
+                    Some(actor.id),
+                    "download_create",
+                    Some(&format!("id={id} platform={platform} app={slug}")),
+                    None,
+                )
+                .await;
+            Json(build_admin_downloads_dtos(&state).await).into_response()
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&path);
+            json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error registrando descarga: {e}"),
+            )
+        }
+    }
+}
+
+async fn admin_downloads_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let actor = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if actor.role != "owner"
+        && actor.role != "admin"
+        && !state.db.user_has_perm(&actor, "admin.access").await
+    {
+        return json_err(StatusCode::FORBIDDEN, "No autorizado.");
+    }
+    if let Ok(Some(row)) = state.db.get_download(id).await {
+        let _ = std::fs::remove_file(format!("data/downloads/{}", row.filename));
+    }
+    let _ = state.db.delete_download(id).await;
+    let _ = state
+        .db
+        .audit(
+            Some(actor.id),
+            "download_delete",
+            Some(&format!("id={id}")),
+            None,
+        )
+        .await;
+    Json(build_admin_downloads_dtos(&state).await).into_response()
 }

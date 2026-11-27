@@ -1,5 +1,10 @@
 use aethravox_core::{
-    base64_encode, AddGroupMemberRequest, AdminBanRequest, AdminIpBansPayload, AdminOverviewDto,
+    base64_encode, AddGroupMemberRequest, AdminAddApiKeyRequest, AdminApisConfigDto,
+    AdminApisPayload, AdminBanRequest, AdminCreateDownloadRequest, AdminCreateUserRequest,
+    AdminCreateWebRequest, AdminDownloadRowDto, AdminIpBansPayload, AdminKeyCapRequest,
+    AdminOverviewDto, AdminReorderProviderRequest, AdminSaveProviderRequest, AdminTestApiKeyResult,
+    AdminToggleRequest, AdminUpdateDocRequest, AdminUploadDocRequest, AdminWebHtmlRequest,
+    AdminWebTagRequest,
     AdminRoleRequest, AdminRolesPayload, AdminTitlesPayload, AexosLinkRequest, AexosProfileDto,
     AexosSavePrefsRequest, AexosSwitchRequest, ApiError, ArisChatDto, ArisCreateChatRequest,
     ArisCreditsDto, ArisMessageDto, ArisMode, ArisSendRequest, ArisSendResponse,
@@ -19,7 +24,7 @@ use aethravox_core::{
     TicketActionRequest, TicketDetailDto, TicketDto, TitleAssignRequest,
     TransferGroupOwnershipRequest, UpdateGroupInfoRequest, UpdateProfileRequest,
     UpdateTitlesRequest, UploadAvatarRequest, UploadChatMediaRequest, UploadGroupImageRequest,
-    UploadVideoRequest, UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto,
+    UploadVideoRequest, UserIpHistoryDto, UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto,
 };
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -143,6 +148,17 @@ pub enum ApiEvent {
     AdminConfigLoaded(SystemConfigDto),
     AdminRolesLoaded(AdminRolesPayload),
     AdminTitlesLoaded(AdminTitlesPayload),
+    AdminUserIpsLoaded {
+        user_id: i64,
+        ips: Vec<UserIpHistoryDto>,
+    },
+    AdminApisLoaded(AdminApisPayload),
+    AdminApiKeyTested {
+        key_id: i64,
+        res: AdminTestApiKeyResult,
+    },
+    AdminDocsLoaded(Vec<DocumentDto>),
+    AdminDownloadsLoaded(Vec<AdminDownloadRowDto>),
     AdminActionOk(String),
     AdminErr(String),
 
@@ -3460,6 +3476,878 @@ pub fn spawn_admin_revoke_title(
             Ok(p) => {
                 let _ = tx.send(ApiEvent::AdminTitlesLoaded(p));
                 let _ = tx.send(ApiEvent::AdminActionOk("Título revocado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_create_user(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AdminCreateUserRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<AdminCreateUserRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/admin/users/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Usuario creado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_user_ips(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    user_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/users/{user_id}/ips");
+        match get_json::<Vec<UserIpHistoryDto>>(&base_url, &path, &token).await {
+            Ok(ips) => {
+                let _ = tx.send(ApiEvent::AdminUserIpsLoaded { user_id, ips });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_create_web(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AdminCreateWebRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<AdminCreateWebRequest, serde_json::Value>(
+            &base_url,
+            "/api/v1/admin/webs/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Sección creada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_update_web_html(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    web_id: i64,
+    html_content: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/webs/{web_id}/html");
+        let req = AdminWebHtmlRequest { html_content };
+        match post_json::<AdminWebHtmlRequest, serde_json::Value>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("HTML actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_set_web_tag(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    web_id: i64,
+    req: AdminWebTagRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/webs/{web_id}/tag");
+        match post_json::<AdminWebTagRequest, serde_json::Value>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Etiqueta de sección guardada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_delete_web(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    web_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/webs/{web_id}");
+        match delete_json::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                let _ = tx.send(ApiEvent::AdminActionOk("Sección eliminada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_apis(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<AdminApisPayload>(&base_url, "/api/v1/admin/apis", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_add_api_key(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AdminAddApiKeyRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<AdminAddApiKeyRequest, AdminApisPayload>(
+            &base_url,
+            "/api/v1/admin/apis/keys",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("API Key(s) añadidas.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_toggle_api_key(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    key_id: i64,
+    active: bool,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/keys/{key_id}/toggle");
+        let req = AdminToggleRequest { active };
+        match post_json::<AdminToggleRequest, AdminApisPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Estado de key actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_update_api_key_cap(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    key_id: i64,
+    daily_cap: Option<i64>,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/keys/{key_id}/cap");
+        let req = AdminKeyCapRequest { daily_cap };
+        match post_json::<AdminKeyCapRequest, AdminApisPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Tope diario actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_test_api_key(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    key_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/keys/{key_id}/test");
+        match post_empty::<AdminTestApiKeyResult>(&base_url, &path, &token).await {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::AdminApiKeyTested { key_id, res });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_delete_api_key(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    key_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/keys/{key_id}");
+        match delete_json::<AdminApisPayload>(&base_url, &path, &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Key eliminada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_reset_api_cooldowns(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match post_empty::<AdminApisPayload>(
+            &base_url,
+            "/api/v1/admin/apis/keys/reset-cooldowns",
+            &token,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Cooldowns liberados.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_add_api_provider(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AdminSaveProviderRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<AdminSaveProviderRequest, AdminApisPayload>(
+            &base_url,
+            "/api/v1/admin/apis/providers",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Proveedor creado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_update_api_provider(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    provider_id: i64,
+    req: AdminSaveProviderRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/providers/{provider_id}/update");
+        match post_json::<AdminSaveProviderRequest, AdminApisPayload>(
+            &base_url, &path, &token, &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Proveedor actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_toggle_api_provider(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    provider_id: i64,
+    active: bool,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/providers/{provider_id}/toggle");
+        let req = AdminToggleRequest { active };
+        match post_json::<AdminToggleRequest, AdminApisPayload>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Proveedor actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_reorder_api_provider(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    provider_id: i64,
+    delta: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/providers/{provider_id}/priority");
+        let req = AdminReorderProviderRequest { delta };
+        match post_json::<AdminReorderProviderRequest, AdminApisPayload>(
+            &base_url, &path, &token, &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_delete_api_provider(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    provider_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/apis/providers/{provider_id}");
+        match delete_json::<AdminApisPayload>(&base_url, &path, &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Proveedor eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_save_apis_config(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: AdminApisConfigDto,
+) {
+    rt.spawn(async move {
+        match post_json::<AdminApisConfigDto, AdminApisPayload>(
+            &base_url,
+            "/api/v1/admin/apis/config",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk(
+                    "Configuración de Aris y rotación guardada.".into(),
+                ));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_clear_rotation_logs(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match delete_json::<AdminApisPayload>(&base_url, "/api/v1/admin/apis/logs", &token).await {
+            Ok(p) => {
+                let _ = tx.send(ApiEvent::AdminApisLoaded(p));
+                let _ = tx.send(ApiEvent::AdminActionOk("Bitácora vaciada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_docs_list(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<DocumentDto>>(&base_url, "/api/v1/docs", &token).await {
+            Ok(d) => {
+                let _ = tx.send(ApiEvent::AdminDocsLoaded(d));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_doc_upload_bytes(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title: String,
+    description: Option<String>,
+    file_name: String,
+    bytes: Vec<u8>,
+) {
+    rt.spawn(async move {
+        let req = AdminUploadDocRequest {
+            title,
+            description,
+            file_name,
+            data_base64: base64_encode(&bytes),
+        };
+        match post_json::<AdminUploadDocRequest, Vec<DocumentDto>>(
+            &base_url,
+            "/api/v1/admin/docs/upload",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(docs) => {
+                let _ = tx.send(ApiEvent::AdminDocsLoaded(docs));
+                let _ = tx.send(ApiEvent::AdminActionOk("Documento subido.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_doc_upload_path(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    title: String,
+    description: Option<String>,
+    path: String,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (rt, base_url, token, title, description, path);
+        let _ = tx.send(ApiEvent::AdminErr(
+            "En navegador web arrastra el documento al área de subida.".into(),
+        ));
+        ctx.request_repaint();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rt.spawn(async move {
+            let trimmed = path.trim().trim_matches('"').to_string();
+            let bytes = match std::fs::read(&trimmed) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AdminErr(format!(
+                        "No se pudo leer el archivo ({trimmed}): {e}"
+                    )));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            let file_name = std::path::Path::new(&trimmed)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("documento.pdf")
+                .to_string();
+            let req = AdminUploadDocRequest {
+                title,
+                description,
+                file_name,
+                data_base64: base64_encode(&bytes),
+            };
+            match post_json::<AdminUploadDocRequest, Vec<DocumentDto>>(
+                &base_url,
+                "/api/v1/admin/docs/upload",
+                &token,
+                &req,
+            )
+            .await
+            {
+                Ok(docs) => {
+                    let _ = tx.send(ApiEvent::AdminDocsLoaded(docs));
+                    let _ = tx.send(ApiEvent::AdminActionOk("Documento subido.".into()));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AdminErr(e));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
+}
+
+pub fn spawn_admin_doc_update(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    doc_id: i64,
+    req: AdminUpdateDocRequest,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/docs/{doc_id}/update");
+        match post_json::<AdminUpdateDocRequest, Vec<DocumentDto>>(&base_url, &path, &token, &req)
+            .await
+        {
+            Ok(docs) => {
+                let _ = tx.send(ApiEvent::AdminDocsLoaded(docs));
+                let _ = tx.send(ApiEvent::AdminActionOk("Documento actualizado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_doc_regenerate(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    doc_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/docs/{doc_id}/regenerate");
+        match post_empty::<Vec<DocumentDto>>(&base_url, &path, &token).await {
+            Ok(docs) => {
+                let _ = tx.send(ApiEvent::AdminDocsLoaded(docs));
+                let _ = tx.send(ApiEvent::AdminActionOk(
+                    "Regeneración de preview lanzada.".into(),
+                ));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_doc_delete(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    doc_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/docs/{doc_id}");
+        match delete_json::<serde_json::Value>(&base_url, &path, &token).await {
+            Ok(_) => {
+                if let Ok(docs) = get_json::<Vec<DocumentDto>>(&base_url, "/api/v1/docs", &token).await {
+                    let _ = tx.send(ApiEvent::AdminDocsLoaded(docs));
+                }
+                let _ = tx.send(ApiEvent::AdminActionOk("Documento eliminado.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_downloads_list(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<AdminDownloadRowDto>>(&base_url, "/api/v1/admin/downloads", &token)
+            .await
+        {
+            Ok(rows) => {
+                let _ = tx.send(ApiEvent::AdminDownloadsLoaded(rows));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_download_create_bytes(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    platform: String,
+    app_slug: String,
+    app_name: String,
+    version: String,
+    notes: Option<String>,
+    file_name: String,
+    bytes: Vec<u8>,
+) {
+    rt.spawn(async move {
+        let req = AdminCreateDownloadRequest {
+            platform,
+            app_slug,
+            app_name,
+            version,
+            notes,
+            file_name,
+            data_base64: base64_encode(&bytes),
+        };
+        match post_json::<AdminCreateDownloadRequest, Vec<AdminDownloadRowDto>>(
+            &base_url,
+            "/api/v1/admin/downloads/create",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(rows) => {
+                let _ = tx.send(ApiEvent::AdminDownloadsLoaded(rows));
+                let _ = tx.send(ApiEvent::AdminActionOk("Descarga publicada.".into()));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::AdminErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_admin_download_create_path(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    platform: String,
+    app_slug: String,
+    app_name: String,
+    version: String,
+    notes: Option<String>,
+    path: String,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (
+            rt, base_url, token, platform, app_slug, app_name, version, notes, path,
+        );
+        let _ = tx.send(ApiEvent::AdminErr(
+            "En navegador web arrastra el binario al área de subida.".into(),
+        ));
+        ctx.request_repaint();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rt.spawn(async move {
+            let trimmed = path.trim().trim_matches('"').to_string();
+            let bytes = match std::fs::read(&trimmed) {
+                Ok(b) => b,
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AdminErr(format!(
+                        "No se pudo leer el archivo ({trimmed}): {e}"
+                    )));
+                    ctx.request_repaint();
+                    return;
+                }
+            };
+            let file_name = std::path::Path::new(&trimmed)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("app.bin")
+                .to_string();
+            let req = AdminCreateDownloadRequest {
+                platform,
+                app_slug,
+                app_name,
+                version,
+                notes,
+                file_name,
+                data_base64: base64_encode(&bytes),
+            };
+            match post_json::<AdminCreateDownloadRequest, Vec<AdminDownloadRowDto>>(
+                &base_url,
+                "/api/v1/admin/downloads/create",
+                &token,
+                &req,
+            )
+            .await
+            {
+                Ok(rows) => {
+                    let _ = tx.send(ApiEvent::AdminDownloadsLoaded(rows));
+                    let _ = tx.send(ApiEvent::AdminActionOk("Descarga publicada.".into()));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::AdminErr(e));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
+}
+
+pub fn spawn_admin_download_delete(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    download_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/admin/downloads/{download_id}");
+        match delete_json::<Vec<AdminDownloadRowDto>>(&base_url, &path, &token).await {
+            Ok(rows) => {
+                let _ = tx.send(ApiEvent::AdminDownloadsLoaded(rows));
+                let _ = tx.send(ApiEvent::AdminActionOk("Descarga eliminada.".into()));
             }
             Err(e) => {
                 let _ = tx.send(ApiEvent::AdminErr(e));

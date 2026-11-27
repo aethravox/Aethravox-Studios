@@ -83,7 +83,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     ui.add(
                         egui::TextEdit::singleline(&mut app.server_url)
                             .desired_width(f32::INFINITY)
-                            .hint_text("https://aethravoxstudios.duckdns.org"),
+                            .hint_text("https://aethravox-studios.duckdns.org"),
                     );
                     ui.add_space(6.0);
 
