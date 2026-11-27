@@ -80,7 +80,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                             } else {
                                 p.bg_elevated
                             })
-                            .stroke(egui::Stroke::new(1.0, p.border_subtle))
+                            .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
                             .rounding(Rounding::same(10.0))
                             .inner_margin(egui::Margin::same(12.0))
                             .show(ui, |ui| {

@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use aethravox_core::{
-    ApiError, AuthSuccess, CategoryRowDto, HubPayload, HubStatsDto, LoginRequest, RegisterRequest,
-    ThemeKind, ThemeSelectRequest, UserSummary, WebAppDto,
+    ApiError, AuthSuccess, CategoryRowDto, ChatConversationDto, ChatMessageDto, HubPayload,
+    HubStatsDto, LoginRequest, RegisterRequest, SendMessageRequest, ThemeKind, ThemeSelectRequest,
+    UserSummary, WebAppDto,
 };
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -14,7 +15,7 @@ use axum::{
 
 use crate::{
     db::verify_password,
-    models::{validate_email, validate_password, validate_username, User, Web},
+    models::{validate_email, validate_password, validate_username, Message, User, Web},
     AppState,
 };
 
@@ -28,6 +29,12 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/me", get(me))
         .route("/api/v1/hub", get(hub))
         .route("/api/v1/theme", post(select_theme))
+        .route("/api/v1/chat/conversations", get(chat_conversations))
+        .route(
+            "/api/v1/chat/conversations/:id/messages",
+            get(chat_messages).post(chat_send),
+        )
+        .route("/api/v1/chat/conversations/:id/read", post(chat_mark_read))
 }
 
 fn json_err(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -343,4 +350,322 @@ async fn hub(State(state): State<AppState>, headers: HeaderMap) -> Response {
         },
     })
     .into_response()
+}
+
+// ===================== Chat (REST) =====================
+// Misma lógica y mismas reglas que el chat web (handlers/chat/*), pero con
+// autenticación Bearer + JSON para el cliente de escritorio.
+
+/// Convierte los prefijos internos ([IMAGE]/[VOICE]/[FILE]) en texto legible.
+fn chat_preview(body: &str) -> String {
+    if body.starts_with("[IMAGE]") {
+        "📷 Imagen".to_string()
+    } else if body.starts_with("[VOICE]") {
+        "🎙️ Nota de voz".to_string()
+    } else if body.starts_with("[FILE]") {
+        "📎 Archivo".to_string()
+    } else {
+        body.to_string()
+    }
+}
+
+fn message_to_dto(m: &Message, sender: String, my_id: i64) -> ChatMessageDto {
+    let content = if m.deleted_at.is_some() {
+        "🚫 Mensaje eliminado".to_string()
+    } else {
+        chat_preview(&m.body)
+    };
+    ChatMessageDto {
+        id: m.id,
+        conversation_id: m.conversation_id,
+        sender,
+        content,
+        created_at: m.created_at.format("%H:%M").to_string(),
+        is_mine: m.sender_id == my_id,
+    }
+}
+
+async fn chat_conversations(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    let convs = state
+        .db
+        .list_user_conversations(user.id)
+        .await
+        .unwrap_or_default();
+    let mut out: Vec<ChatConversationDto> = Vec::with_capacity(convs.len());
+
+    for c in convs {
+        let last = state.db.get_last_message(c.id).await.ok().flatten();
+        let unread = state
+            .db
+            .count_unread_in_conversation(c.id, user.id)
+            .await
+            .unwrap_or(0);
+        let is_group = c.conv_type != "dm";
+
+        let title = if is_group {
+            c.name.clone().unwrap_or_else(|| "Grupo".to_string())
+        } else {
+            let members = state
+                .db
+                .get_conversation_members(c.id)
+                .await
+                .unwrap_or_default();
+            let other_id = members.into_iter().find(|&m| m != user.id).unwrap_or(0);
+            state
+                .db
+                .find_user_by_id(other_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|u| u.display())
+                .unwrap_or_else(|| "Usuario".to_string())
+        };
+
+        let last_message = match last {
+            Some(m) if m.deleted_at.is_some() => "🚫 Mensaje eliminado".to_string(),
+            Some(m) => chat_preview(&m.body),
+            None => String::new(),
+        };
+
+        out.push(ChatConversationDto {
+            id: c.id,
+            title,
+            is_group,
+            last_message,
+            unread_count: unread,
+        });
+    }
+
+    Json(out).into_response()
+}
+
+async fn chat_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.is_conversation_member(id, user.id).await {
+        return json_err(StatusCode::FORBIDDEN, "No eres miembro de esta conversación.");
+    }
+
+    let msgs = state.db.list_messages(id, 200).await.unwrap_or_default();
+
+    // Nombres de remitentes, con caché para no repetir consultas.
+    let mut names: HashMap<i64, String> = HashMap::new();
+    for m in &msgs {
+        if !names.contains_key(&m.sender_id) {
+            let name = state
+                .db
+                .find_user_by_id(m.sender_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|u| u.display())
+                .unwrap_or_else(|| format!("User {}", m.sender_id));
+            names.insert(m.sender_id, name);
+        }
+    }
+
+    let out: Vec<ChatMessageDto> = msgs
+        .iter()
+        .map(|m| {
+            let sender = names.get(&m.sender_id).cloned().unwrap_or_default();
+            message_to_dto(m, sender, user.id)
+        })
+        .collect();
+
+    Json(out).into_response()
+}
+
+async fn chat_send(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(req): Json<SendMessageRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+
+    let body = req.body.trim().to_string();
+    if body.is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "El mensaje no puede estar vacío.");
+    }
+    if body.chars().count() > 4000 {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "Mensaje demasiado largo (máx 4000 caracteres).",
+        );
+    }
+    if !state.db.is_conversation_member(id, user.id).await {
+        return json_err(StatusCode::FORBIDDEN, "No eres miembro de esta conversación.");
+    }
+
+    // Permiso de envío por rango (solo grupos; si no hay rango, se permite).
+    if let Ok(Some(rank)) = state.db.get_member_rank(id, user.id).await {
+        if rank.can_send_messages == 0 {
+            return json_err(
+                StatusCode::FORBIDDEN,
+                "No tienes permiso para enviar mensajes en este grupo.",
+            );
+        }
+    }
+
+    let msg_id = match state.db.send_message(id, user.id, &body).await {
+        Ok(mid) if mid > 0 => mid,
+        _ => {
+            return json_err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "No se pudo guardar el mensaje.",
+            )
+        }
+    };
+
+    let sender_name = user.display();
+    let sender_avatar = user.avatar();
+    let now = chrono::Utc::now();
+    let created_at = now.format("%H:%M").to_string();
+    let created_iso = now.to_rfc3339();
+
+    // ¿Hay algún otro miembro conectado por WebSocket? -> 'delivered'
+    let members = state
+        .db
+        .get_conversation_members(id)
+        .await
+        .unwrap_or_default();
+    let other_online = {
+        let conns = state.ws_connections.lock().await;
+        members
+            .iter()
+            .any(|&m| m != user.id && conns.contains_key(&m))
+    };
+    let status = if other_online { "delivered" } else { "sent" };
+    if other_online {
+        let _ = state.db.mark_messages_delivered(id).await;
+    }
+
+    // Difundir en vivo a los clientes web conectados (mismo formato que el WS).
+    let mut offline_members: Vec<i64> = Vec::new();
+    {
+        let conns = state.ws_connections.lock().await;
+        for member_id in members {
+            if let Some(tx) = conns.get(&member_id) {
+                let mut payload = serde_json::json!({
+                    "type": "message",
+                    "id": msg_id,
+                    "conversation_id": id,
+                    "sender_id": user.id,
+                    "sender_name": sender_name,
+                    "sender_avatar": sender_avatar,
+                    "body": body,
+                    "time": created_at,
+                    "created_iso": created_iso,
+                    "status": status
+                });
+                if member_id == user.id {
+                    payload["is_self"] = serde_json::json!(true);
+                }
+                let _ = tx.send(payload.to_string());
+            } else if member_id != user.id {
+                offline_members.push(member_id);
+            }
+        }
+    }
+
+    // Web Push a los miembros sin conexión.
+    if !offline_members.is_empty() {
+        let push_arc = state.push.clone();
+        let db = state.db.clone();
+        let body_preview = if body.starts_with("[IMAGE]") {
+            "📷 Imagen".to_string()
+        } else if body.starts_with("[VOICE]") {
+            "🎙️ Nota de voz".to_string()
+        } else if body.starts_with("[FILE]") {
+            "📎 Archivo".to_string()
+        } else {
+            let b: String = body.chars().take(120).collect();
+            if body.chars().count() > 120 {
+                b + "…"
+            } else {
+                b
+            }
+        };
+        let payload = serde_json::json!({
+            "title": sender_name,
+            "body": body_preview,
+            "tag": format!("msg-{}", id),
+            "type": "message",
+            "conversation_id": id,
+            "url": "/chat",
+            "requireInteraction": false
+        });
+        tokio::spawn(async move {
+            if let Some(pm) = push_arc.as_ref() {
+                for uid in offline_members {
+                    pm.send_to_user(&db, uid, &payload).await;
+                }
+            }
+        });
+    }
+
+    Json(ChatMessageDto {
+        id: msg_id,
+        conversation_id: id,
+        sender: sender_name,
+        content: chat_preview(&body),
+        created_at,
+        is_mine: true,
+    })
+    .into_response()
+}
+
+async fn chat_mark_read(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    if !state.db.is_conversation_member(id, user.id).await {
+        return json_err(StatusCode::FORBIDDEN, "No eres miembro de esta conversación.");
+    }
+
+    let _ = state.db.mark_conversation_read(id, user.id).await;
+
+    // Avisar a los demás miembros conectados (✓✓ leído en tiempo real).
+    let members = state
+        .db
+        .get_conversation_members(id)
+        .await
+        .unwrap_or_default();
+    let conns = state.ws_connections.lock().await;
+    for member_id in members {
+        if member_id != user.id {
+            if let Some(tx) = conns.get(&member_id) {
+                let _ = tx.send(
+                    serde_json::json!({
+                        "type": "status_update",
+                        "conversation_id": id,
+                        "reader_id": user.id,
+                        "status": "read"
+                    })
+                    .to_string(),
+                );
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "ok": true })).into_response()
 }

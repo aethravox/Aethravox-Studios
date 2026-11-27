@@ -2,10 +2,13 @@ use aethravox_core::{
     ArisChatDto, ArisMessageDto, ArisMode, ChatConversationDto, ChatMessageDto, ColorMode,
     HubPayload, ThemeKind, WebAppDto,
 };
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use crate::api::{
-    demo_aris_chats, demo_chat_conversations, demo_chat_messages, offline_demo_hub, ApiEvent,
+    demo_aris_chats, demo_chat_conversations, demo_chat_messages, offline_demo_hub,
+    spawn_fetch_conversations, spawn_fetch_messages, spawn_mark_read, spawn_send_message,
+    ApiEvent,
 };
 use crate::theme::{apply_theme, Palette};
 use crate::ui;
@@ -63,6 +66,10 @@ pub struct AethravoxApp {
     pub active_conv_id: i64,
     pub chat_messages: Vec<ChatMessageDto>,
     pub chat_draft: String,
+    pub chat_error: Option<String>,
+    pub chat_sending: bool,
+    pub chat_pending: Option<String>,
+    pub chat_last_poll: Option<Instant>,
 
     // Aris state
     pub aris_chats: Vec<ArisChatDto>,
@@ -98,7 +105,7 @@ impl AethravoxApp {
             rt,
             tx,
             rx,
-            server_url: "http://127.0.0.1:8080".to_string(),
+            server_url: "https://aethravoxstudios.duckdns.org".to_string(),
             token: None,
             route: Route::Login,
             offline_mode: false,
@@ -119,6 +126,10 @@ impl AethravoxApp {
             active_conv_id: 1,
             chat_messages: demo_chat_messages(),
             chat_draft: String::new(),
+            chat_error: None,
+            chat_sending: false,
+            chat_pending: None,
+            chat_last_poll: None,
             aris_chats,
             active_aris_chat_id: 1,
             aris_messages,
@@ -158,6 +169,10 @@ impl AethravoxApp {
         self.auth_error = None;
         self.auth_busy = false;
         self.hub = Some(offline_demo_hub(username, is_guest, self.theme));
+        self.conversations = demo_chat_conversations();
+        self.chat_messages = demo_chat_messages();
+        self.active_conv_id = 1;
+        self.chat_error = None;
         self.route = Route::Hub;
     }
 
@@ -189,7 +204,134 @@ impl AethravoxApp {
         self.hub = None;
         self.offline_mode = false;
         self.login_password.clear();
+        self.reset_chat_state();
         self.route = Route::Login;
+    }
+
+    fn reset_chat_state(&mut self) {
+        self.conversations.clear();
+        self.chat_messages.clear();
+        self.active_conv_id = 0;
+        self.chat_draft.clear();
+        self.chat_error = None;
+        self.chat_sending = false;
+        self.chat_pending = None;
+        self.chat_last_poll = None;
+    }
+
+    /// Abre una conversación: carga sus mensajes y la marca como leída (modo online).
+    pub fn chat_open_conversation(&mut self, ctx: &egui::Context, conv_id: i64) {
+        self.active_conv_id = conv_id;
+        self.chat_error = None;
+        if self.offline_mode || self.token.is_none() || conv_id == 0 {
+            return;
+        }
+        spawn_fetch_messages(
+            &self.rt,
+            self.tx.clone(),
+            ctx.clone(),
+            self.server_url.clone(),
+            self.token.clone(),
+            conv_id,
+        );
+        spawn_mark_read(
+            &self.rt,
+            self.server_url.clone(),
+            self.token.clone(),
+            conv_id,
+        );
+    }
+
+    /// Envía el borrador actual. En modo local lo añade a la lista de demostración.
+    pub fn chat_send_draft(&mut self, ctx: &egui::Context) {
+        let txt = self.chat_draft.trim().to_string();
+        if txt.is_empty() {
+            return;
+        }
+
+        if self.offline_mode || self.token.is_none() {
+            let next_id = self.chat_messages.len() as i64 + 1;
+            let sender = self
+                .hub
+                .as_ref()
+                .map(|h| h.user.display.clone())
+                .unwrap_or_else(|| "Tú".into());
+            self.chat_messages.push(ChatMessageDto {
+                id: next_id,
+                conversation_id: self.active_conv_id,
+                sender,
+                content: txt,
+                created_at: "Ahora".into(),
+                is_mine: true,
+            });
+            self.chat_draft.clear();
+            return;
+        }
+
+        if self.active_conv_id == 0 || self.chat_sending {
+            return;
+        }
+        self.chat_sending = true;
+        self.chat_error = None;
+        self.chat_pending = Some(txt.clone());
+        self.chat_draft.clear();
+        spawn_send_message(
+            &self.rt,
+            self.tx.clone(),
+            ctx.clone(),
+            self.server_url.clone(),
+            self.token.clone(),
+            self.active_conv_id,
+            txt,
+        );
+    }
+
+    /// Sondeo periódico mientras la pantalla de chat está abierta (modo online).
+    fn chat_poll(&mut self, ctx: &egui::Context) {
+        if self.route != Route::Chat || self.offline_mode || self.token.is_none() {
+            self.chat_last_poll = None;
+            return;
+        }
+
+        let due = self
+            .chat_last_poll
+            .map(|t| t.elapsed() >= Duration::from_secs(3))
+            .unwrap_or(true);
+
+        if due {
+            self.chat_last_poll = Some(Instant::now());
+            spawn_fetch_conversations(
+                &self.rt,
+                self.tx.clone(),
+                ctx.clone(),
+                self.server_url.clone(),
+                self.token.clone(),
+            );
+            if self.active_conv_id != 0 {
+                spawn_fetch_messages(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                    self.active_conv_id,
+                );
+                let has_unread = self
+                    .conversations
+                    .iter()
+                    .any(|c| c.id == self.active_conv_id && c.unread_count > 0);
+                if has_unread {
+                    spawn_mark_read(
+                        &self.rt,
+                        self.server_url.clone(),
+                        self.token.clone(),
+                        self.active_conv_id,
+                    );
+                }
+            }
+        }
+
+        ctx.request_repaint_after(Duration::from_secs(1));
     }
 
     fn drain_events(&mut self, ctx: &egui::Context) {
@@ -200,6 +342,7 @@ impl AethravoxApp {
                     self.auth_error = None;
                     self.offline_mode = false;
                     self.token = Some(auth.token.clone());
+                    self.reset_chat_state();
                     self.theme = auth.user.theme;
                     apply_theme(ctx, self.theme, self.color_mode);
                     self.route = Route::Hub;
@@ -227,6 +370,46 @@ impl AethravoxApp {
                 ApiEvent::StatusNote(note) => {
                     self.status_banner = Some(note);
                 }
+                ApiEvent::ConversationsLoaded(list) => {
+                    self.chat_error = None;
+                    self.conversations = list;
+                    let active_exists = self
+                        .conversations
+                        .iter()
+                        .any(|c| c.id == self.active_conv_id);
+                    if !active_exists {
+                        if let Some(first) = self.conversations.first().map(|c| c.id) {
+                            self.chat_open_conversation(ctx, first);
+                        } else {
+                            self.active_conv_id = 0;
+                        }
+                    }
+                }
+                ApiEvent::MessagesLoaded { conv_id, messages } => {
+                    self.chat_messages.retain(|m| m.conversation_id != conv_id);
+                    self.chat_messages.extend(messages);
+                }
+                ApiEvent::MessageSent(msg) => {
+                    self.chat_sending = false;
+                    self.chat_pending = None;
+                    if !self.chat_messages.iter().any(|m| m.id == msg.id) {
+                        self.chat_messages.push(msg);
+                    }
+                    // Refrescar enseguida la lista y los mensajes.
+                    self.chat_last_poll = None;
+                }
+                ApiEvent::ChatErr(msg) => {
+                    self.chat_error = Some(msg);
+                }
+                ApiEvent::ChatSendErr(msg) => {
+                    self.chat_sending = false;
+                    self.chat_error = Some(msg);
+                    if let Some(txt) = self.chat_pending.take() {
+                        if self.chat_draft.is_empty() {
+                            self.chat_draft = txt;
+                        }
+                    }
+                }
             }
         }
     }
@@ -235,6 +418,7 @@ impl AethravoxApp {
 impl eframe::App for AethravoxApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.drain_events(ctx);
+        self.chat_poll(ctx);
         let p: Palette = Palette::from(self.theme, self.color_mode);
 
         if self.route == Route::Login {
@@ -252,7 +436,7 @@ impl eframe::App for AethravoxApp {
             .frame(
                 egui::Frame::none()
                     .fill(p.bg_surface)
-                    .stroke(egui::Stroke::new(1.0, p.border_subtle))
+                    .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
                     .inner_margin(egui::Margin::symmetric(16.0, 8.0)),
             )
             .show(ctx, |ui| {
@@ -267,7 +451,7 @@ impl eframe::App for AethravoxApp {
             .frame(
                 egui::Frame::none()
                     .fill(p.bg_surface)
-                    .stroke(egui::Stroke::new(1.0, p.border_subtle))
+                    .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
                     .inner_margin(egui::Margin::same(10.0)),
             )
             .show(ctx, |ui| {

@@ -20,9 +20,9 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                 let selected = app.neon_color == c;
                 let btn = egui::Button::new(egui::RichText::new(name).color(c))
                     .stroke(if selected {
-                        Stroke::new(1.5, c)
+                        Stroke::new(1.5_f32, c)
                     } else {
-                        Stroke::new(1.0, p.border_subtle)
+                        Stroke::new(1.0_f32, p.border_subtle)
                     })
                     .rounding(Rounding::same(6.0));
                 if ui.add(btn).clicked() {
@@ -46,7 +46,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
     let rect = response.rect;
 
     painter.rect_filled(rect, Rounding::same(12.0), Color32::from_rgb(6, 3, 14));
-    painter.rect_stroke(rect, Rounding::same(12.0), Stroke::new(1.0, p.border_strong));
+    painter.rect_stroke(rect, Rounding::same(12.0), Stroke::new(1.0_f32, p.border_strong));
 
     if let Some(pos) = response.interact_pointer_pos() {
         if rect.contains(pos) {

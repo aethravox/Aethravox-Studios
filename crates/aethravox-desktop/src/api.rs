@@ -1,7 +1,7 @@
 use aethravox_core::{
     ApiError, ArisChatDto, ArisMessageDto, AuthSuccess, CategoryRowDto, ChatConversationDto,
-    ChatMessageDto, HubPayload, HubStatsDto, LoginRequest, RegisterRequest, ThemeKind,
-    ThemeSelectRequest, UserSummary, WebAppDto,
+    ChatMessageDto, HubPayload, HubStatsDto, LoginRequest, RegisterRequest, SendMessageRequest,
+    ThemeKind, ThemeSelectRequest, UserSummary, WebAppDto,
 };
 
 #[derive(Debug, Clone)]
@@ -10,8 +10,18 @@ pub enum ApiEvent {
     AuthErr(String),
     HubLoaded(HubPayload),
     HubErr(String),
+    #[allow(dead_code)]
     ThemeSaved(ThemeKind),
+    #[allow(dead_code)]
     StatusNote(String),
+    ConversationsLoaded(Vec<ChatConversationDto>),
+    MessagesLoaded {
+        conv_id: i64,
+        messages: Vec<ChatMessageDto>,
+    },
+    MessageSent(ChatMessageDto),
+    ChatErr(String),
+    ChatSendErr(String),
 }
 
 pub fn spawn_login(
@@ -155,6 +165,152 @@ pub fn spawn_save_theme(
         }
         let _ = tx.send(ApiEvent::ThemeSaved(theme));
         ctx.request_repaint();
+    });
+}
+
+// ===================== Chat =====================
+
+async fn read_error(resp: reqwest::Response) -> String {
+    let status = resp.status();
+    resp.json::<ApiError>()
+        .await
+        .map(|e| e.error)
+        .unwrap_or_else(|_| format!("HTTP {status}"))
+}
+
+async fn get_json<T: serde::de::DeserializeOwned>(
+    base_url: &str,
+    path: &str,
+    token: &Option<String>,
+) -> Result<T, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let mut req = client.get(&url);
+    if let Some(tok) = token {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
+    match req.send().await {
+        Ok(resp) if resp.status().is_success() => resp
+            .json::<T>()
+            .await
+            .map_err(|e| format!("Error parseando respuesta: {e}")),
+        Ok(resp) => Err(read_error(resp).await),
+        Err(e) => Err(format!("Servidor no disponible: {e}")),
+    }
+}
+
+pub fn spawn_fetch_conversations(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<Vec<ChatConversationDto>>(&base_url, "/api/v1/chat/conversations", &token)
+            .await
+        {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::ConversationsLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_fetch_messages(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/chat/conversations/{conv_id}/messages");
+        match get_json::<Vec<ChatMessageDto>>(&base_url, &path, &token).await {
+            Ok(messages) => {
+                let _ = tx.send(ApiEvent::MessagesLoaded { conv_id, messages });
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_send_message(
+    rt: &tokio::runtime::Handle,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+    body: String,
+) {
+    rt.spawn(async move {
+        let client = reqwest::Client::new();
+        let url = format!(
+            "{}/api/v1/chat/conversations/{}/messages",
+            base_url.trim_end_matches('/'),
+            conv_id
+        );
+        let mut req = client.post(&url).json(&SendMessageRequest { body });
+        if let Some(tok) = token {
+            if !tok.is_empty() {
+                req = req.bearer_auth(tok);
+            }
+        }
+        match req.send().await {
+            Ok(resp) if resp.status().is_success() => match resp.json::<ChatMessageDto>().await {
+                Ok(msg) => {
+                    let _ = tx.send(ApiEvent::MessageSent(msg));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiEvent::ChatSendErr(format!(
+                        "Error parseando respuesta: {e}"
+                    )));
+                }
+            },
+            Ok(resp) => {
+                let _ = tx.send(ApiEvent::ChatSendErr(read_error(resp).await));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ChatSendErr(format!(
+                    "Servidor no disponible: {e}"
+                )));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_mark_read(
+    rt: &tokio::runtime::Handle,
+    base_url: String,
+    token: Option<String>,
+    conv_id: i64,
+) {
+    rt.spawn(async move {
+        let client = reqwest::Client::new();
+        let url = format!(
+            "{}/api/v1/chat/conversations/{}/read",
+            base_url.trim_end_matches('/'),
+            conv_id
+        );
+        let mut req = client.post(&url);
+        if let Some(tok) = token {
+            if !tok.is_empty() {
+                req = req.bearer_auth(tok);
+            }
+        }
+        let _ = req.send().await;
     });
 }
 

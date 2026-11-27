@@ -24,7 +24,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
 
         egui::Frame::none()
             .fill(p.bg_surface)
-            .stroke(egui::Stroke::new(1.0, p.border_subtle))
+            .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
             .rounding(Rounding::same(14.0))
             .inner_margin(egui::Margin::same(24.0))
             .show(ui, |ui| {
@@ -53,7 +53,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                 if let Some(err) = &app.auth_error {
                     egui::Frame::none()
                         .fill(p.danger.gamma_multiply(0.16))
-                        .stroke(egui::Stroke::new(1.0, p.danger))
+                        .stroke(egui::Stroke::new(1.0_f32, p.danger))
                         .rounding(Rounding::same(8.0))
                         .inner_margin(egui::Margin::same(10.0))
                         .show(ui, |ui| {
@@ -66,7 +66,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                 ui.add(
                     egui::TextEdit::singleline(&mut app.server_url)
                         .desired_width(f32::INFINITY)
-                        .hint_text("http://127.0.0.1:8080"),
+                        .hint_text("https://aethravoxstudios.duckdns.org"),
                 );
                 ui.add_space(6.0);
 
@@ -148,12 +148,12 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
 
                 ui.horizontal(|ui| {
                     if ui.button("Modo local (Preview)").clicked() {
-                        let name = if app.login_username.trim().is_empty() {
-                            "Aethravox"
+                        let name: String = if app.login_username.trim().is_empty() {
+                            "Aethravox".to_string()
                         } else {
-                            app.login_username.trim()
+                            app.login_username.trim().to_string()
                         };
-                        app.enter_offline_demo(name, false);
+                        app.enter_offline_demo(&name, false);
                     }
                     if ui.button("Entrar como Invitado").clicked() {
                         app.enter_offline_demo("Invitado", true);

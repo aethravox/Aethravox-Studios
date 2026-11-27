@@ -188,3 +188,8 @@ pub struct ChatMessageDto {
 pub struct ThemeSelectRequest {
     pub theme: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendMessageRequest {
+    pub body: String,
+}

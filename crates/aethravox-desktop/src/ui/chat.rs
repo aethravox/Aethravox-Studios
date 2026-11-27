@@ -1,22 +1,30 @@
-use aethravox_core::ChatMessageDto;
 use egui::Rounding;
 
 use crate::app::AethravoxApp;
-use crate::theme::{card_frame, elevated_frame, primary_button, Palette};
+use crate::theme::{card_frame, primary_button, Palette};
 
 pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
-    ui.columns(2, |cols| {
-        // Note: egui::Ui::columns splits 50/50, so let's keep a clean custom split using SidePanel-like layout or horizontal strip
-        let _ = cols;
-    });
+    let ctx = ui.ctx().clone();
+    let mut clicked_conv: Option<i64> = None;
+    let mut send_requested = false;
 
     ui.horizontal(|ui| {
-        // Left conversations list
+        // ---------- Lista de conversaciones ----------
         card_frame(p).show(ui, |ui| {
             ui.set_width(240.0);
             ui.set_min_height(ui.available_height());
             ui.heading("Chats");
             ui.separator();
+
+            if app.conversations.is_empty() {
+                ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new("No tienes conversaciones todavía.")
+                        .small()
+                        .color(p.text_muted),
+                );
+            }
+
             egui::ScrollArea::vertical().id_salt("chat_convs").show(ui, |ui| {
                 for c in &app.conversations {
                     let active = c.id == app.active_conv_id;
@@ -27,7 +35,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                             p.bg_elevated
                         })
                         .stroke(egui::Stroke::new(
-                            1.0,
+                            1.0_f32,
                             if active { p.accent_primary } else { p.border_subtle },
                         ))
                         .rounding(Rounding::same(8.0))
@@ -36,7 +44,16 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                     let resp = frame
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
-                            ui.label(egui::RichText::new(&c.title).strong());
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(&c.title).strong());
+                                if c.unread_count > 0 {
+                                    ui.label(
+                                        egui::RichText::new(format!("● {}", c.unread_count))
+                                            .small()
+                                            .color(p.accent_primary),
+                                    );
+                                }
+                            });
                             ui.label(
                                 egui::RichText::new(&c.last_message)
                                     .small()
@@ -46,7 +63,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         .response
                         .interact(egui::Sense::click());
                     if resp.clicked() {
-                        app.active_conv_id = c.id;
+                        clicked_conv = Some(c.id);
                     }
                     ui.add_space(6.0);
                 }
@@ -55,7 +72,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
 
         ui.add_space(8.0);
 
-        // Right message pane
+        // ---------- Panel de mensajes ----------
         card_frame(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.set_min_height(ui.available_height());
@@ -69,6 +86,10 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
 
             ui.heading(&active_title);
             ui.separator();
+
+            if let Some(err) = &app.chat_error {
+                ui.label(egui::RichText::new(err).small().color(p.danger));
+            }
 
             let msg_height = (ui.available_height() - 56.0).max(160.0);
             egui::ScrollArea::vertical()
@@ -87,7 +108,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
                         };
                         egui::Frame::none()
                             .fill(bg)
-                            .stroke(egui::Stroke::new(1.0, p.border_subtle))
+                            .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
                             .rounding(Rounding::same(10.0))
                             .inner_margin(egui::Margin::same(10.0))
                             .show(ui, |ui| {
@@ -107,37 +128,29 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
 
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                let enter_pressed = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut app.chat_draft)
-                            .desired_width((ui.available_width() - 95.0).max(120.0))
-                            .hint_text("Escribe un mensaje…"),
-                    )
-                    .lost_focus()
-                    && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut app.chat_draft)
+                        .desired_width((ui.available_width() - 95.0).max(120.0))
+                        .hint_text("Escribe un mensaje…"),
+                );
+                let enter_pressed =
+                    resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
 
-                if primary_button(ui, p, "Enviar").clicked() || enter_pressed {
-                    let txt = app.chat_draft.trim().to_string();
-                    if !txt.is_empty() {
-                        let next_id = app.chat_messages.len() as i64 + 1;
-                        app.chat_messages.push(ChatMessageDto {
-                            id: next_id,
-                            conversation_id: app.active_conv_id,
-                            sender: app
-                                .hub
-                                .as_ref()
-                                .map(|h| h.user.display.clone())
-                                .unwrap_or_else(|| "Tú".into()),
-                            content: txt,
-                            created_at: "Ahora".into(),
-                            is_mine: true,
-                        });
-                        app.chat_draft.clear();
-                    }
+                let label = if app.chat_sending { "Enviando…" } else { "Enviar" };
+                let clicked = primary_button(ui, p, label).clicked();
+
+                if clicked || enter_pressed {
+                    send_requested = true;
+                    resp.request_focus();
                 }
             });
         });
     });
 
-    let _ = elevated_frame;
+    if let Some(id) = clicked_conv {
+        app.chat_open_conversation(&ctx, id);
+    }
+    if send_requested {
+        app.chat_send_draft(&ctx);
+    }
 }

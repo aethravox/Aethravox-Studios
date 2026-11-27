@@ -11,12 +11,14 @@ pub struct Palette {
     pub border_subtle: Color32,
     pub border_strong: Color32,
     pub accent_primary: Color32,
+    #[allow(dead_code)]
     pub accent_primary_hover: Color32,
     pub accent_secondary: Color32,
     pub text_primary: Color32,
     pub text_muted: Color32,
     pub success: Color32,
     pub danger: Color32,
+    #[allow(dead_code)]
     pub warning: Color32,
 }
 
@@ -143,28 +145,28 @@ pub fn apply_theme(ctx: &egui::Context, theme: ThemeKind, mode: ColorMode) -> Pa
     visuals.faint_bg_color = p.bg_elevated;
     visuals.override_text_color = Some(p.text_primary);
     visuals.window_rounding = Rounding::same(12.0);
-    visuals.window_stroke = Stroke::new(1.0, p.border_subtle);
+    visuals.window_stroke = Stroke::new(1.0_f32, p.border_subtle);
     visuals.selection.bg_fill = p.accent_primary.gamma_multiply(0.28);
-    visuals.selection.stroke = Stroke::new(1.0, p.accent_primary);
+    visuals.selection.stroke = Stroke::new(1.0_f32, p.accent_primary);
 
     visuals.widgets.noninteractive.bg_fill = p.bg_surface;
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.border_subtle);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, p.text_primary);
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, p.border_subtle);
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, p.text_primary);
     visuals.widgets.noninteractive.rounding = Rounding::same(8.0);
 
     visuals.widgets.inactive.bg_fill = p.bg_elevated;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, p.border_subtle);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, p.text_primary);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, p.border_subtle);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, p.text_primary);
     visuals.widgets.inactive.rounding = Rounding::same(8.0);
 
     visuals.widgets.hovered.bg_fill = p.bg_elevated;
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.2, p.accent_primary);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.2, p.text_primary);
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.2_f32, p.accent_primary);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.2_f32, p.text_primary);
     visuals.widgets.hovered.rounding = Rounding::same(8.0);
 
     visuals.widgets.active.bg_fill = p.accent_primary.gamma_multiply(0.22);
-    visuals.widgets.active.bg_stroke = Stroke::new(1.5, p.accent_primary);
-    visuals.widgets.active.fg_stroke = Stroke::new(1.5, p.text_primary);
+    visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, p.accent_primary);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.5_f32, p.text_primary);
     visuals.widgets.active.rounding = Rounding::same(8.0);
 
     style.visuals = visuals;
@@ -175,7 +177,7 @@ pub fn apply_theme(ctx: &egui::Context, theme: ThemeKind, mode: ColorMode) -> Pa
 pub fn card_frame(p: &Palette) -> egui::Frame {
     egui::Frame::none()
         .fill(p.bg_surface)
-        .stroke(Stroke::new(1.0, p.border_subtle))
+        .stroke(Stroke::new(1.0_f32, p.border_subtle))
         .rounding(Rounding::same(12.0))
         .inner_margin(egui::Margin::same(16.0))
 }
@@ -183,7 +185,7 @@ pub fn card_frame(p: &Palette) -> egui::Frame {
 pub fn elevated_frame(p: &Palette) -> egui::Frame {
     egui::Frame::none()
         .fill(p.bg_elevated)
-        .stroke(Stroke::new(1.0, p.border_subtle))
+        .stroke(Stroke::new(1.0_f32, p.border_subtle))
         .rounding(Rounding::same(10.0))
         .inner_margin(egui::Margin::same(12.0))
 }

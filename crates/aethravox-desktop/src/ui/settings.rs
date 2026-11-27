@@ -58,7 +58,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     cols[idx].vertical(|ui| {
                         let resp = elevated_frame(p)
                             .stroke(Stroke::new(
-                                if active { 2.0 } else { 1.0 },
+                                if active { 2.0_f32 } else { 1.0_f32 },
                                 if active { p.accent_primary } else { p.border_subtle },
                             ))
                             .show(ui, |ui| {

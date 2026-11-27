@@ -98,7 +98,7 @@ pub fn show_sidebar(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Conte
                 Color32::TRANSPARENT
             })
             .stroke(if active {
-                egui::Stroke::new(1.0, p.accent_primary.gamma_multiply(0.5))
+                egui::Stroke::new(1.0_f32, p.accent_primary.gamma_multiply(0.5))
             } else {
                 egui::Stroke::NONE
             })

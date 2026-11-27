@@ -155,7 +155,7 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, p: &Palette) {
 fn stat_chip(ui: &mut egui::Ui, p: &Palette, label: &str, value: i64) {
     egui::Frame::none()
         .fill(p.bg_elevated)
-        .stroke(egui::Stroke::new(1.0, p.border_subtle))
+        .stroke(egui::Stroke::new(1.0_f32, p.border_subtle))
         .rounding(Rounding::same(8.0))
         .inner_margin(egui::Margin::symmetric(10.0, 6.0))
         .show(ui, |ui| {
