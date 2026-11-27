@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}ZLibs — Registro de librerías Zen{% endblock %}
+{% block tagline %}ZLibs · Registro Zen{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}
+<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px">
+    <a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a>
+    <a href="/register" class="btn btn-primary btn-sm">Registrarse</a>
+</span>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card zlibs-page">
+    <div class="zlibs-hero">
+        <div>
+            <h2>📦 ZLibs — Librerías de Zen</h2>
+            <p class="muted">
+                Registro público de paquetes para el lenguaje <strong>Zen</strong>.
+                Cada librería publicada crea automáticamente su propio repositorio público en GitHub.
+            </p>
+        </div>
+        <div class="zlibs-cli-hint">
+            <code>zen buscar &lt;consulta&gt;</code>
+            <code>zen agregar &lt;paquete&gt; &lt;version&gt;</code>
+        </div>
+    </div>
+
+    <form method="GET" action="/zlibs" class="zlibs-search-bar">
+        <input type="text" name="q" value="{{ q }}" placeholder="Buscar librerías Zen por nombre, descripción o autor…" aria-label="Buscar librerías">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        {% if !q.is_empty() %}
+        <a href="/zlibs" class="btn btn-secondary">Limpiar</a>
+        {% endif %}
+    </form>
+
+    <div class="zlibs-grid-layout">
+        <section class="zlibs-main">
+            <h3 class="section-title">
+                {% if q.is_empty() %}
+                Librerías disponibles ({{ packages.len() }})
+                {% else %}
+                Resultados para «{{ q }}» ({{ packages.len() }})
+                {% endif %}
+            </h3>
+
+            {% if packages.is_empty() %}
+            <div class="empty-state" style="padding:28px;border:1px solid var(--fondo);border-radius:12px;background:var(--negro-suave);">
+                <div style="font-size:2.2rem;margin-bottom:8px;">📦</div>
+                <p class="muted">
+                    {% if q.is_empty() %}
+                    Aún no hay librerías publicadas en ZLibs. ¡Publica la primera con <code>zen publicar</code>!
+                    {% else %}
+                    No se encontraron librerías para «{{ q }}».
+                    {% endif %}
+                </p>
+            </div>
+            {% else %}
+            <div class="zlibs-list">
+                {% for pkg in packages %}
+                <article class="zlib-card">
+                    <div class="zlib-card-top">
+                        <div>
+                            <a href="/zlibs/{{ pkg.name }}" class="zlib-name">{{ pkg.name }}</a>
+                            <span class="zlib-ver-badge">v{{ pkg.latest_version }}</span>
+                        </div>
+                        <span class="muted small">@{{ pkg.owner_username }} · {{ pkg.downloads_count }} descargas</span>
+                    </div>
+                    <p class="zlib-desc">{{ pkg.description }}</p>
+                    <div class="zlib-dep-row">
+                        <code class="zlib-dep-code">{{ pkg.dep_line }}</code>
+                        <button type="button" class="btn btn-secondary btn-sm zlib-copy-btn" data-copy="{{ pkg.dep_line }}">Copiar dep</button>
+                        <a href="{{ pkg.git_url }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">GitHub ↗</a>
+                        <a href="/zlibs/{{ pkg.name }}" class="btn btn-primary btn-sm">Detalles</a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </section>
+
+        <aside class="zlibs-aside">
+            {% if is_guest %}
+            <div class="zlib-panel">
+                <h3>🔑 Publicar tus librerías</h3>
+                <p class="muted small">
+                    Inicia sesión para generar tu token CLI (<code>zen login</code>), administrar tus paquetes y publicar desde la web o terminal.
+                </p>
+                <a href="/login" class="btn btn-primary btn-block" style="margin-top:10px;">Iniciar sesión</a>
+            </div>
+            {% else %}
+            <div class="zlib-panel">
+                <h3>🔑 Token para Zen CLI</h3>
+                <p class="muted small">
+                    Genera un token personal (almacenado con SHA-256). Solo se mostrará en texto plano una vez al crearlo.
+                </p>
+                <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                    <input type="text" id="zlib-token-label" placeholder="Etiqueta (ej: Mi PC)" maxlength="48" style="flex:1;min-width:120px;">
+                    <button type="button" class="btn btn-primary btn-sm" id="zlib-gen-token-btn">Generar Token CLI</button>
+                </div>
+
+                <div id="zlib-token-result" class="zlib-token-box" hidden>
+                    <div class="small" style="color:var(--dorado);font-weight:700;">Token creado (guárdalo ahora):</div>
+                    <code id="zlib-token-cmd" class="zlib-cmd-block"></code>
+                    <button type="button" class="btn btn-secondary btn-sm" id="zlib-copy-cmd-btn">Copiar comando zen login</button>
+                </div>
+
+                <div id="zlib-token-err" class="alert alert-error" hidden style="margin-top:10px;"></div>
+
+                <div style="margin-top:14px;">
+                    <div class="small muted" style="margin-bottom:6px;">Tokens activos:</div>
+                    {% if my_tokens.is_empty() %}
+                    <p class="muted small" id="zlib-no-tokens">No tienes tokens CLI activos todavía.</p>
+                    {% endif %}
+                    <div id="zlib-tokens-list" class="zlib-mini-list">
+                        {% for t in my_tokens %}
+                        <div class="zlib-token-item" data-token-id="{{ t.id }}">
+                            <div>
+                                <strong>{{ t.label }}</strong>
+                                <div class="muted small"><code>{{ t.token_prefix }}</code> · {% if let Some(lu) = t.last_used_at.as_deref() %}usado {{ lu }}{% else %}sin uso{% endif %}</div>
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm zlib-revoke-btn" data-id="{{ t.id }}">Revocar</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="zlib-panel">
+                <h3>📚 Mis paquetes ({{ my_packages.len() }})</h3>
+                {% if my_packages.is_empty() %}
+                <p class="muted small">Aún no has publicado librerías con @{{ username }}.</p>
+                {% else %}
+                <div class="zlib-mini-list">
+                    {% for mp in my_packages %}
+                    <div class="zlib-my-pkg">
+                        <div class="zlib-card-top">
+                            <a href="/zlibs/{{ mp.name }}" class="zlib-name">{{ mp.name }}</a>
+                            <a href="{{ mp.git_url }}" target="_blank" rel="noopener" class="small">GitHub ↗</a>
+                        </div>
+                        <div class="zlib-ver-tags">
+                            {% for v in mp.versions %}
+                            <button type="button" class="zlib-ver-chip zlib-copy-btn" data-copy="{{ v.dep_line }}" title="Copiar {{ v.dep_line }}">
+                                {{ v.version }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <code class="zlib-dep-code" style="display:block;margin-top:6px;">{{ mp.dep_line }}</code>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="zlib-panel">
+                <h3>🚀 Publicar desde la web</h3>
+                <p class="muted small">Alternativa rápida a <code>zen publicar</code>. Selecciona tus archivos <code>.zen</code>, <code>Make.mz</code> y <code>README.md</code>.</p>
+                <form id="zlib-web-publish-form" class="auth-form" style="margin-top:10px;">
+                    <div class="input-group">
+                        <label>Nombre del paquete</label>
+                        <input type="text" id="zlib-pub-name" placeholder="mi_libreria" pattern="[a-zA-Z0-9_-]+" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Versión</label>
+                        <input type="text" id="zlib-pub-version" placeholder="1.0.0" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Descripción (opcional)</label>
+                        <input type="text" id="zlib-pub-desc" placeholder="Descripción breve de tu librería">
+                    </div>
+                    <div class="input-group">
+                        <label>Archivos del proyecto</label>
+                        <input type="file" id="zlib-pub-files" multiple>
+                    </div>
+                    <div class="input-group">
+                        <label>O pega código rápido para <code>Main.zen</code> (si no subes archivos)</label>
+                        <textarea id="zlib-pub-main" rows="4" placeholder="// Código Zen opcional"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="zlib-pub-submit">Publicar en GitHub + ZLibs</button>
+                    <div id="zlib-pub-msg" class="small" style="margin-top:8px;"></div>
+                </form>
+            </div>
+            {% endif %}
+        </aside>
+    </div>
+</div>
+
+<style>
+.zlibs-hero { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; align-items:flex-start; margin-bottom:16px; }
+.zlibs-cli-hint { display:flex; flex-direction:column; gap:6px; }
+.zlibs-cli-hint code, .zlib-dep-code, .zlib-cmd-block {
+    background: var(--negro, #050505);
+    border: 1px solid var(--fondo, #1a1a1a);
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--dorado, #e0a308);
+}
+.zlibs-search-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+.zlibs-search-bar input { flex:1; min-width:220px; }
+.zlibs-grid-layout { display:grid; grid-template-columns: minmax(0, 1.5fr) minmax(290px, 1fr); gap:20px; align-items:start; }
+@media (max-width: 900px) { .zlibs-grid-layout { grid-template-columns: 1fr; } }
+.zlibs-list { display:flex; flex-direction:column; gap:12px; }
+.zlib-card, .zlib-panel {
+    background: var(--negro-suave, #0d0d12);
+    border: 1px solid var(--fondo, #1a1a1a);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.zlibs-aside { display:flex; flex-direction:column; gap:14px; }
+.zlib-card-top { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.zlib-name { font-weight:700; font-size:1.06rem; color:var(--dorado, #e0a308); text-decoration:none; }
+.zlib-name:hover { text-decoration:underline; }
+.zlib-ver-badge {
+    display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px;
+    font-size:0.75rem; font-weight:700; background:rgba(0,212,255,.12); color:#00d4ff;
+    border:1px solid rgba(0,212,255,.3);
+}
+.zlib-desc { margin:8px 0 12px; color:var(--blanco, #f5f5f5); font-size:0.92rem; line-height:1.45; }
+.zlib-dep-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.zlib-dep-code { user-select:all; }
+.zlib-token-box {
+    margin-top:12px; padding:10px; border-radius:8px;
+    border:1px solid var(--dorado, #e0a308); background:rgba(224,163,8,0.08);
+    display:flex; flex-direction:column; gap:8px;
+}
+.zlib-cmd-block { display:block; overflow-x:auto; white-space:nowrap; user-select:all; }
+.zlib-mini-list { display:flex; flex-direction:column; gap:8px; }
+.zlib-token-item {
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:8px 10px; border-radius:8px; background:var(--negro, #050505); border:1px solid var(--fondo, #1a1a1a);
+}
+.zlib-my-pkg { padding:10px; border-radius:8px; background:var(--negro, #050505); border:1px solid var(--fondo, #1a1a1a); }
+.zlib-ver-tags { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.zlib-ver-chip {
+    background:rgba(224,163,8,.12); color:var(--dorado,#e0a308);
+    border:1px solid rgba(224,163,8,.35); border-radius:6px; padding:2px 8px;
+    font-size:0.76rem; cursor:pointer;
+}
+</style>
+
+<script>
+(function() {
+    document.querySelectorAll('.zlib-copy-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var txt = btn.getAttribute('data-copy') || '';
+            if (!txt) return;
+            navigator.clipboard?.writeText(txt);
+            var orig = btn.textContent;
+            btn.textContent = '✓ Copiado';
+            setTimeout(function() { btn.textContent = orig; }, 1400);
+        });
+    });
+
+    var genBtn = document.getElementById('zlib-gen-token-btn');
+    if (genBtn) {
+        genBtn.addEventListener('click', async function() {
+            var errEl = document.getElementById('zlib-token-err');
+            var resEl = document.getElementById('zlib-token-result');
+            var cmdEl = document.getElementById('zlib-token-cmd');
+            var labelEl = document.getElementById('zlib-token-label');
+            errEl.hidden = true;
+            genBtn.disabled = true;
+            try {
+                var r = await fetch('/zlibs/api/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: (labelEl && labelEl.value) ? labelEl.value : 'Zen CLI' })
+                });
+                var data = await r.json();
+                if (!r.ok) throw new Error(data.error || 'No se pudo crear el token');
+                cmdEl.textContent = data.cli_command;
+                resEl.hidden = false;
+                var list = document.getElementById('zlib-tokens-list');
+                var noTok = document.getElementById('zlib-no-tokens');
+                if (noTok) noTok.remove();
+                if (list && data.item) {
+                    var div = document.createElement('div');
+                    div.className = 'zlib-token-item';
+                    div.setAttribute('data-token-id', String(data.item.id));
+                    var left = document.createElement('div');
+                    var strong = document.createElement('strong');
+                    strong.textContent = data.item.label;
+                    var meta = document.createElement('div');
+                    meta.className = 'muted small';
+                    var code = document.createElement('code');
+                    code.textContent = data.item.token_prefix;
+                    meta.appendChild(code);
+                    meta.appendChild(document.createTextNode(' · recién creado'));
+                    left.appendChild(strong);
+                    left.appendChild(meta);
+                    var rbtn = document.createElement('button');
+                    rbtn.type = 'button';
+                    rbtn.className = 'btn btn-secondary btn-sm zlib-revoke-btn';
+                    rbtn.textContent = 'Revocar';
+                    rbtn.addEventListener('click', function() { revokeTok(data.item.id, div); });
+                    div.appendChild(left);
+                    div.appendChild(rbtn);
+                    list.prepend(div);
+                }
+            } catch (e) {
+                errEl.textContent = '⚠️ ' + e.message;
+                errEl.hidden = false;
+            } finally {
+                genBtn.disabled = false;
+            }
+        });
+    }
+
+    var copyCmd = document.getElementById('zlib-copy-cmd-btn');
+    if (copyCmd) {
+        copyCmd.addEventListener('click', function() {
+            var cmdEl = document.getElementById('zlib-token-cmd');
+            if (cmdEl && cmdEl.textContent) {
+                navigator.clipboard?.writeText(cmdEl.textContent);
+                copyCmd.textContent = '✓ Comando copiado';
+                setTimeout(function() { copyCmd.textContent = 'Copiar comando zen login'; }, 1500);
+            }
+        });
+    }
+
+    async function revokeTok(id, rowEl) {
+        var r = await fetch('/zlibs/api/token/' + id + '/revoke', { method: 'POST' });
+        if (r.ok && rowEl) rowEl.remove();
+    }
+    document.querySelectorAll('.zlib-revoke-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = btn.getAttribute('data-id');
+            if (id) revokeTok(id, btn.closest('.zlib-token-item'));
+        });
+    });
+
+    var pubForm = document.getElementById('zlib-web-publish-form');
+    if (pubForm) {
+        pubForm.addEventListener('submit', async function(ev) {
+            ev.preventDefault();
+            var msgEl = document.getElementById('zlib-pub-msg');
+            var subBtn = document.getElementById('zlib-pub-submit');
+            msgEl.textContent = 'Subiendo a GitHub y registrando en ZLibs…';
+            subBtn.disabled = true;
+            try {
+                var name = document.getElementById('zlib-pub-name').value.trim();
+                var version = document.getElementById('zlib-pub-version').value.trim();
+                var description = document.getElementById('zlib-pub-desc').value.trim();
+                var filesInput = document.getElementById('zlib-pub-files');
+                var mainText = document.getElementById('zlib-pub-main').value;
+                var files = [];
+                if (filesInput && filesInput.files && filesInput.files.length > 0) {
+                    for (var i = 0; i < filesInput.files.length; i++) {
+                        var f = filesInput.files[i];
+                        var txt = await f.text();
+                        files.push({ path: f.name, content: txt });
+                    }
+                } else if (mainText.trim().length > 0) {
+                    files.push({ path: 'Main.zen', content: mainText });
+                }
+                if (files.length === 0) {
+                    throw new Error('Selecciona archivos o escribe contenido en Main.zen.');
+                }
+                var r = await fetch('/zlibs/api/publish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        version: version,
+                        description: description || null,
+                        files: files
+                    })
+                });
+                var data = await r.json();
+                if (!r.ok) throw new Error(data.error || 'Error publicando');
+                msgEl.textContent = '✅ Publicado: ' + data.git_url + ' (' + data.git_ref + ')';
+                setTimeout(function() { location.reload(); }, 1000);
+            } catch (e) {
+                msgEl.textContent = '⚠️ ' + e.message;
+            } finally {
+                subBtn.disabled = false;
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

@@ -32,6 +32,7 @@
         <button type="button" class="settings-tab" data-tab="notificaciones">Notificaciones</button>
         <button type="button" class="settings-tab" data-tab="privacidad">Privacidad</button>
         <button type="button" class="settings-tab" data-tab="terminos">Términos</button>
+        <button type="button" class="settings-tab" data-tab="zlibs">Zen CLI / ZLibs</button>
     </nav>
 
     {# ===== Perfil ===== #}
@@ -305,6 +306,14 @@
                 </p>
                 <button type="button" class="btn btn-primary btn-sm" onclick="document.querySelector('.settings-tab[data-tab=tema]')?.click()">Ir a Tema en Ajustes</button>
             </details>
+            <details class="collapse" style="margin-top:14px;">
+                <summary>Zen CLI y paquetes ZLibs</summary>
+                <p class="muted small" style="margin:10px 0">
+                    Genera tu token para <code>zen login</code> y consulta tus librerías publicadas en ZLibs.
+                </p>
+                <button type="button" class="btn btn-primary btn-sm" onclick="document.querySelector('.settings-tab[data-tab=zlibs]')?.click()">Abrir Zen CLI / ZLibs</button>
+                <a href="/zlibs" class="btn btn-secondary btn-sm" style="margin-left:6px;">Explorar ZLibs</a>
+            </details>
         </div>
     </section>
 
@@ -553,6 +562,180 @@
             </p>
         </div>
     </section>
+
+    {# ===== Zen CLI / ZLibs ===== #}
+    <section class="settings-section" data-section="zlibs" hidden>
+        <div class="account-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+                <div>
+                    <h3 class="stat-label" style="margin-bottom:4px;">📦 Zen CLI y Paquetes ZLibs</h3>
+                    <p class="muted small">Genera un token CLI (hasheado con SHA-256 en servidor) para publicar librerías con <code>zen publicar</code>.</p>
+                </div>
+                <a href="/zlibs" class="btn btn-secondary btn-sm">Abrir ZLibs ↗</a>
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <input type="text" id="dash-zlib-label" placeholder="Etiqueta del equipo (ej: Portátil)" maxlength="48"
+                       style="flex:1;min-width:160px;padding:10px;background:var(--negro-suave);border:1px solid var(--fondo);border-radius:8px;color:var(--blanco);">
+                <button type="button" class="btn btn-primary" id="dash-zlib-gen-btn">🔑 Generar Token CLI</button>
+            </div>
+
+            <div id="dash-zlib-token-box" hidden
+                 style="padding:12px;border-radius:10px;border:1px solid var(--dorado);background:rgba(224,163,8,0.08);margin-bottom:14px;">
+                <div class="small" style="color:var(--dorado);font-weight:700;margin-bottom:6px;">
+                    Token generado (guárdalo ahora — no volverá a mostrarse):
+                </div>
+                <code id="dash-zlib-cmd"
+                      style="display:block;padding:8px 10px;border-radius:6px;background:var(--negro);border:1px solid var(--fondo);color:var(--dorado);font-family:'JetBrains Mono',monospace;font-size:0.82rem;overflow-x:auto;white-space:nowrap;user-select:all;"></code>
+                <button type="button" class="btn btn-secondary btn-sm" id="dash-zlib-copy-cmd" style="margin-top:8px;">
+                    Copiar comando zen login
+                </button>
+            </div>
+
+            <div id="dash-zlib-err" class="alert alert-error" hidden></div>
+
+            <h4 class="stat-label" style="margin:14px 0 8px;">Tokens CLI activos</h4>
+            <div id="dash-zlib-tokens" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
+                {% if zlibs_tokens.is_empty() %}
+                <p class="muted small" id="dash-zlib-no-tokens">No tienes tokens CLI activos.</p>
+                {% else %}
+                {% for t in zlibs_tokens %}
+                <div class="dash-zlib-row" data-token-id="{{ t.id }}"
+                     style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:var(--negro-suave);border:1px solid var(--fondo);">
+                    <div>
+                        <strong>{{ t.label }}</strong>
+                        <div class="muted small"><code>{{ t.token_prefix }}</code> · {% if let Some(lu) = t.last_used_at.as_deref() %}último uso {{ lu }}{% else %}sin uso{% endif %}</div>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm dash-zlib-revoke" data-id="{{ t.id }}">Revocar</button>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+
+            <h4 class="stat-label" style="margin:14px 0 8px;">Paquetes publicados ({{ zlibs_packages.len() }})</h4>
+            {% if zlibs_packages.is_empty() %}
+            <p class="muted small">Todavía no has publicado ningún paquete Zen. Conéctate con <code>zen login</code> y ejecuta <code>zen publicar</code>.</p>
+            {% else %}
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                {% for pkg in zlibs_packages %}
+                <div style="padding:12px;border-radius:10px;background:var(--negro-suave);border:1px solid var(--fondo);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <div>
+                            <a href="/zlibs/{{ pkg.name }}" style="font-weight:700;color:var(--dorado);text-decoration:none;">{{ pkg.name }}</a>
+                            <span class="muted small">· {{ pkg.downloads_count }} descargas</span>
+                        </div>
+                        <a href="{{ pkg.git_url }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">GitHub ↗</a>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                        {% for v in pkg.versions %}
+                        <button type="button" class="btn btn-secondary btn-sm dash-zlib-copy-dep" data-copy="{{ v.dep_line }}" title="Copiar {{ v.dep_line }}">
+                            v{{ v.version }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+                        <code style="padding:5px 8px;border-radius:6px;background:var(--negro);border:1px solid var(--fondo);color:var(--dorado);font-family:'JetBrains Mono',monospace;font-size:0.8rem;user-select:all;">{{ pkg.dep_line }}</code>
+                        <button type="button" class="btn btn-secondary btn-sm dash-zlib-copy-dep" data-copy="{{ pkg.dep_line }}">Copiar para Make.mz</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <script>
+    (function() {
+        var genBtn = document.getElementById('dash-zlib-gen-btn');
+        var box = document.getElementById('dash-zlib-token-box');
+        var cmdEl = document.getElementById('dash-zlib-cmd');
+        var errEl = document.getElementById('dash-zlib-err');
+        var labelEl = document.getElementById('dash-zlib-label');
+        var listEl = document.getElementById('dash-zlib-tokens');
+
+        if (genBtn) {
+            genBtn.addEventListener('click', async function() {
+                errEl.hidden = true;
+                genBtn.disabled = true;
+                try {
+                    var r = await fetch('/zlibs/api/token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ label: (labelEl && labelEl.value) ? labelEl.value : 'Zen CLI' })
+                    });
+                    var data = await r.json();
+                    if (!r.ok) throw new Error(data.error || 'Error generando token');
+                    cmdEl.textContent = data.cli_command;
+                    box.hidden = false;
+                    var empty = document.getElementById('dash-zlib-no-tokens');
+                    if (empty) empty.remove();
+                    if (listEl && data.item) {
+                        var row = document.createElement('div');
+                        row.className = 'dash-zlib-row';
+                        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:var(--negro-suave);border:1px solid var(--fondo);';
+                        var left = document.createElement('div');
+                        var st = document.createElement('strong');
+                        st.textContent = data.item.label;
+                        var meta = document.createElement('div');
+                        meta.className = 'muted small';
+                        var cd = document.createElement('code');
+                        cd.textContent = data.item.token_prefix;
+                        meta.appendChild(cd);
+                        meta.appendChild(document.createTextNode(' · recién creado'));
+                        left.appendChild(st);
+                        left.appendChild(meta);
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'btn btn-secondary btn-sm';
+                        btn.textContent = 'Revocar';
+                        btn.addEventListener('click', function() { revokeDashTok(data.item.id, row); });
+                        row.appendChild(left);
+                        row.appendChild(btn);
+                        listEl.prepend(row);
+                    }
+                } catch (e) {
+                    errEl.textContent = '⚠️ ' + e.message;
+                    errEl.hidden = false;
+                } finally {
+                    genBtn.disabled = false;
+                }
+            });
+        }
+
+        var copyCmd = document.getElementById('dash-zlib-copy-cmd');
+        if (copyCmd) {
+            copyCmd.addEventListener('click', function() {
+                if (cmdEl && cmdEl.textContent) {
+                    navigator.clipboard?.writeText(cmdEl.textContent);
+                    copyCmd.textContent = '✓ Comando copiado';
+                    setTimeout(function() { copyCmd.textContent = 'Copiar comando zen login'; }, 1400);
+                }
+            });
+        }
+
+        async function revokeDashTok(id, rowEl) {
+            var r = await fetch('/zlibs/api/token/' + id + '/revoke', { method: 'POST' });
+            if (r.ok && rowEl) rowEl.remove();
+        }
+        document.querySelectorAll('.dash-zlib-revoke').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var id = btn.getAttribute('data-id');
+                if (id) revokeDashTok(id, btn.closest('.dash-zlib-row'));
+            });
+        });
+
+        document.querySelectorAll('.dash-zlib-copy-dep').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var txt = btn.getAttribute('data-copy') || '';
+                if (!txt) return;
+                navigator.clipboard?.writeText(txt);
+                var orig = btn.textContent;
+                btn.textContent = '✓ Copiado';
+                setTimeout(function() { btn.textContent = orig; }, 1400);
+            });
+        });
+    })();
+    </script>
 
     <div class="dashboard-actions">
     </div>

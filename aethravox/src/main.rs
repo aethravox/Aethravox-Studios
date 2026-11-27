@@ -185,7 +185,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/link/consume", post(handlers::link::api_link_consume))
         // Visor PDF (plantilla Askama) + PDF.js como vendor JS en static/pdf/
         // (servido por ServeDir). Públicos porque el visor se carga desde /d/:uuid.
-        .route("/pdf-viewer/viewer.html", get(handlers::assets::viewer));
+        .route("/pdf-viewer/viewer.html", get(handlers::assets::viewer))
+        // ===== ZLibs / Zen CLI endpoints exactos =====
+        .route("/api/zen/packages/publish", post(handlers::zlibs::cli_publish))
+        .route("/api/zen/packages/search", get(handlers::zlibs::cli_search))
+        .route("/api/zen/packages/:name/:version", get(handlers::zlibs::cli_resolve_version));
 
     // ===== Rutas guest-allowed (Sección 3.2/3.4) =====
     // El invitado sin sesión puede ver: hub, docs (solo view, no descargar),
@@ -211,6 +215,8 @@ async fn main() -> anyhow::Result<()> {
         // ===== Sección 4: categorías del hub (guest-allowed) =====
         .route("/categorias", get(handlers::categories::categorias_page))
         .route("/descargas", get(handlers::descargas::descargas_page))
+        .route("/zlibs", get(handlers::zlibs::zlibs_page))
+        .route("/zlibs/:name", get(handlers::zlibs::zlibs_detail_page))
         .route("/categoria/:slug", get(handlers::categories::categoria_detalle))
         .route("/explorar", get(handlers::categories::explorar_page))
         .route("/buscar", get(handlers::categories::buscar_page))
@@ -226,6 +232,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/dashboard/sessions/:token/revoke", post(handlers::dashboard::revoke_session))
         .route("/dashboard/devices/:token/revoke", post(handlers::dashboard::revoke_linked_device))
         .route("/dashboard/logout_all", post(handlers::dashboard::logout_all))
+        // ZLibs / Zen CLI (cookie auth para web Askama)
+        .route("/zlibs/api/token", post(handlers::zlibs::web_create_token))
+        .route("/zlibs/api/token/:id/revoke", post(handlers::zlibs::web_revoke_token))
+        .route("/zlibs/api/publish", post(handlers::zlibs::web_publish_package))
         // Sección 6.2 — Correo interno (vinculación con código de 8 dígitos).
         .route("/cuenta/correo", get(handlers::correo::correo_get))
         .route("/cuenta/correo/solicitar", post(handlers::correo::correo_solicitar_post))

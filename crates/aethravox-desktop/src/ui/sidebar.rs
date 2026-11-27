@@ -18,6 +18,7 @@ fn all_nav_items(can_admin: bool) -> Vec<(&'static str, &'static str, Route)> {
         ("🖥", "aexOS", Route::Aexos),
         ("📡", "Transmitir", Route::Transmit),
         ("⬇", "Descargas", Route::Downloads),
+        ("📦", "ZLibs (Zen)", Route::ZLibs),
         ("🛟", "Asistencia", Route::Support),
         ("⚙", "Perfil y Tema", Route::Settings),
     ];

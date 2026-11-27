@@ -24,7 +24,7 @@ use aethravox_core::{
     TicketActionRequest, TicketDetailDto, TicketDto, TitleAssignRequest,
     TransferGroupOwnershipRequest, UpdateGroupInfoRequest, UpdateProfileRequest,
     UpdateTitlesRequest, UploadAvatarRequest, UploadChatMediaRequest, UploadGroupImageRequest,
-    UploadVideoRequest, UserIpHistoryDto, UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto,
+    UploadVideoRequest, UserIpHistoryDto, UserSearchDto, UserSummary, VideoDto, VideoReactRequest, WebAppDto, ZLibAccountPayload, ZLibCreateTokenRequest, ZLibCreateTokenResponse, ZLibPackageDetailDto, ZLibPackageDto, ZLibPublishRequest, ZLibPublishResponse, ZLibVersionDto,
 };
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -170,6 +170,13 @@ pub enum ApiEvent {
     EmailRequestOk(String),
     EmailErr(String),
     LogoutAllOk,
+    // ZLibs (Zen Registry)
+    ZLibsPackagesLoaded(Vec<ZLibPackageDto>),
+    ZLibsDetailLoaded(ZLibPackageDetailDto),
+    ZLibsAccountLoaded(ZLibAccountPayload),
+    ZLibTokenCreated(ZLibCreateTokenResponse),
+    ZLibPublished(ZLibPublishResponse),
+    ZLibsErr(String),
 }
 
 fn encode_uri_component(s: &str) -> String {
@@ -4449,6 +4456,7 @@ pub fn offline_demo_hub(username: &str, is_guest: bool, theme: ThemeKind) -> Hub
                 app(9, "aexos", "aexOS", "Entorno de escritorio interactivo.", "🖥", ""),
                 app(10, "transmitir", "Transmitir", "Comparte tu pantalla en red local.", "📡", ""),
                 app(11, "descargas", "Descargas", "Clientes nativos y releases.", "⬇", ""),
+                app(13, "zlibs", "ZLibs", "Registro de librerías Zen con repositorios en GitHub y tokens CLI.", "📦", "Nuevo"),
             ],
         },
         CategoryRowDto {
@@ -4662,5 +4670,177 @@ pub fn demo_aexos_profiles(username: &str) -> Vec<AexosProfileDto> {
         pinned_apps_json: "[\"aris\",\"chat\",\"neon-canvas\",\"docs\"]".into(),
         files_json: "[]".into(),
         notes_text: "Notas rápidas de aexOS en cliente nativo egui.".into(),
+    }]
+}
+
+
+// ===================== ZLibs (Zen Registry) =====================
+
+pub fn spawn_fetch_zlibs_packages(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    query: String,
+) {
+    rt.spawn(async move {
+        let q = query.trim();
+        let path = if q.is_empty() {
+            "/api/v1/zlibs/packages".to_string()
+        } else {
+            format!("/api/v1/zlibs/packages?q={}", encode_uri_component(q))
+        };
+        match get_json::<Vec<ZLibPackageDto>>(&base_url, &path, &token).await {
+            Ok(list) => {
+                let _ = tx.send(ApiEvent::ZLibsPackagesLoaded(list));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ZLibsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_fetch_zlib_detail(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    name: String,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/zlibs/packages/{}", encode_uri_component(&name));
+        match get_json::<ZLibPackageDetailDto>(&base_url, &path, &token).await {
+            Ok(detail) => {
+                let _ = tx.send(ApiEvent::ZLibsDetailLoaded(detail));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ZLibsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_fetch_zlibs_mine(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+) {
+    rt.spawn(async move {
+        match get_json::<ZLibAccountPayload>(&base_url, "/api/v1/zlibs/mine", &token).await {
+            Ok(acc) => {
+                let _ = tx.send(ApiEvent::ZLibsAccountLoaded(acc));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ZLibsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_create_zlib_token(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    label: String,
+) {
+    rt.spawn(async move {
+        let body = ZLibCreateTokenRequest { label };
+        match post_json::<ZLibCreateTokenRequest, ZLibCreateTokenResponse>(
+            &base_url,
+            "/api/v1/zlibs/tokens",
+            &token,
+            &body,
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::ZLibTokenCreated(res));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ZLibsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_revoke_zlib_token(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    token_id: i64,
+) {
+    rt.spawn(async move {
+        let path = format!("/api/v1/zlibs/tokens/{token_id}");
+        match delete_json::<ZLibAccountPayload>(&base_url, &path, &token).await {
+            Ok(acc) => {
+                let _ = tx.send(ApiEvent::ZLibsAccountLoaded(acc));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ZLibsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn spawn_publish_zlib(
+    rt: &AsyncRt,
+    tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
+    ctx: egui::Context,
+    base_url: String,
+    token: Option<String>,
+    req: ZLibPublishRequest,
+) {
+    rt.spawn(async move {
+        match post_json::<ZLibPublishRequest, ZLibPublishResponse>(
+            &base_url,
+            "/api/v1/zlibs/publish",
+            &token,
+            &req,
+        )
+        .await
+        {
+            Ok(res) => {
+                let _ = tx.send(ApiEvent::ZLibPublished(res));
+            }
+            Err(e) => {
+                let _ = tx.send(ApiEvent::ZLibsErr(e));
+            }
+        }
+        ctx.request_repaint();
+    });
+}
+
+pub fn demo_zlibs() -> Vec<ZLibPackageDto> {
+    vec![ZLibPackageDto {
+        id: 1,
+        name: "zen_math".into(),
+        owner_username: "Aethravox".into(),
+        description: "Utilidades matemáticas y vectores para Zen.".into(),
+        git_url: "https://github.com/aethravox/zen_math.git".into(),
+        latest_version: "1.0.0".into(),
+        dep_line: "dep zen_math "1.0.0"".into(),
+        downloads_count: 42,
+        updated_at: "2026-11-27".into(),
+        versions: vec![ZLibVersionDto {
+            version: "1.0.0".into(),
+            git_ref: "1.0.0".into(),
+            dep_line: "dep zen_math "1.0.0"".into(),
+            files_count: 3,
+            created_at: "2026-11-27".into(),
+        }],
     }]
 }

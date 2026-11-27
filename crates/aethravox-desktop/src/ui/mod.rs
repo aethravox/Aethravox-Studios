@@ -16,3 +16,4 @@ pub mod sidebar;
 pub mod support;
 pub mod transmit;
 pub mod virtual_keyboard;
+pub mod zlibs;

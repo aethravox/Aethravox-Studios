@@ -25,3 +25,5 @@ pub mod aris;
 pub mod descargas; // Sección 7: /descargas (clientes nativos)
 pub mod theme;
 pub mod transmit;
+
+pub mod zlibs;

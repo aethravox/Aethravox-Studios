@@ -10,7 +10,7 @@ use crate::api::{
     spawn_revoke_device, spawn_revoke_session, spawn_set_primary_email, spawn_update_profile,
     spawn_update_titles, spawn_upload_avatar_bytes, spawn_upload_avatar_path, spawn_verify_email,
 };
-use crate::app::AethravoxApp;
+use crate::app::{AethravoxApp, Route};
 use crate::theme::{badge_pill, card_frame, elevated_frame, primary_button, Palette};
 
 #[allow(dead_code)]
@@ -24,6 +24,9 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
     let mobile = app.is_mobile_layout(ctx);
     let mut refresh_profile = false;
     let mut refresh_emails = false;
+    let mut refresh_zlibs = false;
+    let mut create_zlib_tok = false;
+    let mut revoke_zlib_tok: Option<i64> = None;
     let mut save_profile = false;
     let mut save_titles = false;
     let mut change_pw = false;
@@ -74,6 +77,9 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                 }
                 if app.emails_payload.is_none() {
                     refresh_emails = true;
+                }
+                if app.zlibs_account.is_none() {
+                    refresh_zlibs = true;
                 }
             }
         }
@@ -704,6 +710,126 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
                     }
                 });
 
+                ui.add_space(12.0);
+                // Zen CLI & ZLibs
+                card_frame(p).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.heading("📦 Zen CLI y ZLibs");
+                        if ui.button("↻ Actualizar").clicked() {
+                            refresh_zlibs = true;
+                        }
+                        if ui.button("Abrir ZLibs ↗").clicked() {
+                            app.navigate_to(ctx, Route::ZLibs);
+                        }
+                    });
+                    ui.label(
+                        egui::RichText::new(
+                            "Genera tu token CLI (almacenado con SHA-256) y consulta tus librerías Zen publicadas en GitHub.",
+                        )
+                        .small()
+                        .color(p.text_muted),
+                    );
+                    if let Some(err) = &app.zlibs_error {
+                        ui.label(egui::RichText::new(format!("⚠️ {err}")).small().color(p.danger));
+                    }
+                    ui.add_space(6.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.zlibs_token_label)
+                                .desired_width(200.0)
+                                .hint_text("Etiqueta (ej: Mi PC)"),
+                        );
+                        if primary_button(ui, p, "🔑 Generar Token CLI").clicked() {
+                            create_zlib_tok = true;
+                        }
+                    });
+                    if let Some(created) = &app.zlibs_created_token {
+                        ui.add_space(8.0);
+                        elevated_frame(p).show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("Token CLI creado (cópialo ahora):")
+                                    .strong()
+                                    .color(p.accent_primary),
+                            );
+                            ui.monospace(&created.cli_command);
+                            if primary_button(ui, p, "📋 Copiar zen login").clicked() {
+                                ctx.copy_text(created.cli_command.clone());
+                                app.status_banner = Some("Comando zen login copiado.".into());
+                            }
+                        });
+                    }
+                    if let Some(acc) = &app.zlibs_account {
+                        if !acc.tokens.is_empty() {
+                            ui.add_space(8.0);
+                            ui.label(egui::RichText::new("Tokens CLI activos:").strong().small());
+                            for t in &acc.tokens {
+                                elevated_frame(p).show(ui, |ui| {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(egui::RichText::new(&t.label).strong());
+                                        ui.monospace(&t.token_prefix);
+                                        if ui
+                                            .button(egui::RichText::new("Revocar").color(p.danger))
+                                            .clicked()
+                                        {
+                                            revoke_zlib_tok = Some(t.id);
+                                        }
+                                    });
+                                });
+                                ui.add_space(4.0);
+                            }
+                        }
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Paquetes publicados ({}):",
+                                acc.my_packages.len()
+                            ))
+                            .strong()
+                            .small(),
+                        );
+                        if acc.my_packages.is_empty() {
+                            ui.label(
+                                egui::RichText::new("Todavía no has publicado librerías Zen.")
+                                    .small()
+                                    .color(p.text_muted),
+                            );
+                        } else {
+                            for pkg in &acc.my_packages {
+                                elevated_frame(p).show(ui, |ui| {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(&pkg.name)
+                                                .strong()
+                                                .color(p.accent_primary),
+                                        );
+                                        if ui.button("GitHub ↗").clicked() {
+                                            ctx.open_url(egui::OpenUrl::new_tab(pkg.git_url.clone()));
+                                        }
+                                    });
+                                    ui.horizontal_wrapped(|ui| {
+                                        for v in &pkg.versions {
+                                            if ui.button(format!("v{}", v.version)).clicked() {
+                                                ctx.copy_text(v.dep_line.clone());
+                                                app.status_banner =
+                                                    Some(format!("Copiado: {}", v.dep_line));
+                                            }
+                                        }
+                                    });
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.monospace(&pkg.dep_line);
+                                        if ui.button("📋 Copiar Make.mz").clicked() {
+                                            ctx.copy_text(pkg.dep_line.clone());
+                                            app.status_banner =
+                                                Some(format!("Copiado: {}", pkg.dep_line));
+                                        }
+                                    });
+                                });
+                                ui.add_space(4.0);
+                            }
+                        }
+                    }
+                });
+
                 if !prof.linked_devices.is_empty() {
                     ui.add_space(12.0);
                     card_frame(p).show(ui, |ui| {
@@ -760,6 +886,37 @@ pub fn show(app: &mut AethravoxApp, ui: &mut egui::Ui, ctx: &egui::Context, p: &
             app.server_url.clone(),
             app.token.clone(),
         );
+    }
+    if refresh_zlibs && !app.offline_mode && app.token.is_some() {
+        spawn_fetch_zlibs_mine(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+        );
+    }
+    if create_zlib_tok && !app.offline_mode && app.token.is_some() {
+        spawn_create_zlib_token(
+            &app.rt,
+            app.tx.clone(),
+            ctx.clone(),
+            app.server_url.clone(),
+            app.token.clone(),
+            app.zlibs_token_label.clone(),
+        );
+    }
+    if let Some(tid) = revoke_zlib_tok {
+        if !app.offline_mode && app.token.is_some() {
+            spawn_revoke_zlib_token(
+                &app.rt,
+                app.tx.clone(),
+                ctx.clone(),
+                app.server_url.clone(),
+                app.token.clone(),
+                tid,
+            );
+        }
     }
     if refresh_emails && !app.offline_mode && app.token.is_some() {
         spawn_fetch_emails(

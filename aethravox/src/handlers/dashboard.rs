@@ -5,6 +5,7 @@
 use askama::Template;
 use axum::{
     extract::{Multipart, Path, State},
+    http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
     Form,
 };
@@ -19,7 +20,11 @@ use crate::{
 pub async fn dashboard(
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    let zlibs_public_url = crate::handlers::zlibs::effective_public_url(&state.cfg, &headers);
+    let zlibs_account =
+        crate::handlers::zlibs::build_zlib_account_payload(&state, user.id, &zlibs_public_url).await;
     let sessions = state.db.list_user_sessions(user.id).await.unwrap_or_default();
     let current_token = String::new();
 
@@ -76,6 +81,9 @@ pub async fn dashboard(
             })
             .collect(),
         linked_devices,
+        zlibs_public_url,
+        zlibs_tokens: zlibs_account.tokens,
+        zlibs_packages: zlibs_account.my_packages,
         info: None,
         error: None,
     }
@@ -98,6 +106,9 @@ pub struct DashboardTemplate {
     pub active_session_count: i64,
     pub sessions: Vec<SessionRow>,
     pub linked_devices: Vec<LinkedDeviceRow>,
+    pub zlibs_public_url: String,
+    pub zlibs_tokens: Vec<aethravox_core::ZLibTokenDto>,
+    pub zlibs_packages: Vec<aethravox_core::ZLibPackageDto>,
     pub info: Option<String>,
     pub error: Option<String>,
 }

@@ -5,7 +5,7 @@ use aethravox_core::{
     ChatMessageDto, ChatMessageInfoDto, ColorMode, CommunityDetailDto, CommunityDto, DeviceProfile,
     DocumentDto, DownloadPlatformDto, EmailsPayload, FriendsPayload, HubPayload, LinkCodeDto,
     ProfilePayload, PublicProfileDto, SystemConfigDto, ThemeKind, TicketDetailDto, TicketDto,
-    UserIpHistoryDto, UserSearchDto, VideoDto, WebAppDto,
+    UserIpHistoryDto, UserSearchDto, VideoDto, WebAppDto, ZLibAccountPayload, ZLibCreateTokenResponse, ZLibFileInput, ZLibPackageDetailDto, ZLibPackageDto,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -43,6 +43,7 @@ pub enum Route {
     Playground,
     Aexos,
     Downloads,
+    ZLibs,
     Support,
     Transmit,
     Settings,
@@ -370,6 +371,24 @@ pub struct AethravoxApp {
     pub neon_width: f32,
     pub neon_board_mode: u8,
 
+    // ZLibs (Zen Registry)
+    pub zlibs_tab: u8,
+    pub zlibs_packages: Vec<ZLibPackageDto>,
+    pub zlibs_search: String,
+    pub zlibs_active_detail: Option<ZLibPackageDetailDto>,
+    pub zlibs_account: Option<ZLibAccountPayload>,
+    pub zlibs_token_label: String,
+    pub zlibs_created_token: Option<ZLibCreateTokenResponse>,
+    pub zlibs_pub_name: String,
+    pub zlibs_pub_version: String,
+    pub zlibs_pub_desc: String,
+    pub zlibs_pub_main: String,
+    pub zlibs_pub_manifest: String,
+    pub zlibs_pub_readme: String,
+    pub zlibs_pub_files: Vec<ZLibFileInput>,
+    pub zlibs_busy: bool,
+    pub zlibs_error: Option<String>,
+    pub zlibs_info: Option<String>,
     // Status toast
     pub status_banner: Option<String>,
 
@@ -704,6 +723,23 @@ impl AethravoxApp {
             neon_color: egui::Color32::from_rgb(0, 212, 255),
             neon_width: 4.0,
             neon_board_mode: 0,
+            zlibs_tab: 0,
+            zlibs_packages: demo_zlibs(),
+            zlibs_search: String::new(),
+            zlibs_active_detail: None,
+            zlibs_account: None,
+            zlibs_token_label: String::new(),
+            zlibs_created_token: None,
+            zlibs_pub_name: String::new(),
+            zlibs_pub_version: "1.0.0".to_string(),
+            zlibs_pub_desc: String::new(),
+            zlibs_pub_main: String::new(),
+            zlibs_pub_manifest: String::new(),
+            zlibs_pub_readme: String::new(),
+            zlibs_pub_files: Vec::new(),
+            zlibs_busy: false,
+            zlibs_error: None,
+            zlibs_info: None,
             status_banner: None,
             #[cfg(target_os = "android")]
             android_app: None,
@@ -796,6 +832,7 @@ impl AethravoxApp {
         self.communities = demo_communities();
         self.docs = demo_docs();
         self.downloads = demo_downloads();
+        self.zlibs_packages = demo_zlibs();
         self.tickets = demo_tickets();
         self.videos = demo_videos();
         self.aexos_profiles = demo_aexos_profiles(username);
@@ -882,6 +919,25 @@ impl AethravoxApp {
                     self.token.clone(),
                 );
             }
+            Route::ZLibs => {
+                spawn_fetch_zlibs_packages(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                    self.zlibs_search.clone(),
+                );
+                if has_tok {
+                    spawn_fetch_zlibs_mine(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+            }
             Route::Support => {
                 spawn_fetch_tickets(
                     &self.rt,
@@ -924,6 +980,13 @@ impl AethravoxApp {
                     self.server_url.clone(),
                     self.token.clone(),
                 );
+                spawn_fetch_zlibs_mine(
+                    &self.rt,
+                    self.tx.clone(),
+                    ctx.clone(),
+                    self.server_url.clone(),
+                    self.token.clone(),
+                );
             }
             Route::Admin if has_tok => {
                 spawn_admin_overview(
@@ -954,6 +1017,7 @@ impl AethravoxApp {
             "playground" => Route::Playground,
             "aexos" => Route::Aexos,
             "descargas" => Route::Downloads,
+            "zlibs" => Route::ZLibs,
             "support" => Route::Support,
             "transmitir" => Route::Transmit,
             "dashboard" | "perfil" => Route::Settings,
@@ -978,6 +1042,9 @@ impl AethravoxApp {
         self.emails_payload = None;
         self.link_code_generated = None;
         self.admin_overview = None;
+        self.zlibs_account = None;
+        self.zlibs_created_token = None;
+        self.zlibs_active_detail = None;
         self.admin_ip_bans = None;
         self.admin_config = None;
         self.admin_ban_target = None;
@@ -1866,6 +1933,62 @@ impl AethravoxApp {
                     self.logout();
                     self.auth_info = Some("Todas tus sesiones fueron cerradas.".into());
                 }
+                // ZLibs (Zen Registry)
+                ApiEvent::ZLibsPackagesLoaded(list) => {
+                    self.zlibs_error = None;
+                    self.zlibs_packages = list;
+                }
+                ApiEvent::ZLibsDetailLoaded(detail) => {
+                    self.zlibs_error = None;
+                    self.zlibs_active_detail = Some(detail);
+                }
+                ApiEvent::ZLibsAccountLoaded(acc) => {
+                    self.zlibs_error = None;
+                    self.zlibs_account = Some(acc);
+                }
+                ApiEvent::ZLibTokenCreated(res) => {
+                    self.zlibs_error = None;
+                    self.zlibs_info = Some("Token CLI generado correctamente.".into());
+                    self.zlibs_token_label.clear();
+                    self.zlibs_created_token = Some(res);
+                    spawn_fetch_zlibs_mine(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::ZLibPublished(res) => {
+                    self.zlibs_busy = false;
+                    self.zlibs_error = None;
+                    self.zlibs_info = Some(format!(
+                        "Librería publicada en {} (ref {}).",
+                        res.git_url, res.git_ref
+                    ));
+                    self.status_banner = Some("Paquete Zen publicado en GitHub + ZLibs.".into());
+                    self.zlibs_pub_files.clear();
+                    self.zlibs_tab = 0;
+                    spawn_fetch_zlibs_packages(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                        self.zlibs_search.clone(),
+                    );
+                    spawn_fetch_zlibs_mine(
+                        &self.rt,
+                        self.tx.clone(),
+                        ctx.clone(),
+                        self.server_url.clone(),
+                        self.token.clone(),
+                    );
+                }
+                ApiEvent::ZLibsErr(e) => {
+                    self.zlibs_busy = false;
+                    self.zlibs_error = Some(e);
+                }
             }
         }
     }
@@ -2085,6 +2208,7 @@ impl eframe::App for AethravoxApp {
                     Route::Playground => ui::playground::show(self, ui, &p),
                     Route::Aexos => ui::aexos::show(self, ui, &p),
                     Route::Downloads => ui::downloads::show(self, ui, &p),
+                    Route::ZLibs => ui::zlibs::show(self, ui, &p),
                     Route::Support => ui::support::show(self, ui, &p),
                     Route::Transmit => ui::transmit::show(self, ui, &p),
                     Route::Settings => ui::settings::show(self, ui, ctx, &p),

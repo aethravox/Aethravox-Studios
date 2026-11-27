@@ -26,6 +26,7 @@ askama_axum = "0.4"
 argon2 = "0.5"
 rand = "0.8"
 hex = "0.4"
+sha2 = "0.10"
 
 # Cookies
 tower-cookies = "0.10"

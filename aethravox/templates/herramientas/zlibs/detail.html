@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ pkg.name }} — ZLibs{% endblock %}
+{% block tagline %}ZLibs · {{ pkg.name }}{% endblock %}
+{% block back_url %}/zlibs{% endblock %}
+{% block sidebar %}{% include "_sidebar.html" %}{% endblock %}
+{% block header_auth %}
+{% if is_guest %}
+<span class="guest-auth" style="display:flex;gap:10px;align-items:center;margin-left:12px">
+    <a href="/login" class="btn btn-secondary btn-sm">Iniciar sesión</a>
+    <a href="/register" class="btn btn-primary btn-sm">Registrarse</a>
+</span>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+            <a href="/zlibs" class="small muted">← Volver a ZLibs</a>
+            <h2 style="margin-top:6px;">📦 {{ pkg.name }} <span class="zlib-ver-badge">v{{ pkg.latest_version }}</span></h2>
+            <p class="muted">{{ pkg.description }}</p>
+            <p class="muted small">Autor: <strong>@{{ pkg.owner_username }}</strong> · {{ pkg.downloads_count }} descargas · Actualizado {{ pkg.updated_at }}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="{{ pkg.git_url }}" target="_blank" rel="noopener" class="btn btn-primary">Repositorio GitHub ↗</a>
+        </div>
+    </div>
+
+    <div class="zlib-install-box">
+        <div class="small muted">Añadir en <code>Make.mz</code>:</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+            <code class="zlib-dep-code">{{ pkg.dep_line }}</code>
+            <button type="button" class="btn btn-secondary btn-sm zlib-copy-btn" data-copy="{{ pkg.dep_line }}">Copiar</button>
+        </div>
+        <div class="small muted" style="margin-top:8px;">O por CLI: <code>zen agregar {{ pkg.name }} {{ pkg.latest_version }}</code></div>
+    </div>
+
+    <h3 class="section-title" style="margin-top:22px;">🏷️ Versiones ({{ pkg.versions.len() }})</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+        {% for v in pkg.versions %}
+        <div class="zlib-ver-row">
+            <div>
+                <strong>{{ v.version }}</strong>
+                <span class="muted small">· ref <code>{{ v.git_ref }}</code> · {{ v.files_count }} archivos · {{ v.created_at }}</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <code class="zlib-dep-code">{{ v.dep_line }}</code>
+                <button type="button" class="btn btn-secondary btn-sm zlib-copy-btn" data-copy="{{ v.dep_line }}">Copiar</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if !manifest.is_empty() %}
+    <h3 class="section-title" style="margin-top:22px;">⚙️ Manifiesto (Make.mz / Manifest.zm)</h3>
+    <pre class="zlib-pre">{{ manifest }}</pre>
+    {% endif %}
+
+    {% if !readme.is_empty() %}
+    <h3 class="section-title" style="margin-top:22px;">📄 README.md</h3>
+    <pre class="zlib-pre">{{ readme }}</pre>
+    {% endif %}
+</div>
+
+<style>
+.zlib-ver-badge {
+    display:inline-block; margin-left:6px; padding:2px 9px; border-radius:999px;
+    font-size:0.78rem; font-weight:700; background:rgba(0,212,255,.12); color:#00d4ff;
+    border:1px solid rgba(0,212,255,.3);
+}
+.zlib-install-box {
+    margin-top:16px; padding:14px; border-radius:10px;
+    background:var(--negro-suave, #0d0d12); border:1px solid var(--fondo, #1a1a1a);
+}
+.zlib-dep-code {
+    background:var(--negro, #050505); border:1px solid var(--fondo, #1a1a1a);
+    border-radius:6px; padding:5px 9px; font-family:'JetBrains Mono', monospace;
+    font-size:0.82rem; color:var(--dorado, #e0a308); user-select:all;
+}
+.zlib-ver-row {
+    display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 12px; border-radius:8px; background:var(--negro-suave, #0d0d12); border:1px solid var(--fondo, #1a1a1a);
+}
+.zlib-pre {
+    background:var(--negro, #050505); border:1px solid var(--fondo, #1a1a1a);
+    border-radius:10px; padding:14px; overflow-x:auto; white-space:pre-wrap;
+    font-family:'JetBrains Mono', monospace; font-size:0.84rem; line-height:1.5;
+}
+</style>
+
+<script>
+document.querySelectorAll('.zlib-copy-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var txt = btn.getAttribute('data-copy') || '';
+        if (!txt) return;
+        navigator.clipboard?.writeText(txt);
+        var orig = btn.textContent;
+        btn.textContent = '✓ Copiado';
+        setTimeout(function() { btn.textContent = orig; }, 1400);
+    });
+});
+</script>
+{% endblock %}

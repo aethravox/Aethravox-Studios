@@ -280,3 +280,5 @@ pub mod aris; // Aris: chats, miembros, mensajes, rate-limit y API keys
 pub mod aexos; // Cuentas exclusivas y sesiones activas de aexOS
 pub mod theme; // Sistema de temas y onboarding
 pub mod analytics; // Carriles IA de Aris, analíticas de visitas y acciones sociales
+
+pub mod zlibs; // Registro de librerías Zen (ZLibs + tokens CLI)

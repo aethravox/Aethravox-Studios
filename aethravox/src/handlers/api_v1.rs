@@ -29,7 +29,7 @@ use aethravox_core::{
     TitleDto, TitleHolderDto, TransferGroupOwnershipRequest, UpdateGroupInfoRequest,
     UpdateProfileRequest, UpdateTitlesRequest, UploadAvatarRequest, UploadChatMediaRequest,
     UploadGroupImageRequest, UploadVideoRequest, UserEmailDto, UserIpHistoryDto, UserSearchDto, UserSummary,
-    VideoDto, VideoReactRequest, WebAppDto,
+    VideoDto, VideoReactRequest, WebAppDto, ZLibCreateTokenRequest, ZLibCreateTokenResponse, ZLibPackageDetailDto, ZLibPackageDto, ZLibPublishRequest,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -322,6 +322,13 @@ pub fn router() -> Router<AppState> {
             post(admin_downloads_create),
         )
         .route("/api/v1/admin/downloads/:id", delete(admin_downloads_delete))
+        // ZLibs (Zen Registry)
+        .route("/api/v1/zlibs/packages", get(zlibs_packages))
+        .route("/api/v1/zlibs/packages/:name", get(zlibs_package_detail))
+        .route("/api/v1/zlibs/mine", get(zlibs_mine))
+        .route("/api/v1/zlibs/tokens", post(zlibs_create_token))
+        .route("/api/v1/zlibs/tokens/:id", delete(zlibs_revoke_token))
+        .route("/api/v1/zlibs/publish", post(zlibs_publish))
 }
 
 fn json_err(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -6996,4 +7003,142 @@ async fn admin_downloads_delete(
         )
         .await;
     Json(build_admin_downloads_dtos(&state).await).into_response()
+}
+
+
+// ============================================================
+// ZLibs / Zen Registry (/api/v1/zlibs/*)
+// ============================================================
+
+#[derive(Deserialize)]
+struct ZLibListQuery {
+    #[serde(default)]
+    q: String,
+}
+
+async fn zlibs_packages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ZLibListQuery>,
+) -> Response {
+    let _user = resolve_bearer_or_guest(&state, &headers).await;
+    let rows = state
+        .db
+        .search_zen_packages(&query.q, 60)
+        .await
+        .unwrap_or_default();
+    let mut out: Vec<ZLibPackageDto> = Vec::with_capacity(rows.len());
+    for row in rows {
+        let vers = state
+            .db
+            .list_zen_package_versions(row.id)
+            .await
+            .unwrap_or_default();
+        out.push(crate::handlers::zlibs::summary_row_to_dto(row, vers));
+    }
+    Json(out).into_response()
+}
+
+async fn zlibs_package_detail(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+) -> Response {
+    let _user = resolve_bearer_or_guest(&state, &headers).await;
+    let pkg_name = name.trim().to_ascii_lowercase();
+    let detail = match state.db.get_zen_package_detail(&pkg_name).await {
+        Ok(Some(d)) => d,
+        _ => return json_err(StatusCode::NOT_FOUND, "Paquete no encontrado."),
+    };
+    let manifest = detail
+        .versions
+        .first()
+        .map(|v| v.manifest.clone())
+        .unwrap_or_default();
+    let package = crate::handlers::zlibs::summary_row_to_dto(detail.package, detail.versions);
+    Json(ZLibPackageDetailDto {
+        package,
+        readme: detail.readme,
+        manifest,
+    })
+    .into_response()
+}
+
+async fn zlibs_mine(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let public_url = crate::handlers::zlibs::effective_public_url(&state.cfg, &headers);
+    let payload = crate::handlers::zlibs::build_zlib_account_payload(&state, user.id, &public_url).await;
+    Json(payload).into_response()
+}
+
+async fn zlibs_create_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let label = serde_json::from_slice::<ZLibCreateTokenRequest>(&body)
+        .map(|b| b.label)
+        .unwrap_or_else(|_| "Zen CLI".to_string());
+    let public_url = crate::handlers::zlibs::effective_public_url(&state.cfg, &headers);
+    match state.db.create_zen_cli_token(user.id, &label).await {
+        Ok((row, raw_token)) => {
+            let cli_command = format!("zen login --token {raw_token} --url {public_url}");
+            let _ = state
+                .db
+                .audit(Some(user.id), "zlib_token_create", Some(&row.token_prefix), None)
+                .await;
+            Json(ZLibCreateTokenResponse {
+                token: raw_token,
+                cli_command,
+                server_url: public_url,
+                item: crate::handlers::zlibs::token_row_to_dto(row),
+            })
+            .into_response()
+        }
+        Err(e) => json_err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error creando token CLI: {e}"),
+        ),
+    }
+}
+
+async fn zlibs_revoke_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let _ = state.db.revoke_zen_cli_token(user.id, id).await;
+    let _ = state
+        .db
+        .audit(Some(user.id), "zlib_token_revoke", Some(&format!("id={id}")), None)
+        .await;
+    let public_url = crate::handlers::zlibs::effective_public_url(&state.cfg, &headers);
+    let payload = crate::handlers::zlibs::build_zlib_account_payload(&state, user.id, &public_url).await;
+    Json(payload).into_response()
+}
+
+async fn zlibs_publish(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ZLibPublishRequest>,
+) -> Response {
+    let user = match require_bearer_user(&state, &headers).await {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    match crate::handlers::zlibs::publish_zen_package_core(&state, &user, req).await {
+        Ok(res) => (StatusCode::CREATED, Json(res)).into_response(),
+        Err((status, msg)) => json_err(status, msg),
+    }
 }

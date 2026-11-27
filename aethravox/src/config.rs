@@ -26,6 +26,10 @@ pub struct Config {
     pub aethramail_sender: String,
     /// Timeout (segundos) para cada llamada a la API interna.
     pub aethramail_timeout_secs: u64,
+    // ── ZLibs / Zen Registry (GitHub REST API) ──
+    pub github_token: String,
+    pub github_org: String,
+    pub github_owner: String,
 }
 
 impl Config {
@@ -60,10 +64,21 @@ impl Config {
                 .and_then(|s| s.parse::<u64>().ok())
                 .filter(|n| *n > 0)
                 .unwrap_or(10),
+            github_token: env_or_alt("GITHUB_TOKEN", "AETHRAVOX_GITHUB_TOKEN", ""),
+            github_org: env_or_alt("GITHUB_ORG", "AETHRAVOX_GITHUB_ORG", ""),
+            github_owner: env_or_alt("GITHUB_OWNER", "AETHRAVOX_GITHUB_OWNER", ""),
         }
     }
 }
 
 fn env_or(key: &str, fallback: &str) -> String {
     env::var(key).unwrap_or_else(|_| fallback.to_string())
+}
+
+fn env_or_alt(primary: &str, secondary: &str, fallback: &str) -> String {
+    env::var(primary)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| env::var(secondary).ok().filter(|s| !s.trim().is_empty()))
+        .unwrap_or_else(|| fallback.to_string())
 }

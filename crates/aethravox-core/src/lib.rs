@@ -1269,6 +1269,88 @@ pub struct AdminCreateDownloadRequest {
     pub data_base64: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibTokenDto {
+    pub id: i64,
+    pub label: String,
+    pub token_prefix: String,
+    pub created_at: String,
+    pub last_used_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibCreateTokenRequest {
+    #[serde(default)]
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibCreateTokenResponse {
+    pub token: String,
+    pub cli_command: String,
+    pub server_url: String,
+    pub item: ZLibTokenDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibVersionDto {
+    pub version: String,
+    pub git_ref: String,
+    pub dep_line: String,
+    pub files_count: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibPackageDto {
+    pub id: i64,
+    pub name: String,
+    pub owner_username: String,
+    pub description: String,
+    pub git_url: String,
+    pub latest_version: String,
+    pub dep_line: String,
+    pub downloads_count: i64,
+    pub updated_at: String,
+    #[serde(default)]
+    pub versions: Vec<ZLibVersionDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibPackageDetailDto {
+    pub package: ZLibPackageDto,
+    pub readme: String,
+    pub manifest: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibAccountPayload {
+    pub server_url: String,
+    pub tokens: Vec<ZLibTokenDto>,
+    pub my_packages: Vec<ZLibPackageDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibFileInput {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibPublishRequest {
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub files: Vec<ZLibFileInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZLibPublishResponse {
+    pub git_url: String,
+    pub git_ref: String,
+}
+
 pub fn base64_encode(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
