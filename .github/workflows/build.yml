@@ -1,0 +1,290 @@
+name: Build Multi-Platform Aethravox
+
+on:
+  push:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Windows (${{ matrix.label }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            msvc_arch: amd64
+            label: x86_64
+          - target: aarch64-pc-windows-msvc
+            msvc_arch: arm64
+            label: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure MSVC (${{ matrix.msvc_arch }})
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-${{ matrix.target }}
+
+      - name: Build Windows (${{ matrix.label }})
+        run: cargo build --release --package aethravox-desktop --target ${{ matrix.target }}
+
+      - name: Package executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist-out | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/aethravox-desktop.exe" "dist-out/aethravox-windows-${{ matrix.label }}.exe"
+
+      - name: Upload Windows (${{ matrix.label }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethravox-windows-${{ matrix.label }}
+          path: dist-out/aethravox-windows-${{ matrix.label }}.exe
+
+  linux:
+    name: Linux (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            label: x86_64
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            label: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux GUI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libclang-dev \
+            libgtk-3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libssl-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-${{ matrix.target }}
+
+      - name: Build Linux (${{ matrix.label }})
+        run: cargo build --release --package aethravox-desktop --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          mkdir -p dist-out
+          cp "target/${{ matrix.target }}/release/aethravox-desktop" "dist-out/aethravox-linux-${{ matrix.label }}"
+          chmod +x "dist-out/aethravox-linux-${{ matrix.label }}"
+
+      - name: Upload Linux (${{ matrix.label }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethravox-linux-${{ matrix.label }}
+          path: dist-out/aethravox-linux-${{ matrix.label }}
+
+  macos:
+    name: macOS (${{ matrix.label }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            label: x86_64
+          - target: aarch64-apple-darwin
+            label: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-${{ matrix.target }}
+
+      - name: Build macOS (${{ matrix.label }})
+        run: cargo build --release --package aethravox-desktop --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          mkdir -p dist-out
+          cp "target/${{ matrix.target }}/release/aethravox-desktop" "dist-out/aethravox-macos-${{ matrix.label }}"
+          chmod +x "dist-out/aethravox-macos-${{ matrix.label }}"
+
+      - name: Upload macOS (${{ matrix.label }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethravox-macos-${{ matrix.label }}
+          path: dist-out/aethravox-macos-${{ matrix.label }}
+
+  wasm:
+    name: WebAssembly (wasm32)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (wasm32)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32
+
+      - name: Build WebAssembly bundle
+        working-directory: crates/aethravox-desktop
+        env:
+          RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
+        run: trunk build --release
+
+      - name: Upload WebAssembly bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethravox-wasm-web
+          path: crates/aethravox-desktop/dist
+
+  android:
+    name: Android APK (ARMv7 + ARM64 + x86_64 + TV + PDI)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          build-tools-version: '34.0.0'
+          api-levels: '34'
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: 'r26d'
+          add-to-path: true
+          link-to-sdk: true
+
+      - name: Setup Rust Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: |
+            armv7-linux-androideabi
+            aarch64-linux-android
+            x86_64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android-multi-abi
+
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+
+      - name: Build Universal APK (32-bit, 64-bit, x86_64, TV & PDI)
+        working-directory: crates/aethravox-desktop
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: cargo apk build --release
+
+      - name: Align and Sign APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-out
+          RAW_APK=$(find target -path "*/release/apk/*.apk" | head -n 1)
+          if [ -z "$RAW_APK" ]; then
+            echo "Error: No APK generated by cargo-apk"
+            exit 1
+          fi
+          echo "Found APK: $RAW_APK"
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          ZIPALIGN=$(find "$SDK_ROOT/build-tools" -name "zipalign" | sort -V | tail -n 1)
+          APKSIGNER=$(find "$SDK_ROOT/build-tools" -name "apksigner" | sort -V | tail -n 1)
+
+          "$ZIPALIGN" -f -p 4 "$RAW_APK" dist-out/aethravox-aligned.apk
+
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/release-key.jks
+            SIGN_ARGS=(
+              --ks /tmp/release-key.jks
+              --ks-pass env:ANDROID_KEYSTORE_PASSWORD
+              --out dist-out/aethravox-android-universal.apk
+            )
+            if [ -n "${ANDROID_KEY_ALIAS:-}" ]; then
+              SIGN_ARGS+=(--ks-key-alias "$ANDROID_KEY_ALIAS")
+            fi
+            if [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+              SIGN_ARGS+=(--key-pass env:ANDROID_KEY_PASSWORD)
+            fi
+            "$APKSIGNER" sign "${SIGN_ARGS[@]}" dist-out/aethravox-aligned.apk
+            rm -f /tmp/release-key.jks dist-out/aethravox-aligned.apk
+            "$APKSIGNER" verify --verbose dist-out/aethravox-android-universal.apk
+            echo "APK firmado correctamente con tu keystore (.jks)."
+          else
+            mv dist-out/aethravox-aligned.apk dist-out/aethravox-android-universal-debug.apk
+            echo "::warning::Secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD no configurados; se subió APK con firma debug."
+          fi
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aethravox-android-apk
+          path: dist-out/*.apk

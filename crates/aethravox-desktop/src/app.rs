@@ -4,7 +4,7 @@ use aethravox_core::{
     DeviceProfile, DocumentDto, DownloadPlatformDto, FriendsPayload, HubPayload, ProfilePayload,
     ThemeKind, TicketDetailDto, TicketDto, UserSearchDto, VideoDto, WebAppDto,
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::api::{
@@ -15,7 +15,7 @@ use crate::api::{
     spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
     spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages, spawn_fetch_profile,
     spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read, spawn_save_theme,
-    spawn_send_message, spawn_ticket_detail, ApiEvent,
+    spawn_send_message, spawn_ticket_detail, ApiEvent, AsyncRt,
 };
 use crate::theme::{apply_theme_for_device, Palette};
 use crate::ui;
@@ -48,7 +48,7 @@ pub struct NeonStroke {
 }
 
 pub struct AethravoxApp {
-    pub rt: tokio::runtime::Handle,
+    pub rt: AsyncRt,
     pub tx: mpsc::UnboundedSender<ApiEvent>,
     pub rx: mpsc::UnboundedReceiver<ApiEvent>,
 
@@ -90,7 +90,7 @@ pub struct AethravoxApp {
     pub chat_error: Option<String>,
     pub chat_sending: bool,
     pub chat_pending: Option<String>,
-    pub chat_last_poll: Option<Instant>,
+    pub chat_last_poll: Option<f64>,
     pub chat_new_panel: bool,
     pub chat_dm_username: String,
     pub chat_group_name: String,
@@ -208,7 +208,7 @@ impl AethravoxApp {
         cc: &eframe::CreationContext<'_>,
         tx: mpsc::UnboundedSender<ApiEvent>,
         rx: mpsc::UnboundedReceiver<ApiEvent>,
-        rt: tokio::runtime::Handle,
+        rt: AsyncRt,
     ) -> Self {
         Self::new_with_profile(cc, tx, rx, rt, DeviceProfile::Auto)
     }
@@ -217,7 +217,7 @@ impl AethravoxApp {
         cc: &eframe::CreationContext<'_>,
         tx: mpsc::UnboundedSender<ApiEvent>,
         rx: mpsc::UnboundedReceiver<ApiEvent>,
-        rt: tokio::runtime::Handle,
+        rt: AsyncRt,
         initial_profile: DeviceProfile,
     ) -> Self {
         let theme = ThemeKind::Aethravox;
@@ -704,13 +704,14 @@ impl AethravoxApp {
             return;
         }
 
+        let now = ctx.input(|i| i.time);
         let due = self
             .chat_last_poll
-            .map(|t| t.elapsed() >= Duration::from_secs(3))
+            .map(|t| (now - t) >= 3.0)
             .unwrap_or(true);
 
         if due {
-            self.chat_last_poll = Some(Instant::now());
+            self.chat_last_poll = Some(now);
             spawn_fetch_conversations(
                 &self.rt,
                 self.tx.clone(),

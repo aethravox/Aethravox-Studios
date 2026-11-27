@@ -14,6 +14,23 @@ use aethravox_core::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 
+#[cfg(not(target_arch = "wasm32"))]
+pub type AsyncRt = tokio::runtime::Handle;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Default)]
+pub struct AsyncRt;
+
+#[cfg(target_arch = "wasm32")]
+impl AsyncRt {
+    pub fn spawn<F>(&self, fut: F)
+    where
+        F: std::future::Future<Output = ()> + 'static,
+    {
+        wasm_bindgen_futures::spawn_local(fut);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ApiEvent {
     AuthOk(AuthSuccess),
@@ -226,7 +243,7 @@ async fn delete_json<T: DeserializeOwned>(
 // ===================== Auth & Hub =====================
 
 pub fn spawn_login(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -259,7 +276,7 @@ pub fn spawn_login(
 }
 
 pub fn spawn_register(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -291,7 +308,7 @@ pub fn spawn_register(
     });
 }
 
-pub fn spawn_logout(rt: &tokio::runtime::Handle, base_url: String, token: Option<String>) {
+pub fn spawn_logout(rt: &AsyncRt, base_url: String, token: Option<String>) {
     rt.spawn(async move {
         if token.as_ref().map(|t| !t.is_empty()).unwrap_or(false) {
             let _: Result<serde_json::Value, _> =
@@ -301,7 +318,7 @@ pub fn spawn_logout(rt: &tokio::runtime::Handle, base_url: String, token: Option
 }
 
 pub fn spawn_fetch_hub(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -321,7 +338,7 @@ pub fn spawn_fetch_hub(
 }
 
 pub fn spawn_save_theme(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -348,7 +365,7 @@ pub fn spawn_save_theme(
 // ===================== Chat =====================
 
 pub fn spawn_fetch_conversations(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -370,7 +387,7 @@ pub fn spawn_fetch_conversations(
 }
 
 pub fn spawn_fetch_messages(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -392,7 +409,7 @@ pub fn spawn_fetch_messages(
 }
 
 pub fn spawn_send_message(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -422,7 +439,7 @@ pub fn spawn_send_message(
 }
 
 pub fn spawn_mark_read(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     base_url: String,
     token: Option<String>,
     conv_id: i64,
@@ -434,7 +451,7 @@ pub fn spawn_mark_read(
 }
 
 pub fn spawn_start_dm(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -462,7 +479,7 @@ pub fn spawn_start_dm(
 }
 
 pub fn spawn_create_group(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -492,7 +509,7 @@ pub fn spawn_create_group(
 // ===================== Aris IA =====================
 
 pub fn spawn_aris_credits(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -507,7 +524,7 @@ pub fn spawn_aris_credits(
 }
 
 pub fn spawn_aris_chats(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -527,7 +544,7 @@ pub fn spawn_aris_chats(
 }
 
 pub fn spawn_aris_create_chat(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -555,7 +572,7 @@ pub fn spawn_aris_create_chat(
 }
 
 pub fn spawn_aris_delete_chat(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -577,7 +594,7 @@ pub fn spawn_aris_delete_chat(
 }
 
 pub fn spawn_aris_pin_chat(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -600,7 +617,7 @@ pub fn spawn_aris_pin_chat(
 }
 
 pub fn spawn_aris_messages(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -622,7 +639,7 @@ pub fn spawn_aris_messages(
 }
 
 pub fn spawn_aris_send(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -655,7 +672,7 @@ pub fn spawn_aris_send(
 // ===================== Amigos =====================
 
 pub fn spawn_fetch_friends(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -675,7 +692,7 @@ pub fn spawn_fetch_friends(
 }
 
 pub fn spawn_search_friends(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -697,7 +714,7 @@ pub fn spawn_search_friends(
 }
 
 pub fn spawn_send_friend_request(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -729,7 +746,7 @@ pub fn spawn_send_friend_request(
 }
 
 pub fn spawn_friend_action(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -759,7 +776,7 @@ pub fn spawn_friend_action(
 // ===================== Comunidades =====================
 
 pub fn spawn_fetch_communities(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -779,7 +796,7 @@ pub fn spawn_fetch_communities(
 }
 
 pub fn spawn_create_community(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -807,7 +824,7 @@ pub fn spawn_create_community(
 }
 
 pub fn spawn_community_detail(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -829,7 +846,7 @@ pub fn spawn_community_detail(
 }
 
 pub fn spawn_community_membership(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -861,7 +878,7 @@ pub fn spawn_community_membership(
 }
 
 pub fn spawn_community_create_group(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -891,7 +908,7 @@ pub fn spawn_community_create_group(
 }
 
 pub fn spawn_community_inviteable(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -908,7 +925,7 @@ pub fn spawn_community_inviteable(
 }
 
 pub fn spawn_community_invite(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -940,7 +957,7 @@ pub fn spawn_community_invite(
 // ===================== Documentos & Descargas =====================
 
 pub fn spawn_fetch_docs(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -960,7 +977,7 @@ pub fn spawn_fetch_docs(
 }
 
 pub fn spawn_fetch_downloads(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -982,7 +999,7 @@ pub fn spawn_fetch_downloads(
 // ===================== Asistencia / Tickets =====================
 
 pub fn spawn_fetch_tickets(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1002,7 +1019,7 @@ pub fn spawn_fetch_tickets(
 }
 
 pub fn spawn_create_ticket(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1030,7 +1047,7 @@ pub fn spawn_create_ticket(
 }
 
 pub fn spawn_ticket_detail(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1052,7 +1069,7 @@ pub fn spawn_ticket_detail(
 }
 
 pub fn spawn_reply_ticket(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1082,7 +1099,7 @@ pub fn spawn_reply_ticket(
 }
 
 pub fn spawn_ticket_action(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1115,7 +1132,7 @@ pub fn spawn_ticket_action(
 // ===================== Perfil, Títulos y Sesiones =====================
 
 pub fn spawn_fetch_profile(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1135,7 +1152,7 @@ pub fn spawn_fetch_profile(
 }
 
 pub fn spawn_update_profile(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1163,7 +1180,7 @@ pub fn spawn_update_profile(
 }
 
 pub fn spawn_update_titles(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1191,7 +1208,7 @@ pub fn spawn_update_titles(
 }
 
 pub fn spawn_change_password(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1219,7 +1236,7 @@ pub fn spawn_change_password(
 }
 
 pub fn spawn_revoke_session(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1244,7 +1261,7 @@ pub fn spawn_revoke_session(
 }
 
 pub fn spawn_revoke_device(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1271,7 +1288,7 @@ pub fn spawn_revoke_device(
 // ===================== aexTube =====================
 
 pub fn spawn_fetch_videos(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1291,7 +1308,7 @@ pub fn spawn_fetch_videos(
 }
 
 pub fn spawn_react_video(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1322,7 +1339,7 @@ pub fn spawn_react_video(
 }
 
 pub fn spawn_view_video(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     base_url: String,
     token: Option<String>,
     video_id: i64,
@@ -1334,7 +1351,7 @@ pub fn spawn_view_video(
 }
 
 pub fn spawn_subscribe_channel(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1359,7 +1376,7 @@ pub fn spawn_subscribe_channel(
 }
 
 pub fn spawn_delete_video(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1383,7 +1400,7 @@ pub fn spawn_delete_video(
 // ===================== Playground =====================
 
 pub fn spawn_playground_generate(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1413,7 +1430,7 @@ pub fn spawn_playground_generate(
 // ===================== aexOS =====================
 
 pub fn spawn_aexos_profiles(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1433,7 +1450,7 @@ pub fn spawn_aexos_profiles(
 }
 
 pub fn spawn_aexos_link(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1462,7 +1479,7 @@ pub fn spawn_aexos_link(
 }
 
 pub fn spawn_aexos_switch(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1491,7 +1508,7 @@ pub fn spawn_aexos_switch(
 }
 
 pub fn spawn_aexos_save_prefs(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1519,7 +1536,7 @@ pub fn spawn_aexos_save_prefs(
 }
 
 pub fn spawn_aexos_delete(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1544,7 +1561,7 @@ pub fn spawn_aexos_delete(
 // ===================== Admin =====================
 
 pub fn spawn_admin_overview(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1564,7 +1581,7 @@ pub fn spawn_admin_overview(
 }
 
 pub fn spawn_admin_set_role(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1594,7 +1611,7 @@ pub fn spawn_admin_set_role(
 }
 
 pub fn spawn_admin_ban_user(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
@@ -1619,7 +1636,7 @@ pub fn spawn_admin_ban_user(
 }
 
 pub fn spawn_admin_simple_action(
-    rt: &tokio::runtime::Handle,
+    rt: &AsyncRt,
     tx: tokio::sync::mpsc::UnboundedSender<ApiEvent>,
     ctx: egui::Context,
     base_url: String,
