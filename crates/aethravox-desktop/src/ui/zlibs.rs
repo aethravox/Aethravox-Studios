@@ -1,5 +1,5 @@
 use aethravox_core::{ZLibFileInput, ZLibPublishRequest};
-use egui::{Color32, Rounding};
+use egui::Rounding;
 
 use crate::api::{
     spawn_create_zlib_token, spawn_fetch_zlib_detail, spawn_fetch_zlibs_mine,

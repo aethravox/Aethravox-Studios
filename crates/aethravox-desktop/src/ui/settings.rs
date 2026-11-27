@@ -7,7 +7,8 @@ use egui::{Color32, Rounding, Stroke};
 use crate::api::{
     spawn_change_password, spawn_fetch_emails, spawn_fetch_profile, spawn_link_code,
     spawn_logout_all, spawn_remove_avatar, spawn_remove_email, spawn_request_email,
-    spawn_revoke_device, spawn_revoke_session, spawn_set_primary_email, spawn_update_profile,
+    spawn_create_zlib_token, spawn_fetch_zlibs_mine, spawn_revoke_device, spawn_revoke_session,
+    spawn_revoke_zlib_token, spawn_set_primary_email, spawn_update_profile,
     spawn_update_titles, spawn_upload_avatar_bytes, spawn_upload_avatar_path, spawn_verify_email,
 };
 use crate::app::{AethravoxApp, Route};

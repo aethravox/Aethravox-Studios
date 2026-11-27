@@ -20,7 +20,8 @@ use crate::api::{
     spawn_aris_credits, spawn_aris_messages, spawn_community_detail, spawn_community_inviteable,
     spawn_fetch_communities, spawn_fetch_conversations, spawn_fetch_docs, spawn_fetch_downloads,
     spawn_fetch_emails, spawn_fetch_friends, spawn_fetch_hub, spawn_fetch_messages,
-    spawn_fetch_profile, spawn_fetch_tickets, spawn_fetch_videos, spawn_logout, spawn_mark_read,
+    demo_zlibs, spawn_fetch_profile, spawn_fetch_tickets, spawn_fetch_videos,
+    spawn_fetch_zlibs_mine, spawn_fetch_zlibs_packages, spawn_logout, spawn_mark_read,
     spawn_save_theme, spawn_send_friend_request, spawn_send_message, spawn_start_dm,
     spawn_ticket_detail, ApiEvent, AsyncRt,
 };
