@@ -4994,7 +4994,7 @@ async fn admin_assign_role_id(
         if let (Ok(Some(ar)), Ok(Some(tr))) =
             (state.db.get_role(ar_id).await, state.db.get_role(tr_id).await)
         {
-            if !crate::handlers::roles::manage::can_act_on_role(&actor, &ar, &target, &tr) {
+            if !crate::handlers::roles::can_act_on_role(&actor, &ar, &target, &tr) {
                 return json_err(
                     StatusCode::FORBIDDEN,
                     "Tu jerarquía no permite modificar este usuario.",
